@@ -1,0 +1,1471 @@
+import { API_BASE } from '../config/api';
+import { io } from 'socket.io-client';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus } from 'lucide-react';
+import { useAuthStore } from '../store/authStore';
+import { uploadFileToBackend } from '../utils/uploadUtil';
+
+export default function RestaurantDashboard() {
+  const { user, token } = useAuthStore();
+  const navigate = useNavigate();
+
+  const [activeSubTab, setActiveSubTab] = useState('orders'); // 'orders', 'menu', 'offers', 'profile', 'kyc'
+  
+  // Dashboard Metrics
+  const [metrics, setMetrics] = useState(null);
+  const [weeklySales, setWeeklySales] = useState([]);
+  
+  // Menu Management
+  const [menuItems, setMenuItems] = useState([]);
+  const [isMenuLoading, setIsMenuLoading] = useState(true);
+  const [showItemModal, setShowItemModal] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [itemName, setItemName] = useState('');
+  const [itemPrice, setItemPrice] = useState('');
+  const [itemCategory, setItemCategory] = useState('Main Course');
+  const [itemImage, setItemImage] = useState('');
+  const [itemImageFile, setItemImageFile] = useState(null);
+  const [itemDesc, setItemDesc] = useState('');
+  const [itemIsVeg, setItemIsVeg] = useState(true);
+  const [itemIsAvailable, setItemIsAvailable] = useState(true);
+  
+  // Orders Management
+  const [orders, setOrders] = useState([]);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(true);
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
+  
+  // Orders Pipeline sub-tabs and Date filtering
+  const [orderPipelineTab, setOrderPipelineTab] = useState('new'); // 'new', 'ongoing', 'completed'
+  const [dateFilterType, setDateFilterType] = useState('all'); // 'all', 'today', 'yesterday', '7days', '30days', 'custom'
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [appliedDateFilter, setAppliedDateFilter] = useState({ type: 'all', start: '', end: '' });
+
+  // Profile Management
+  const [restaurantProfile, setRestaurantProfile] = useState(null);
+  const [profileName, setProfileName] = useState('');
+  const [profileImage, setProfileImage] = useState('');
+  const [profileImageFile, setProfileImageFile] = useState(null);
+  const [profileAddress, setProfileAddress] = useState('');
+  const [profileTime, setProfileTime] = useState(30);
+  const [profileVeg, setProfileVeg] = useState(false);
+  const [profileClosed, setProfileClosed] = useState(false);
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
+
+  // Local Coupons/Offers
+  const [offers, setOffers] = useState([]);
+  const [newOfferCode, setNewOfferCode] = useState('');
+  const [newOfferDiscount, setNewOfferDiscount] = useState('');
+  const [newOfferMinAmount, setNewOfferMinAmount] = useState('150');
+  const [newOfferItemId, setNewOfferItemId] = useState('');
+
+  // KYC
+  const [kycDocType, setKycDocType] = useState('GSTIN');
+  const [kycDocNum, setKycDocNum] = useState('');
+  const [kycSubmitting, setKycSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!token || user?.role !== 'restaurant') {
+      navigate('/login');
+      return;
+    }
+    fetchMetrics();
+    fetchMenu();
+    fetchOrders();
+    fetchProfile();
+
+    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
+    const socket = io(socketHost, {
+      auth: { token },
+      withCredentials: true,
+      transports: ['websocket', 'polling']
+    });
+    socket.on('orderStatusChanged', () => {
+      fetchOrders();
+      fetchMetrics();
+    });
+    const interval = setInterval(() => {
+      fetchOrders();
+      fetchMetrics();
+    }, 10000);
+    return () => {
+      socket.disconnect();
+      clearInterval(interval);
+    };
+  }, [token, user, navigate]);
+
+
+  const fetchMetrics = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/restaurant-partner/analytics`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMetrics(data.metrics);
+        setWeeklySales(data.weeklySales);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const getIncomeBreakdown = (ordersList) => {
+    let upi = 0;
+    let card = 0;
+    let cod = 0;
+    ordersList.forEach(order => {
+      const amount = (order.total || 0) * 0.85; // 85% is net earnings for restaurant
+      const method = order.paymentDetails?.method || 'COD';
+      if (method === 'UPI') upi += amount;
+      else if (method === 'Card') card += amount;
+      else if (method === 'COD') cod += amount;
+    });
+    return { upi, card, cod, total: upi + card + cod };
+  };
+
+  const fetchMenu = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/restaurant-partner/menu`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMenuItems(data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsMenuLoading(false);
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/restaurant-partner/orders`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setOrders(data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsOrdersLoading(false);
+    }
+  };
+
+  const fetchProfile = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/restaurant-partner/profile`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRestaurantProfile(data);
+        setProfileName(data.name || '');
+        setProfileImage(data.image || '');
+        setProfileAddress(data.address || '');
+        setProfileTime(data.deliveryTime || 30);
+        setProfileVeg(data.isPureVeg || false);
+        setProfileClosed(data.isClosed || false);
+        setOffers(data.offers || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Add / Edit Menu Item
+  const handleOpenItemModal = (item = null) => {
+    if (item) {
+      setEditingItem(item);
+      setItemName(item.name);
+      setItemPrice(item.price);
+      setItemCategory(item.category);
+      setItemImage(item.image);
+      setItemImageFile(null);
+      setItemDesc(item.description || '');
+      setItemIsVeg(item.isVeg);
+      setItemIsAvailable(item.isAvailable !== false);
+    } else {
+      setEditingItem(null);
+      setItemName('');
+      setItemPrice('');
+      setItemCategory('Main Course');
+      setItemImage('https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&h=200&q=80');
+      setItemImageFile(null);
+      setItemDesc('');
+      setItemIsVeg(true);
+      setItemIsAvailable(true);
+    }
+    setShowItemModal(true);
+  };
+
+  const handleSaveItem = async (e) => {
+    e.preventDefault();
+    if (!itemName || !itemPrice) return;
+    if (!itemImage && !itemImageFile) return alert('Please select an image');
+
+    let finalImageUrl = itemImage;
+    if (itemImageFile) {
+      try {
+        finalImageUrl = await uploadFileToBackend(itemImageFile);
+      } catch (err) {
+        return alert(err.message || 'Image upload failed');
+      }
+    }
+
+    const payload = {
+      name: itemName,
+      price: parseFloat(itemPrice),
+      category: itemCategory,
+      image: finalImageUrl,
+      description: itemDesc,
+      isVeg: itemIsVeg,
+      isAvailable: itemIsAvailable
+    };
+
+    try {
+      const url = editingItem 
+        ? `${API_BASE}/restaurant-partner/menu/${editingItem._id}`
+        : `${API_BASE}/restaurant-partner/menu`;
+      
+      const method = editingItem ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const saved = await res.json();
+        if (editingItem) {
+          setMenuItems(prev => prev.map(i => i._id === editingItem._id ? saved : i));
+        } else {
+          setMenuItems(prev => [...prev, saved]);
+        }
+        setShowItemModal(false);
+        fetchMetrics(); // Refresh stats
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteItem = async (itemId) => {
+    if (!window.confirm('Delete this menu item?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/restaurant-partner/menu/${itemId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setMenuItems(prev => prev.filter(i => i._id !== itemId));
+        fetchMetrics();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Order Status update
+  const handleUpdateOrderStatus = async (orderId, nextStatus) => {
+    setUpdatingOrderId(orderId);
+    try {
+      const res = await fetch(`${API_BASE}/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: nextStatus })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setOrders(prev => prev.map(o => o._id === orderId ? updated : o));
+        fetchMetrics();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  // Save profile
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    setIsProfileSaving(true);
+    
+    let finalProfileImageUrl = profileImage;
+    if (profileImageFile) {
+      try {
+        finalProfileImageUrl = await uploadFileToBackend(profileImageFile);
+      } catch (err) {
+        setIsProfileSaving(false);
+        return alert(err.message || 'Cover image upload failed');
+      }
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/restaurant-partner/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: profileName,
+          image: finalProfileImageUrl,
+          address: profileAddress,
+          deliveryTime: parseInt(profileTime),
+          isPureVeg: profileVeg,
+          isClosed: profileClosed
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setRestaurantProfile(updated);
+        setProfileClosed(updated.isClosed || false);
+        alert('Restaurant profile updated successfully!');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsProfileSaving(false);
+    }
+  };
+
+  // Submit KYC
+  const handleSubmitKyc = async (e) => {
+    e.preventDefault();
+    if (!kycDocNum) return;
+    setKycSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/kyc`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          documentType: kycDocType,
+          documentNumber: kycDocNum
+        })
+      });
+      if (res.ok) {
+        alert('KYC documents submitted. Approval pending admin review.');
+        // Force refresh user role state locally or window reload to sync
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setKycSubmitting(false);
+    }
+  };
+
+  // Create Coupon
+  const handleCreateCoupon = async (e) => {
+    e.preventDefault();
+    if (!newOfferCode || !newOfferDiscount) return;
+
+    let applicableItemName = '';
+    if (newOfferItemId) {
+      const selectedItem = menuItems.find(i => String(i._id) === String(newOfferItemId));
+      if (selectedItem) {
+        applicableItemName = selectedItem.name;
+      }
+    }
+
+    const newOffer = {
+      code: newOfferCode.toUpperCase().trim(),
+      discount: parseFloat(newOfferDiscount),
+      minAmount: parseFloat(newOfferMinAmount || 0),
+      applicableItemId: newOfferItemId || '',
+      applicableItemName: applicableItemName,
+      active: true
+    };
+
+    const updatedOffers = [...offers, newOffer];
+
+    try {
+      const res = await fetch(`${API_BASE}/restaurant-partner/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          offers: updatedOffers
+        })
+      });
+      if (res.ok) {
+        const updatedProfile = await res.json();
+        setRestaurantProfile(updatedProfile);
+        setOffers(updatedProfile.offers || []);
+        setNewOfferCode('');
+        setNewOfferDiscount('');
+        setNewOfferMinAmount('150');
+        setNewOfferItemId('');
+        alert('Promo code created successfully!');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delete Coupon
+  const handleDeleteCoupon = async (offerCode) => {
+    if (!window.confirm(`Delete coupon "${offerCode}"?`)) return;
+    const updatedOffers = offers.filter(o => o.code !== offerCode);
+
+    try {
+      const res = await fetch(`${API_BASE}/restaurant-partner/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          offers: updatedOffers
+        })
+      });
+      if (res.ok) {
+        const updatedProfile = await res.json();
+        setRestaurantProfile(updatedProfile);
+        setOffers(updatedProfile.offers || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const getNextStatusText = (status) => {
+    if (status === 'Placed') return { next: 'Confirmed', label: 'Accept Order' };
+    if (status === 'Confirmed') return { next: 'Preparing', label: 'Start Cooking' };
+    if (status === 'Preparing') return { next: 'Out for Delivery', label: 'Dispatch Order' };
+    return null;
+  };
+
+  const getDateLabel = () => {
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('en-GB');
+    if (appliedDateFilter.type === 'all') return 'All Time';
+    if (appliedDateFilter.type === 'today') return `${todayStr} / Today`;
+    if (appliedDateFilter.type === 'yesterday') {
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      return `${yesterday.toLocaleDateString('en-GB')} / Yesterday`;
+    }
+    if (appliedDateFilter.type === '7days') {
+      const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return `${start.toLocaleDateString('en-GB')} - ${todayStr} / Last 7 Days`;
+    }
+    if (appliedDateFilter.type === '30days') {
+      const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      return `${start.toLocaleDateString('en-GB')} - ${todayStr} / Last 30 Days`;
+    }
+    if (appliedDateFilter.type === 'custom') {
+      const startLabel = appliedDateFilter.start ? new Date(appliedDateFilter.start).toLocaleDateString('en-GB') : 'Start';
+      const endLabel = appliedDateFilter.end ? new Date(appliedDateFilter.end).toLocaleDateString('en-GB') : 'End';
+      return `${startLabel} - ${endLabel} / Custom Date Range`;
+    }
+    return 'Select Date Range';
+  };
+
+  const renderCalendar = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const monthName = now.toLocaleString('default', { month: 'long' });
+
+    // Build a set of days in this month that have orders (for dot indicators)
+    const daysWithOrders = new Set();
+    orders.forEach(o => {
+      const d = new Date(o.createdAt);
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        daysWithOrders.add(d.getDate());
+      }
+    });
+
+    const handleDayClick = (day) => {
+      // Build a YYYY-MM-DD string for the clicked date
+      const mm = String(month + 1).padStart(2, '0');
+      const dd = String(day).padStart(2, '0');
+      const dateStr = `${year}-${mm}-${dd}`;
+
+      setDateFilterType('custom');
+      if (!customStartDate || (customStartDate && customEndDate)) {
+        // Start a fresh range
+        setCustomStartDate(dateStr);
+        setCustomEndDate('');
+      } else {
+        // Second click — set end date (ensure start <= end)
+        if (dateStr >= customStartDate) {
+          setCustomEndDate(dateStr);
+        } else {
+          setCustomEndDate(customStartDate);
+          setCustomStartDate(dateStr);
+        }
+      }
+    };
+
+    const dayCells = [];
+    for (let i = 0; i < firstDay; i++) {
+      dayCells.push(<div key={`empty-${i}`} className="w-6 h-6" />);
+    }
+    for (let d = 1; d <= totalDays; d++) {
+      const mm = String(month + 1).padStart(2, '0');
+      const dd = String(d).padStart(2, '0');
+      const dateStr = `${year}-${mm}-${dd}`;
+      const isStart = dateStr === customStartDate;
+      const isEnd = dateStr === customEndDate;
+      const inRange = customStartDate && customEndDate && dateStr >= customStartDate && dateStr <= customEndDate;
+      const hasOrder = daysWithOrders.has(d);
+      const isToday = d === now.getDate();
+
+      dayCells.push(
+        <button
+          key={d}
+          type="button"
+          onClick={() => handleDayClick(d)}
+          className={`w-6 h-6 rounded-full text-[10px] font-bold transition-all flex items-center justify-center cursor-pointer relative
+            ${ isStart || isEnd ? 'bg-primary text-white shadow-sm' :
+               inRange ? 'bg-primary/15 text-primary' :
+               isToday ? 'ring-1 ring-primary text-primary' :
+               'hover:bg-violet-50 hover:text-primary text-main' }`}
+        >
+          {d}
+          {hasOrder && !isStart && !isEnd && (
+            <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full" />
+          )}
+        </button>
+      );
+    }
+
+    return (
+      <div className="flex flex-col gap-1.5 border border-line p-2.5 rounded-2xl bg-base/50">
+        <h4 className="text-center font-display font-black text-xs text-primary">{monthName} {year}</h4>
+        <div className="grid grid-cols-7 gap-0.5 text-[9px] font-bold text-muted text-center">
+          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(w => <span key={w}>{w}</span>)}
+        </div>
+        <div className="grid grid-cols-7 gap-0.5 text-gray-650 text-center">
+          {dayCells}
+        </div>
+        {customStartDate && (
+          <p className="text-[9px] text-center text-primary font-bold mt-0.5">
+            {customStartDate}{customEndDate ? ` → ${customEndDate}` : ' → pick end date'}
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  const getOrdersByDate = (ordersList) => {
+    let list = [...ordersList];
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    
+    if (appliedDateFilter.type === 'today') {
+      list = list.filter(o => {
+        const t = new Date(o.createdAt).getTime();
+        return t >= todayStart;
+      });
+    } else if (appliedDateFilter.type === 'yesterday') {
+      const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+      const yesterdayEnd = todayStart - 1;
+      list = list.filter(o => {
+        const t = new Date(o.createdAt).getTime();
+        return t >= yesterdayStart && t <= yesterdayEnd;
+      });
+    } else if (appliedDateFilter.type === '7days') {
+      const start = todayStart - 7 * 24 * 60 * 60 * 1000;
+      list = list.filter(o => new Date(o.createdAt).getTime() >= start);
+    } else if (appliedDateFilter.type === '30days') {
+      const start = todayStart - 30 * 24 * 60 * 60 * 1000;
+      list = list.filter(o => new Date(o.createdAt).getTime() >= start);
+    } else if (appliedDateFilter.type === 'custom') {
+      const start = appliedDateFilter.start ? new Date(appliedDateFilter.start).setHours(0,0,0,0) : 0;
+      const end = appliedDateFilter.end ? new Date(appliedDateFilter.end).setHours(23,59,59,999) : Infinity;
+      list = list.filter(o => {
+        const t = new Date(o.createdAt).getTime();
+        return t >= start && t <= end;
+      });
+    }
+    return list;
+  };
+
+  const dateFilteredOrders = getOrdersByDate(orders);
+
+  const newOrdersCount = dateFilteredOrders.filter(o => o.status === 'Placed').length;
+  const ongoingOrdersCount = dateFilteredOrders.filter(o => ['Confirmed', 'Preparing', 'Out for Delivery'].includes(o.status) && !['Delivered', 'Completed', 'Cancelled'].includes(o.status)).length;
+  const completedOrdersCount = dateFilteredOrders.filter(o => ['Delivered', 'Completed'].includes(o.status)).length;
+
+  const filteredOrders = dateFilteredOrders.filter(o => {
+    if (orderPipelineTab === 'new') return o.status === 'Placed';
+    if (orderPipelineTab === 'ongoing') return ['Confirmed', 'Preparing', 'Out for Delivery'].includes(o.status) && !['Delivered', 'Completed', 'Cancelled'].includes(o.status);
+    if (orderPipelineTab === 'completed') return ['Delivered', 'Completed'].includes(o.status);
+    return true;
+  });
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 md:px-8 pb-32 animate-fade-in flex flex-col gap-8 w-full mt-4">
+      
+      {/* Upper header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-5">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-primary/10 text-primary rounded-2xl">
+            <Store className="w-8 h-8" />
+          </div>
+          <div>
+            <h1 className="font-display font-black text-2xl text-main leading-tight">
+              {restaurantProfile?.name || 'Restaurant Panel'}
+            </h1>
+            <p className="text-xs text-muted font-semibold mt-0.5">Manage and scale your digital kitchen operations</p>
+          </div>
+        </div>
+
+        {/* Quick Toggles container */}
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Kitchen Status Toggle */}
+          {restaurantProfile && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted font-bold uppercase">Kitchen Status</span>
+              <button
+                onClick={async () => {
+                  const newClosedVal = !restaurantProfile.isClosed;
+                  try {
+                    const res = await fetch(`${API_BASE}/restaurant-partner/profile`, {
+                      method: 'PUT',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                      },
+                      body: JSON.stringify({ isClosed: newClosedVal })
+                    });
+                    if (res.ok) {
+                      const updated = await res.json();
+                      setRestaurantProfile(updated);
+                      setProfileClosed(updated.isClosed || false);
+                    }
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+                className={`text-[10px] font-extrabold px-3 py-1 rounded-full border transition-all cursor-pointer ${
+                  restaurantProfile.isClosed
+                    ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                    : 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
+                }`}
+              >
+                {restaurantProfile.isClosed ? '🔴 Closed' : '🟢 Open'}
+              </button>
+            </div>
+          )}
+
+          {/* KYC Status Badge */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-muted font-bold uppercase">KYC status</span>
+            <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full border ${
+              user?.kycStatus === 'Approved' ? 'bg-green-50 border-green-200 text-green-700' :
+              user?.kycStatus === 'Pending' ? 'bg-yellow-50 border-yellow-200 text-yellow-700 animate-pulse' :
+              'bg-red-50 border-red-200 text-red-700'
+            }`}>
+              {user?.kycStatus || 'Not Submitted'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Analytics Info widgets */}
+      {metrics && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+          <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col justify-between min-h-[100px]">
+            <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Gross Sales</span>
+            <div className="flex justify-between items-end mt-2">
+              <span className="text-xl font-black text-main">₹{metrics.totalSales.toFixed(2)}</span>
+              <span className="p-1 bg-green-50 text-green-600 rounded-md text-[9px] font-bold flex items-center">
+                <ArrowUpRight className="w-3 h-3" /> 15%
+              </span>
+            </div>
+          </div>
+          <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col justify-between min-h-[100px]">
+            <div>
+              <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Net Earnings</span>
+              <div className="flex justify-between items-end mt-2">
+                <span className="text-xl font-black text-main">₹{metrics.netEarnings.toFixed(2)}</span>
+                <span className="p-1 bg-primary/10 text-primary rounded-md text-[9px] font-bold">85% Split</span>
+              </div>
+            </div>
+            <div className="border-t border-line pt-2.5 mt-2.5 text-[10px] font-bold text-muted flex flex-col gap-1">
+              <div className="flex justify-between">
+                <span>UPI:</span>
+                <span>₹{getIncomeBreakdown(dateFilteredOrders).upi.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Card:</span>
+                <span>₹{getIncomeBreakdown(dateFilteredOrders).card.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>COD:</span>
+                <span>₹{getIncomeBreakdown(dateFilteredOrders).cod.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between border-t border-dashed border-line-strong pt-1 mt-0.5 font-extrabold text-primary">
+                <span>Sum (Net):</span>
+                <span>₹{getIncomeBreakdown(dateFilteredOrders).total.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+          <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col justify-between min-h-[100px]">
+            <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Kitchen Orders</span>
+            <div className="flex justify-between items-end mt-2">
+              <span className="text-xl font-black text-main">{metrics.ordersCount} Total</span>
+              <span className="text-[10px] font-bold text-muted">{metrics.activeOrders} Active</span>
+            </div>
+          </div>
+          <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col justify-between min-h-[100px]">
+            <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Dishes listed</span>
+            <div className="flex justify-between items-end mt-2">
+              <span className="text-xl font-black text-main">{metrics.menuItemsCount} Items</span>
+              <button onClick={() => handleOpenItemModal(null)} className="p-1 bg-primary text-white rounded-lg hover:bg-primary-hover shadow-xs">
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Tab Controls */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+        
+        {/* Left Column: Horizontal tabs selector on mobile, vertical on desktop */}
+        <div className="lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex flex-row overflow-x-auto lg:flex-col gap-1.5 scrollbar-none">
+          {[
+            { id: 'orders', label: 'Order Pipeline', icon: ShoppingBag, badge: orders.filter(o => !['Delivered', 'Completed', 'Cancelled'].includes(o.status)).length },
+            { id: 'menu', label: 'Menu & Food Items', icon: List, badge: menuItems.length },
+            { id: 'offers', label: 'Discounts & Offers', icon: Tag },
+            { id: 'profile', label: 'Kitchen Profile', icon: Store },
+            { id: 'kyc', label: 'KYC Document Verification', icon: Shield }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const active = activeSubTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveSubTab(tab.id)}
+                className={`flex-shrink-0 lg:w-full p-3 rounded-2xl flex items-center justify-between gap-3 text-left font-bold text-xs transition-all cursor-pointer ${
+                  active 
+                    ? 'bg-primary text-white shadow-xs' 
+                    : 'text-muted hover:bg-base hover:text-main'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Icon className="w-4 h-4" />
+                  <span>{tab.label}</span>
+                </div>
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <span className={`text-[9px] px-1.8 py-0.5 rounded-full font-black ${active ? 'bg-surface text-primary' : 'bg-primary text-white animate-pulse'}`}>
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right Columns: Tab Body Panels */}
+        <div className="lg:col-span-3">
+          
+          {/* ORDERS TAB */}
+          {activeSubTab === 'orders' && (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-2">
+                <h3 className="font-display font-extrabold text-base text-main">Order Pipeline</h3>
+                
+                {/* Date range picker selector */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowDatePicker(prev => !prev)}
+                    className="bg-surface border border-line-strong px-4 py-2.5 rounded-xl text-xs font-bold text-muted hover:bg-base flex items-center gap-2 cursor-pointer shadow-3xs"
+                  >
+                    <Calendar className="w-4 h-4 text-primary" />
+                    <span>{getDateLabel()}</span>
+                  </button>
+
+                  {showDatePicker && (
+                    <div className="absolute right-0 mt-2 z-50 bg-surface border border-gray-150 rounded-3xl shadow-xl p-5 flex flex-col gap-4 w-[290px] sm:w-[480px]">
+                      <div className="flex justify-between items-center border-b border-line pb-2">
+                        <span className="text-[11px] font-black text-gray-750 uppercase tracking-wider">Select Order Date Range</span>
+                        <button onClick={() => setShowDatePicker(false)} className="text-muted hover:text-muted cursor-pointer">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                        {/* Preset Toggles */}
+                        <div className="flex flex-col gap-1.5">
+                          {[
+                            { type: 'all', label: 'All Time' },
+                            { type: 'today', label: `Today (${new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })})` },
+                            { type: 'yesterday', label: `Yesterday (${new Date(Date.now() - 864e5).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })})` },
+                            { type: '7days', label: 'Last 7 Days' },
+                            { type: '30days', label: 'Last 30 Days' },
+                            { type: 'custom', label: 'Custom Date Range' }
+                          ].map(opt => (
+                            <label key={opt.type} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-base cursor-pointer text-xs font-bold text-muted">
+                              <input
+                                type="radio"
+                                name="dateFilter"
+                                checked={dateFilterType === opt.type}
+                                onChange={() => setDateFilterType(opt.type)}
+                                className="w-4 h-4 accent-primary cursor-pointer"
+                              />
+                              <span>{opt.label}</span>
+                            </label>
+                          ))}
+                        </div>
+
+                        {/* Calendar & Custom dates */}
+                        <div className="flex flex-col gap-3">
+                          {renderCalendar()}
+                          
+                          {dateFilterType === 'custom' && (
+                            <div className="flex gap-2">
+                              <div className="flex flex-col gap-0.5 flex-grow">
+                                <span className="text-[9px] uppercase font-extrabold text-muted pl-1">From</span>
+                                <input
+                                  type="date"
+                                  value={customStartDate}
+                                  onChange={(e) => setCustomStartDate(e.target.value)}
+                                  className="bg-base border border-gray-250 rounded-xl px-2 py-1 text-xs text-main font-bold outline-none"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-0.5 flex-grow">
+                                <span className="text-[9px] uppercase font-extrabold text-muted pl-1">To</span>
+                                <input
+                                  type="date"
+                                  value={customEndDate}
+                                  onChange={(e) => setCustomEndDate(e.target.value)}
+                                  className="bg-base border border-gray-250 rounded-xl px-2 py-1 text-xs text-main font-bold outline-none"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 border-t border-line pt-3 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDateFilterType(appliedDateFilter.type);
+                            setCustomStartDate(appliedDateFilter.start);
+                            setCustomEndDate(appliedDateFilter.end);
+                            setShowDatePicker(false);
+                          }}
+                          className="px-4 py-2 border border-gray-250 text-muted rounded-xl text-xs font-bold hover:bg-base cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAppliedDateFilter({
+                              type: dateFilterType,
+                              start: customStartDate,
+                              end: customEndDate
+                            });
+                            setShowDatePicker(false);
+                          }}
+                          className="px-5 py-2 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary-hover shadow-xs cursor-pointer"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Order pipeline sub-tabs */}
+              <div className="flex gap-2 border-b border-line pb-3">
+                {[
+                  { id: 'new', label: 'New Orders', count: newOrdersCount, color: 'bg-violet-500' },
+                  { id: 'ongoing', label: 'Ongoing Orders', count: ongoingOrdersCount, color: 'bg-primary' },
+                  { id: 'completed', label: 'Completed Orders', count: completedOrdersCount, color: 'bg-green-600' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setOrderPipelineTab(tab.id)}
+                    className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border ${
+                      orderPipelineTab === tab.id
+                        ? 'bg-surface border-primary text-primary shadow-xs'
+                        : 'bg-base border-line text-muted hover:bg-gray-100'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`text-[9px] text-white px-2 py-0.5 rounded-full font-black ${tab.color}`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {isOrdersLoading ? (
+                <div className="h-48 skeleton rounded-3xl" />
+              ) : filteredOrders.length > 0 ? (
+                <div className="flex flex-col gap-4">
+                  {filteredOrders.map(order => {
+                    const action = getNextStatusText(order.status);
+                    return (
+                      <div key={order._id} className="bg-surface border border-line p-5 rounded-3xl shadow-2xs flex flex-col gap-3 animate-fade-in">
+                        <div className="flex justify-between items-center border-b border-line pb-2">
+                          <div>
+                            <span className="text-[10px] font-mono font-bold text-muted">#{order._id.substr(-8).toUpperCase()}</span>
+                            <span className="text-[10px] text-muted font-semibold ml-2">• Placed on {new Date(order.createdAt).toLocaleString('en-GB')}</span>
+                          </div>
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
+                            ['Delivered', 'Completed'].includes(order.status) ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-violet-100 text-violet-700 animate-pulse border border-violet-200'
+                          }`}>
+                            {order.status}
+                          </span>
+                        </div>
+
+                        {/* List items */}
+                        <div className="flex flex-col gap-1.5 py-1">
+                          {order.items.map((item, idx) => (
+                            <div key={idx} className="flex justify-between text-xs font-bold text-main">
+                              <span>x{item.quantity} {item.name}</span>
+                              <span className="text-muted font-medium">₹{item.price * item.quantity}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Review details */}
+                        {order.review && (
+                          <div className="bg-green-50/20 border border-green-100 rounded-2xl p-4 text-xs font-semibold text-green-955 flex flex-col gap-1.5 my-1.5">
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <span 
+                                  key={star} 
+                                  className={`text-sm ${
+                                    star <= order.review.rating ? 'text-yellow-500' : 'text-gray-300'
+                                  }`}
+                                >
+                                  ★
+                                </span>
+                              ))}
+                              <span className="text-[9px] text-green-700 font-bold bg-green-100/50 px-1.5 py-0.5 rounded-md ml-1.5 uppercase">Customer Rated</span>
+                            </div>
+                            {order.review.comment && (
+                              <p className="text-[11px] text-gray-650 italic bg-surface/70 p-2.5 rounded-xl border border-green-100/10">
+                                "{order.review.comment}"
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="border-t border-line pt-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                          <span className="text-xs font-black text-main">Total: ₹{order.total.toFixed(2)}</span>
+                          
+                          {/* Accept/Advance Actions */}
+                          {action ? (
+                            <button
+                              onClick={() => handleUpdateOrderStatus(order._id, action.next)}
+                              disabled={updatingOrderId === order._id}
+                              className="bg-primary hover:bg-primary-hover text-white text-[10px] font-bold px-4 py-2 rounded-xl shadow-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>{action.label}</span>
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-bold text-muted flex items-center gap-1">
+                              <Check className="w-4 h-4 text-green-600" /> {order.status === 'Out for Delivery' ? 'Handed Over to Rider (Out for Delivery)' : 'Finished & Handed Over'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="bg-surface rounded-3xl p-16 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
+                  <ShoppingBag className="w-12 h-12 text-gray-300 animate-bounce" />
+                  <h4 className="font-display font-extrabold text-sm text-main">No matching orders found</h4>
+                  <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">Try resetting your date filter or switching pipeline tabs.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* MENU MANAGEMENT TAB */}
+          {activeSubTab === 'menu' && (
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between items-center border-b border-line pb-2">
+                <h3 className="font-display font-extrabold text-base text-main">Menu & Food Items</h3>
+                <button
+                  onClick={() => handleOpenItemModal(null)}
+                  className="bg-primary hover:bg-primary-hover text-white text-[10px] font-bold px-3 py-1.8 rounded-xl shadow-xs cursor-pointer flex items-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Food Item
+                </button>
+              </div>
+
+              {isMenuLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="h-24 skeleton rounded-3xl" />
+                  <div className="h-24 skeleton rounded-3xl" />
+                </div>
+              ) : menuItems.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {menuItems.map(item => (
+                    <div key={item._id} className="bg-surface border border-line p-4 rounded-3xl shadow-2xs flex gap-3 relative group">
+                      <div className="w-16 h-16 rounded-2xl overflow-hidden bg-base flex-shrink-0">
+                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex flex-col gap-0.5 flex-grow pr-12">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-3 h-3 rounded-xs border-2 flex items-center justify-center ${item.isVeg ? 'border-green-600' : 'border-red-600'}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
+                          </span>
+                          <h4 className="text-xs font-bold text-main line-clamp-1">{item.name}</h4>
+                        </div>
+                        <span className="text-[10px] text-primary font-bold">₹{item.price}</span>
+                        <p className="text-[9px] text-muted line-clamp-2 mt-0.5 font-medium leading-tight">{item.description || 'No description provided.'}</p>
+                        
+                        {/* Quick Availability Toggler */}
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <button
+                            onClick={async () => {
+                              const newAvail = item.isAvailable === false ? true : false;
+                              try {
+                                const res = await fetch(`${API_BASE}/restaurant-partner/menu/${item._id}`, {
+                                  method: 'PUT',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                  },
+                                  body: JSON.stringify({ isAvailable: newAvail })
+                                });
+                                if (res.ok) {
+                                  const updated = await res.json();
+                                  setMenuItems(prev => prev.map(i => i._id === item._id ? updated : i));
+                                }
+                              } catch (err) {
+                                console.error(err);
+                              }
+                            }}
+                            className={`text-[8px] font-extrabold px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
+                              item.isAvailable !== false
+                                ? 'bg-green-50 border-green-150 text-green-700 hover:bg-green-100'
+                                : 'bg-base border-line-strong text-muted hover:bg-gray-100'
+                            }`}
+                          >
+                            {item.isAvailable !== false ? '🟢 Available' : '🔴 Out of Stock'}
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* CRUD Buttons */}
+                      <div className="absolute right-3 top-3 flex gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleOpenItemModal(item)}
+                          className="p-1.5 bg-base hover:bg-primary-light hover:text-primary rounded-lg text-muted cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteItem(item._id)}
+                          className="p-1.5 bg-base hover:bg-red-50 hover:text-red-500 rounded-lg text-muted cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-surface rounded-3xl p-16 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
+                  <List className="w-12 h-12 text-gray-300" />
+                  <h4 className="font-display font-extrabold text-sm text-main">No dishes listed yet</h4>
+                  <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">Click "Add Food Item" above to fill your digital kitchen menu card!</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* OFFERS TAB */}
+          {activeSubTab === 'offers' && (
+            <div className="flex flex-col gap-4">
+              <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Offer & Discount Manager</h3>
+              
+              {/* Add Coupon Form */}
+              <form onSubmit={handleCreateCoupon} className="bg-base border border-gray-150 p-4 rounded-3xl flex gap-3 flex-wrap items-end">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] uppercase font-extrabold tracking-wider text-muted px-1">Promo Code</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. SPICE50"
+                    value={newOfferCode}
+                    onChange={(e) => setNewOfferCode(e.target.value)}
+                    className="bg-surface border border-gray-250 rounded-xl px-3 py-2 text-xs text-main outline-none uppercase font-bold"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] uppercase font-extrabold tracking-wider text-muted px-1">Flat Discount (₹)</label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="e.g. 50"
+                    value={newOfferDiscount}
+                    onChange={(e) => setNewOfferDiscount(e.target.value)}
+                    className="bg-surface border border-gray-250 rounded-xl px-3 py-2 text-xs text-main outline-none font-bold"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] uppercase font-extrabold tracking-wider text-muted px-1">Min Order (₹)</label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="e.g. 150"
+                    value={newOfferMinAmount}
+                    onChange={(e) => setNewOfferMinAmount(e.target.value)}
+                    className="bg-surface border border-gray-250 rounded-xl px-3 py-2 text-xs text-main outline-none font-bold animate-fade-in"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] uppercase font-extrabold tracking-wider text-muted px-1">Applicable Item</label>
+                  <select
+                    value={newOfferItemId}
+                    onChange={(e) => setNewOfferItemId(e.target.value)}
+                    className="bg-surface border border-gray-250 rounded-xl px-3 py-2 text-xs text-main outline-none font-bold min-w-[150px] cursor-pointer"
+                  >
+                    <option value="">All Menu Items</option>
+                    {menuItems.map(item => (
+                      <option key={item._id} value={item._id}>{item.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <button type="submit" className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer shadow-xs">
+                  Create Offer
+                </button>
+              </form>
+
+              {/* Coupon List */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                {offers.map((offer, idx) => (
+                  <div key={idx} className="bg-surface border border-line p-4 rounded-3xl shadow-2xs flex justify-between items-center relative gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-violet-50 text-primary flex items-center justify-center font-black">
+                        %
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <h4 className="text-xs font-mono font-black text-main">{offer.code}</h4>
+                        <p className="text-[10px] text-muted font-semibold">Flat ₹{offer.discount} off • Min order ₹{offer.minAmount}</p>
+                        {offer.applicableItemName && (
+                          <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-md font-bold w-max mt-0.5">
+                            🎯 Only for: {offer.applicableItemName}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] bg-green-50 border border-green-100 text-green-700 px-2 py-0.5 rounded-md font-bold">Active</span>
+                      <button
+                        onClick={() => handleDeleteCoupon(offer.code)}
+                        className="p-1 hover:bg-red-50 hover:text-red-500 rounded-lg text-muted cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* PROFILE MANAGEMENT TAB */}
+          {activeSubTab === 'profile' && (
+            <div className="flex flex-col gap-4">
+              <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Kitchen Settings</h3>
+              
+              <form onSubmit={handleSaveProfile} className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Kitchen Display Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Average Prep Time (Mins)</label>
+                    <input
+                      type="number"
+                      required
+                      value={profileTime}
+                      onChange={(e) => setProfileTime(e.target.value)}
+                      className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Kitchen Address</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileAddress}
+                    onChange={(e) => setProfileAddress(e.target.value)}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Cover Image File</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setProfileImageFile(e.target.files[0])}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main outline-none"
+                  />
+                  {profileImage && !profileImageFile && (
+                    <span className="text-[9px] text-muted px-1">Current Image: {profileImage.split('/').pop()}</span>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3.5 mt-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="profileVeg"
+                      checked={profileVeg}
+                      onChange={(e) => setProfileVeg(e.target.checked)}
+                      className="w-4.5 h-4.5 border-line-strong rounded text-primary focus:ring-primary cursor-pointer"
+                    />
+                    <label htmlFor="profileVeg" className="text-xs text-muted font-bold cursor-pointer uppercase">This is a Pure Vegetarian Kitchen</label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="profileClosed"
+                      checked={profileClosed}
+                      onChange={(e) => setProfileClosed(e.target.checked)}
+                      className="w-4.5 h-4.5 border-line-strong rounded text-primary focus:ring-primary cursor-pointer"
+                    />
+                    <label htmlFor="profileClosed" className="text-xs text-muted font-bold cursor-pointer uppercase">Mark Kitchen as Temporarily Closed</label>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isProfileSaving}
+                  className="bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 rounded-xl cursor-pointer shadow-md mt-2 disabled:opacity-50 w-full"
+                >
+                  {isProfileSaving ? 'Saving Updates...' : 'Save Kitchen Parameters'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* KYC VERIFICATION TAB */}
+          {activeSubTab === 'kyc' && (
+            <div className="flex flex-col gap-4">
+              <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Business KYC Authentication</h3>
+              
+              {user?.kycStatus === 'Approved' ? (
+                <div className="bg-green-50 border border-green-100 rounded-3xl p-6 text-green-800 flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-6 h-6 text-green-600" />
+                    <h4 className="font-display font-extrabold text-sm uppercase">KYC Verified & Authorized</h4>
+                  </div>
+                  <p className="text-xs leading-relaxed font-semibold">Your business credentials have been successfully authenticated by the platform administrator. You can accept active deliveries and publish menu updates.</p>
+                  <div className="text-[10px] font-mono text-green-700 bg-surface/50 px-3 py-2 rounded-xl w-max mt-1">
+                    Verified ID: {user.kycDetails?.documentType} - {user.kycDetails?.documentNumber}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-5">
+                  <div className="bg-yellow-50 border border-yellow-100 rounded-3xl p-5 text-yellow-800 flex gap-3 text-xs leading-relaxed font-medium">
+                    <Shield className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h5 className="font-bold">KYC Action Required</h5>
+                      <p className="mt-0.5">Please provide business licensing / taxation IDs below (such as your FSSAI license or GSTIN registration). Dashboards and payments will remain locked until verified by an Administrator.</p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleSubmitKyc} className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Document Type</label>
+                        <select
+                          value={kycDocType}
+                          onChange={(e) => setKycDocType(e.target.value)}
+                          className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none"
+                        >
+                          <option value="GSTIN">GSTIN Certificate</option>
+                          <option value="FSSAI License">FSSAI Kitchen License</option>
+                          <option value="PAN Card">Business PAN</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Document ID Number</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. 29AAAAA1111A1Z1"
+                          value={kycDocNum}
+                          onChange={(e) => setKycDocNum(e.target.value)}
+                          className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main outline-none uppercase font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={kycSubmitting}
+                      className="bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 rounded-xl cursor-pointer shadow-md disabled:opacity-50"
+                    >
+                      {kycSubmitting ? 'Uploading Documents...' : 'Submit Verification Docs'}
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          )}
+
+        </div>
+      </div>
+
+      {/* MENU ITEM ADD/EDIT MODAL */}
+      {showItemModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-xs">
+          <div className="bg-surface w-full max-w-md rounded-3xl p-6 shadow-xl border border-line animate-scale-up">
+            
+            <div className="flex justify-between items-center border-b border-line pb-3.5">
+              <h3 className="font-display font-extrabold text-base text-main">
+                {editingItem ? 'Edit Food Item' : 'Add Food Item'}
+              </h3>
+              <button onClick={() => setShowItemModal(false)} className="p-1 hover:bg-base rounded-lg text-muted hover:text-muted">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveItem} className="flex flex-col gap-4 mt-4">
+              
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Dish Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Paneer Tikka Masala"
+                  value={itemName}
+                  onChange={(e) => setItemName(e.target.value)}
+                  className="bg-base border border-gray-250 rounded-xl px-3.5 py-2.5 text-xs text-main outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Price (₹)</label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="e.g. 240"
+                    value={itemPrice}
+                    onChange={(e) => setItemPrice(e.target.value)}
+                    className="bg-base border border-gray-250 rounded-xl px-3.5 py-2.5 text-xs text-main outline-none font-bold"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Category</label>
+                  <select
+                    value={itemCategory}
+                    onChange={(e) => setItemCategory(e.target.value)}
+                    className="bg-base border border-gray-250 rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none"
+                  >
+                    <option value="Starters">Starters</option>
+                    <option value="Burgers">Burgers</option>
+                    <option value="Pizza">Pizza</option>
+                    <option value="Biryani">Biryani</option>
+                    <option value="Main Course">Main Course</option>
+                    <option value="Desserts">Desserts</option>
+                    <option value="Drinks">Drinks</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Description</label>
+                <textarea
+                  placeholder="Tell customers about the spices, volume, and ingredients..."
+                  value={itemDesc}
+                  onChange={(e) => setItemDesc(e.target.value)}
+                  rows={2}
+                  className="bg-base border border-gray-250 rounded-xl px-3.5 py-2.5 text-xs text-main outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Image File</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setItemImageFile(e.target.files[0])}
+                  className="bg-base border border-gray-255 rounded-xl px-3.5 py-2.5 text-xs text-main outline-none"
+                />
+                {itemImage && !itemImageFile && (
+                  <span className="text-[9px] text-muted px-1">Current Image: {itemImage.split('/').pop()}</span>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2 mt-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="itemVeg"
+                    checked={itemIsVeg}
+                    onChange={(e) => setItemIsVeg(e.target.checked)}
+                    className="w-4.5 h-4.5 border-line-strong rounded text-primary focus:ring-primary cursor-pointer"
+                  />
+                  <label htmlFor="itemVeg" className="text-xs text-muted font-bold cursor-pointer uppercase">This is Vegetarian (Green Badge)</label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="itemAvailable"
+                    checked={itemIsAvailable}
+                    onChange={(e) => setItemIsAvailable(e.target.checked)}
+                    className="w-4.5 h-4.5 border-line-strong rounded text-primary focus:ring-primary cursor-pointer"
+                  />
+                  <label htmlFor="itemAvailable" className="text-xs text-muted font-bold cursor-pointer uppercase">Item is Available & In Stock</label>
+                </div>
+              </div>
+
+              <button type="submit" className="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 rounded-xl mt-2 cursor-pointer shadow-md">
+                {editingItem ? 'Update Menu Item' : 'Add Item to Menu'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
