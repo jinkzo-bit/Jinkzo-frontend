@@ -38,7 +38,7 @@ export default function RazorpaySim({ amount, isOpen, onClose, onSuccess }) {
           <div className="flex items-center gap-2">
             <span className="bg-blue-600 text-white font-extrabold text-xs px-2 py-1 rounded">R</span>
             <div>
-              <h4 className="font-display font-semibold text-sm leading-tight text-slate-100">QuickBite Payment</h4>
+              <h4 className="font-display font-semibold text-sm leading-tight text-slate-100">Jinkzo Payment</h4>
               <p className="text-[10px] text-slate-400">Secured by Razorpay Sandbox</p>
             </div>
           </div>

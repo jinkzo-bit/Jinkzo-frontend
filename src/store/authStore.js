@@ -264,4 +264,52 @@ export const useAuthStore = create((set, get) => ({
       console.error('Delete address failed:', err);
     }
   },
+
+  // ── Forgot Password ─────────────────────────────────────────────────────────
+  forgotPassword: async (email) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, message: data.message || 'Failed to send OTP.' };
+      return { success: true, message: data.message };
+    } catch (err) {
+      return { success: false, message: 'Network error. Please check your connection.' };
+    }
+  },
+
+  // ── Verify OTP ──────────────────────────────────────────────────────────────
+  verifyOtp: async (email, otp) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, message: data.message || 'OTP verification failed.' };
+      return { success: true, resetToken: data.resetToken };
+    } catch (err) {
+      return { success: false, message: 'Network error. Please check your connection.' };
+    }
+  },
+
+  // ── Reset Password ───────────────────────────────────────────────────────────
+  resetPassword: async (resetToken, password) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resetToken, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, message: data.message || 'Password reset failed.' };
+      return { success: true, message: data.message };
+    } catch (err) {
+      return { success: false, message: 'Network error. Please check your connection.' };
+    }
+  },
 }));

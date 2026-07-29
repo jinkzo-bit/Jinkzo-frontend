@@ -296,10 +296,10 @@ Nandikotkur, AP
             <div className="flex flex-col gap-2 max-w-2xl">
               <div className="inline-flex items-center gap-1 bg-surface/20 backdrop-blur-md text-white font-bold text-xs uppercase tracking-wider px-3 py-1 rounded-full w-max shadow-sm">
                 <Sparkles className="w-3.5 h-3.5 fill-white" />
-                {banners[currentBannerIdx]?.title || 'QuickBite Delivery'}
+                {banners[currentBannerIdx]?.title || 'Jinkzo Delivery'}
               </div>
               <h1 className="font-display font-extrabold text-3xl md:text-5xl tracking-tight leading-tight my-2 text-white drop-shadow-md">
-                Hungry? Grab your <span className="underline decoration-wavy decoration-violet-300">QuickBite</span> now!
+                Hungry? Grab your <span className="underline decoration-wavy decoration-violet-300">Jinkzo</span> now!
               </h1>
               <p className="text-sm md:text-base text-gray-100 leading-relaxed font-medium drop-shadow-md max-w-lg">
                 Explore 100+ top restaurants near you delivering piping hot, fresh meals within 25 minutes. Free delivery on orders over â‚¹200.
@@ -379,10 +379,10 @@ Nandikotkur, AP
           <div className="flex flex-col gap-2 max-w-2xl">
             <div className="inline-flex items-center gap-1 bg-surface/10 text-white font-bold text-xs uppercase tracking-wider px-3 py-1 rounded-full w-max">
               <Sparkles className="w-3.5 h-3.5 fill-white" />
-              QuickBite Delivery
+              Jinkzo Delivery
             </div>
             <h1 className="font-display font-extrabold text-3xl md:text-5xl tracking-tight leading-tight my-2">
-              Hungry? Grab your <span className="underline decoration-wavy decoration-violet-300">QuickBite</span> now!
+              Hungry? Grab your <span className="underline decoration-wavy decoration-violet-300">Jinkzo</span> now!
             </h1>
             <p className="text-sm md:text-base text-violet-50/80 leading-relaxed font-medium">
               Explore 100+ top restaurants near you delivering piping hot, fresh meals within 25 minutes. Free delivery on orders over â‚¹200.

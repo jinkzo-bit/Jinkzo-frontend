@@ -926,7 +926,7 @@ export default function AdminDashboard() {
 
                 <div className="bg-violet-50/20 border border-violet-100 p-4 rounded-2xl text-xs font-semibold text-muted mt-2 leading-relaxed">
                   <span className="text-primary font-bold">Billing Architecture: </span> 
-                  QuickBite processes digital payment collections and disperses funds daily. Platform splits commissions seamlessly across all active food ordering channels based on configured system parameters.
+                  Jinkzo processes digital payment collections and disperses funds daily. Platform splits commissions seamlessly across all active food ordering channels based on configured system parameters.
                 </div>
               </div>
 

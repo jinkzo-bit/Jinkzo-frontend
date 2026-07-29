@@ -28,7 +28,10 @@ window.fetch = async function (resource, init = {}) {
     resource.includes('/auth/login') ||
     resource.includes('/auth/register') ||
     resource.includes('/auth/refresh') ||
-    resource.includes('/auth/logout')
+    resource.includes('/auth/logout') ||
+    resource.includes('/auth/forgot-password') ||
+    resource.includes('/auth/verify-otp') ||
+    resource.includes('/auth/reset-password')
   );
 
   // Silent Token Refresh: access token expired (401) → try refresh token

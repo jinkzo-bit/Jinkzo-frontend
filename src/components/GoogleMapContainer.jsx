@@ -104,7 +104,7 @@ const pickerIcon = L.divIcon({
 const geocodeAddress = async (address) => {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&countrycodes=in`;
-    const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'QuickBite-App/1.0 (support@quickbite.com)' } });
+    const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'Jinkzo-App/1.0 (support@Jinkzo.com)' } });
     const data = await res.json();
     if (data && data[0]) {
       return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };

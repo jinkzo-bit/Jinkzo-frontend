@@ -16,6 +16,7 @@ import Checkout from './pages/Checkout';
 import OrderTracking from './pages/OrderTracking';
 import Profile from './pages/Profile';
 import LoginSignup from './pages/LoginSignup';
+import ForgotPassword from './pages/ForgotPassword';
 import DeliveryPortal from './pages/DeliveryPortal';
 import RestaurantDashboard from './pages/RestaurantDashboard';
 import DeliveryDashboard from './pages/DeliveryDashboard';
@@ -72,6 +73,7 @@ export default function App() {
                 </ProtectedRoute>
               } />
               <Route path="/login" element={<LoginSignup />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/delivery" element={<DeliveryPortal />} />
               <Route path="/restaurant-dashboard" element={
                 <RoleProtectedRoute allowedRoles={['restaurant']}>

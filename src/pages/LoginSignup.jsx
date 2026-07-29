@@ -169,7 +169,7 @@ export default function LoginSignup() {
           Q
         </span>
         <h2 className="font-display font-black text-2xl text-main tracking-tight mt-1">
-          Welcome to QuickBite
+          Welcome to Jinkzo
         </h2>
         <p className="text-xs text-muted font-semibold max-w-[320px]">
           {isLogin ? 'Sign in to access your dashboard' : 'Create a secure profile to unlock partner dashboard'}
@@ -285,7 +285,7 @@ export default function LoginSignup() {
               <input
                 type="email"
                 required
-                placeholder="e.g. john@quickbite.com"
+                placeholder="e.g. john@Jinkzo.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted"
@@ -458,6 +458,18 @@ export default function LoginSignup() {
             </div>
           </div>
 
+          {/* Forgot Password Link — Sign In only */}
+          {isLogin && (
+            <div className="flex justify-end -mt-1">
+              <Link
+                to="/forgot-password"
+                className="text-[11px] font-semibold text-primary hover:underline transition-colors"
+              >
+                Forgot password?
+              </Link>
+            </div>
+          )}
+
           {/* Submit Button */}
            <button
             type="submit"
@@ -502,49 +514,49 @@ export default function LoginSignup() {
               <button
                 onClick={() => {
                   setRole('customer');
-                  setEmail('john@quickbite.com');
+                  setEmail('john@Jinkzo.com');
                   setPassword('password123');
                 }}
                 className="text-left bg-base hover:bg-gray-100 border border-line-strong/50 p-2 rounded-xl text-[9px] font-semibold text-muted transition-colors flex flex-col cursor-pointer leading-tight"
               >
                 <span className="text-primary font-bold">Autofill Customer</span>
-                <span>john@quickbite.com</span>
+                <span>john@Jinkzo.com</span>
               </button>
               
               <button
                 onClick={() => {
                   setRole('restaurant');
-                  setEmail('owner@quickbite.com');
+                  setEmail('owner@Jinkzo.com');
                   setPassword('password123');
                 }}
                 className="text-left bg-base hover:bg-gray-100 border border-line-strong/50 p-2 rounded-xl text-[9px] font-semibold text-muted transition-colors flex flex-col cursor-pointer leading-tight"
               >
                 <span className="text-primary font-bold">Autofill Restaurant</span>
-                <span>owner@quickbite.com</span>
+                <span>owner@Jinkzo.com</span>
               </button>
 
               <button
                 onClick={() => {
                   setRole('delivery');
-                  setEmail('rider@quickbite.com');
+                  setEmail('rider@Jinkzo.com');
                   setPassword('password123');
                 }}
                 className="text-left bg-base hover:bg-gray-100 border border-line-strong/50 p-2 rounded-xl text-[9px] font-semibold text-muted transition-colors flex flex-col cursor-pointer leading-tight"
               >
                 <span className="text-primary font-bold">Autofill Delivery</span>
-                <span>rider@quickbite.com</span>
+                <span>rider@Jinkzo.com</span>
               </button>
 
               <button
                 onClick={() => {
                   setRole('admin');
-                  setEmail('admin@quickbite.com');
+                  setEmail('admin@Jinkzo.com');
                   setPassword('admin123');
                 }}
                 className="text-left bg-base hover:bg-gray-100 border border-line-strong/50 p-2 rounded-xl text-[9px] font-semibold text-muted transition-colors flex flex-col cursor-pointer leading-tight"
               >
                 <span className="text-red-600 font-bold">Autofill Super Admin</span>
-                <span>admin@quickbite.com</span>
+                <span>admin@Jinkzo.com</span>
               </button>
             </div>
           </div>

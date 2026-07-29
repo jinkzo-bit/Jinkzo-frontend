@@ -5,7 +5,7 @@ import { MapPin, Navigation, Loader, Search, X } from 'lucide-react';
 const reverseGeocode = async (lat, lng) => {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'QuickBite-App/1.0 (support@quickbite.com)' } });
+    const res = await fetch(url, { headers: { 'User-Agent': 'Jinkzo-App/1.0 (support@Jinkzo.com)' } });
     const data = await res.json();
     if (data && data.address) {
       const a = data.address;
@@ -29,7 +29,7 @@ const searchAddress = async (query) => {
   if (!query || query.length < 3) return [];
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&countrycodes=in&addressdetails=1`;
-    const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'QuickBite-App/1.0 (support@quickbite.com)' } });
+    const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'Jinkzo-App/1.0 (support@Jinkzo.com)' } });
     return await res.json();
   } catch (_) {
     return [];

@@ -32,7 +32,7 @@ export default function Navbar() {
             Q
           </span>
           <span className="font-display font-black text-xl text-primary tracking-tight">
-            QuickBite
+            Jinkzo
           </span>
         </Link>
 

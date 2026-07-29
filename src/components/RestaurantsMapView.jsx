@@ -37,7 +37,7 @@ const geocodeAddress = async (address) => {
     const res = await fetch(url, { 
       headers: { 
         'Accept-Language': 'en', 
-        'User-Agent': 'QuickBite-App/1.0 (support@quickbite.com)' 
+        'User-Agent': 'Jinkzo-App/1.0 (support@Jinkzo.com)' 
       } 
     });
     const data = await res.json();
