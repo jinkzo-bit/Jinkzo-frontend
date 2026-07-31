@@ -170,7 +170,6 @@ export default function Checkout() {
         paymentMethod,
         subtotal,
         deliveryFee,
-        taxes,
         promoCode: promoCode || '',
         promoDiscount,
         total,
