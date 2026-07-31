@@ -16,7 +16,7 @@ export default function Cart() {
     fetchPlatformSettings();
   }, []);
 
-  const { subtotal, deliveryFee, taxes, total, restaurantFees } = getCalculations();
+  const { subtotal, deliveryFee, platformFee, total, restaurantFees } = getCalculations();
 
   // Group items by restaurant
   const groupedItems = items.reduce((acc, item) => {
@@ -279,10 +279,12 @@ export default function Cart() {
                   );
                 })}
               </div>
-              <div className="flex items-center justify-between">
-                <span>Taxes & Charges ({platformSettings ? platformSettings.taxPercent : 5}% GST)</span>
-                <span className="text-main">₹{taxes.toFixed(2)}</span>
-              </div>
+              {platformFee > 0 && (
+                <div className="flex items-center justify-between font-medium">
+                  <span>Platform Fee</span>
+                  <span className="text-main font-bold">₹{platformFee}</span>
+                </div>
+              )}
               {promoDiscount > 0 && (
                 <div className="flex items-center justify-between text-green-700 font-bold bg-green-50 p-1.5 rounded-lg">
                   <span>Promo Discount</span>

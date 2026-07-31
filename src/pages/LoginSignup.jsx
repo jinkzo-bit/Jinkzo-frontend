@@ -1,26 +1,114 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Lock, Mail, User, Phone, Sparkles, AlertCircle, Bike, Store, ShieldAlert, FileText, MapPin, Camera } from 'lucide-react';
+import {
+  Lock, Mail, User, Phone, AlertCircle, Bike, Store,
+  ShieldAlert, FileText, MapPin, Camera, MessageSquare,
+  KeyRound, RefreshCw, CheckCircle2, ArrowLeft, Eye, EyeOff
+} from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadPublicFileToBackend } from '../utils/uploadUtil';
 
+// ── Google SVG Icon ───────────────────────────────────────────────────────────
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-4 h-4" xmlns="http://www.w3.org/2000/svg">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+  );
+}
+
+// ── OTP digit boxes ───────────────────────────────────────────────────────────
+function OtpInput({ value, onChange, disabled }) {
+  const inputsRef = useRef([]);
+  const digits = value.split('');
+
+  const handleKey = (e, idx) => {
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      const d = [...digits];
+      if (d[idx]) { d[idx] = ''; }
+      else if (idx > 0) { d[idx - 1] = ''; inputsRef.current[idx - 1]?.focus(); }
+      onChange(d.join(''));
+      return;
+    }
+    if (e.key === 'ArrowLeft' && idx > 0) inputsRef.current[idx - 1]?.focus();
+    if (e.key === 'ArrowRight' && idx < 5) inputsRef.current[idx + 1]?.focus();
+  };
+
+  const handleChange = (e, idx) => {
+    const char = e.target.value.replace(/\D/g, '').slice(-1);
+    const d = [...digits]; d[idx] = char;
+    onChange(d.join(''));
+    if (char && idx < 5) inputsRef.current[idx + 1]?.focus();
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    onChange(pasted.padEnd(6, '').slice(0, 6));
+    inputsRef.current[Math.min(pasted.length, 5)]?.focus();
+  };
+
+  return (
+    <div className="flex gap-2 justify-center">
+      {[0,1,2,3,4,5].map((idx) => (
+        <input
+          key={idx}
+          ref={(el) => (inputsRef.current[idx] = el)}
+          type="text" inputMode="numeric" maxLength={1}
+          value={digits[idx] || ''}
+          onChange={(e) => handleChange(e, idx)}
+          onKeyDown={(e) => handleKey(e, idx)}
+          onPaste={handlePaste}
+          disabled={disabled}
+          className={`w-10 h-13 rounded-xl border-2 text-center text-lg font-black transition-all duration-200 outline-none bg-base
+            ${digits[idx] ? 'border-primary text-primary shadow-lg shadow-violet-500/20' : 'border-line text-main'}
+            focus:border-primary focus:shadow-lg focus:shadow-violet-500/20 disabled:opacity-50`}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ── Resend timer hook ─────────────────────────────────────────────────────────
+function useResendTimer() {
+  const [timer, setTimer] = useState(0);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (timer > 0) ref.current = setTimeout(() => setTimer(t => t - 1), 1000);
+    return () => clearTimeout(ref.current);
+  }, [timer]);
+  return [timer, () => setTimer(60)];
+}
+
 export default function LoginSignup() {
   const [isLogin, setIsLogin] = useState(true);
-  const [role, setRole] = useState('customer'); // 'customer' | 'restaurant' | 'delivery' | 'admin'
-  
-  // Basic Fields
+  const [role, setRole] = useState('customer');
+  // loginMethod: 'email' | 'phone'
+  const [loginMethod, setLoginMethod] = useState('email');
+  // phoneStep: 1 = enter phone, 2 = enter OTP
+  const [phoneStep, setPhoneStep] = useState(1);
+  const [resendTimer, startResend] = useResendTimer();
+
+  // Fields
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [otp, setOtp] = useState('');
 
-  // Restaurant Partner signup fields
+  // Partner fields
   const [restaurantName, setRestaurantName] = useState('');
   const [restaurantAddress, setRestaurantAddress] = useState('');
   const [gstin, setGstin] = useState('');
   const [restaurantImageFile, setRestaurantImageFile] = useState(null);
-
-  // Delivery Partner signup fields
   const [vehicleType, setVehicleType] = useState('Motorcycle');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [drivingLicense, setDrivingLicense] = useState('');
@@ -31,537 +119,436 @@ export default function LoginSignup() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // Zustand Auth
-  const { login, register, token, user, error, loading } = useAuthStore();
+  const { login, register, googleSignIn, sendLoginOtp, verifyLoginOtp, token, user, loading } = useAuthStore();
 
-  const getDashboardRedirect = (userRole) => {
-    if (userRole === 'admin') return '/admin-dashboard';
-    if (userRole === 'restaurant') return '/restaurant-dashboard';
-    if (userRole === 'delivery') return '/delivery-dashboard';
+  const getDashboard = (r) => {
+    if (r === 'admin') return '/admin-dashboard';
+    if (r === 'restaurant') return '/restaurant-dashboard';
+    if (r === 'delivery') return '/delivery-dashboard';
     return '/';
   };
 
-  // Redirect if already logged in
   useEffect(() => {
-    if (token && user) {
-      const redirectPath = searchParams.get('redirect') || getDashboardRedirect(user.role);
-      navigate(redirectPath);
-    }
-  }, [token, user, navigate, searchParams]);
+    if (token && user) navigate(searchParams.get('redirect') || getDashboard(user.role));
+  }, [token, user]);
 
-  // Clear errors when toggling modes or roles
-  const handleToggleMode = (modeValue) => {
-    setIsLogin(modeValue);
-    setFormError('');
-    resetFields();
+  const resetAll = () => {
+    setName(''); setEmail(''); setPhone(''); setAddress('');
+    setPassword(''); setConfirmPassword(''); setShowPassword(false); setShowConfirmPassword(false); setOtp('');
+    setRestaurantName(''); setRestaurantAddress(''); setGstin('');
+    setRestaurantImageFile(null); setVehicleNumber(''); setDrivingLicense(''); setRiderImageFile(null);
+    setPhoneStep(1); setFormError('');
   };
 
-  const handleRoleChange = (roleValue) => {
-    setRole(roleValue);
-    setFormError('');
-    if (roleValue === 'admin') {
-      setIsLogin(true); // Super Admin can only login, no registration
-    }
+  const handleToggleMode = (v) => { setIsLogin(v); resetAll(); };
+  const handleRoleChange = (v) => {
+    setRole(v); setFormError('');
+    if (v === 'admin') setIsLogin(true);
   };
+  const handleMethodChange = (m) => { setLoginMethod(m); setFormError(''); setPhoneStep(1); setOtp(''); };
 
-  const resetFields = () => {
-    setName('');
-    setEmail('');
-    setPassword('');
-    setPhone('');
-    setRestaurantName('');
-    setRestaurantAddress('');
-    setGstin('');
-    setRestaurantImageFile(null);
-    setVehicleNumber('');
-    setDrivingLicense('');
-    setRiderImageFile(null);
-  };
-
-  const handleSubmit = async (e) => {
+  // ── Email + Password Login ───────────────────────────────────────────────────
+  const handleEmailLogin = async (e) => {
     e.preventDefault();
     setFormError('');
+    if (!email || !password) return setFormError('Please enter email and password.');
+    const res = await login(email, password);
+    if (!res.success) setFormError(res.message);
+  };
 
-    if (!email || !password) {
-      setFormError('Please enter email and password');
-      return;
-    }
+  // ── Phone Login Step 1: Send OTP ─────────────────────────────────────────────
+  const handleSendLoginOtp = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    if (!phone.trim() || phone.trim().length < 10) return setFormError('Enter a valid 10-digit mobile number.');
+    const res = await sendLoginOtp(phone.trim());
+    if (res.success) { setPhoneStep(2); startResend(); setOtp(''); }
+    else setFormError(res.message);
+  };
 
-    if (isLogin) {
-      const res = await login(email, password);
-      if (!res.success) {
-        setFormError(res.message);
-      }
-    } else {
-      if (!name || !phone) {
-        setFormError('Please enter your name and phone number');
-        return;
-      }
-
-      let partnerDetails = {};
-      if (role === 'restaurant') {
-        if (!restaurantName || !restaurantAddress || !gstin) {
-          setFormError('Please complete all restaurant partner details');
-          return;
-        }
-
-        let restaurantImage = '';
-        if (restaurantImageFile) {
-          setIsUploading(true);
-          try {
-            restaurantImage = await uploadPublicFileToBackend(restaurantImageFile);
-          } catch (err) {
-            setFormError(err.message || 'Restaurant cover image upload failed');
-            setIsUploading(false);
-            return;
-          }
-          setIsUploading(false);
-        }
-
-        partnerDetails = {
-          restaurantName,
-          restaurantAddress,
-          documentType: 'GSTIN',
-          documentNumber: gstin,
-          restaurantImage
-        };
-      } else if (role === 'delivery') {
-        if (!vehicleNumber || !drivingLicense) {
-          setFormError('Please complete all delivery partner details');
-          return;
-        }
-
-        let profileImage = '';
-        if (riderImageFile) {
-          setIsUploading(true);
-          try {
-            profileImage = await uploadPublicFileToBackend(riderImageFile);
-          } catch (err) {
-            setFormError(err.message || 'Rider profile image upload failed');
-            setIsUploading(false);
-            return;
-          }
-          setIsUploading(false);
-        }
-
-        partnerDetails = {
-          vehicleType,
-          vehicleNumber,
-          documentType: 'Driving License',
-          documentNumber: drivingLicense,
-          profileImage
-        };
-      }
-
-      const res = await register(name, email, password, phone, role, partnerDetails);
-      if (!res.success) {
-        setFormError(res.message);
-      }
+  // ── Phone Login Step 2: Verify OTP ───────────────────────────────────────────
+  const handleVerifyLoginOtp = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    if (otp.length !== 6) return setFormError('Enter the complete 6-digit OTP.');
+    const res = await verifyLoginOtp(phone.trim(), otp);
+    if (!res.success) {
+      setFormError(res.message);
+      if (res.message?.includes('expired') || res.message?.includes('Too many')) setOtp('');
     }
   };
+
+  // ── Resend login OTP ──────────────────────────────────────────────────────────
+  const handleResendLoginOtp = async () => {
+    setFormError(''); setOtp('');
+    const res = await sendLoginOtp(phone.trim());
+    if (res.success) startResend();
+    else setFormError(res.message);
+  };
+
+  // ── Google Sign-In ────────────────────────────────────────────────────────────
+  const handleGoogleSignIn = useCallback(() => {
+    if (!window.google) { setFormError('Google Sign-In is not available.'); return; }
+    window.google.accounts.id.initialize({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
+      callback: async (response) => {
+        if (response.credential) {
+          const res = await googleSignIn(response.credential);
+          if (!res.success) setFormError(res.message);
+        }
+      },
+    });
+    window.google.accounts.id.prompt();
+  }, [googleSignIn]);
+
+  // ── Registration (Customer or Partner) ─────────────────────────────────────────
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    if (!name.trim()) return setFormError('Please enter your full name.');
+    if (!phone.trim()) return setFormError('Please enter your mobile number.');
+    if (!email.trim()) return setFormError('Please enter your email address.');
+    if (role === 'customer' && !address.trim()) return setFormError('Please enter your delivery address.');
+    if (!password) return setFormError('Please enter a password.');
+    if (password.length < 6) return setFormError('Password must be at least 6 characters long.');
+    if (password !== confirmPassword) return setFormError('Passwords do not match.');
+
+    let partnerDetails = {};
+    if (role === 'customer') {
+      partnerDetails = { address: address.trim() };
+    } else if (role === 'restaurant') {
+      if (!restaurantName || !restaurantAddress || !gstin) return setFormError('Please complete all restaurant partner details.');
+      let restaurantImage = '';
+      if (restaurantImageFile) {
+        setIsUploading(true);
+        try { restaurantImage = await uploadPublicFileToBackend(restaurantImageFile); }
+        catch (err) { setFormError(err.message || 'Image upload failed.'); setIsUploading(false); return; }
+        setIsUploading(false);
+      }
+      partnerDetails = { restaurantName, restaurantAddress, documentType: 'GSTIN', documentNumber: gstin, restaurantImage };
+    } else if (role === 'delivery') {
+      if (!vehicleNumber || !drivingLicense) return setFormError('Please complete all delivery partner details.');
+      let profileImage = '';
+      if (riderImageFile) {
+        setIsUploading(true);
+        try { profileImage = await uploadPublicFileToBackend(riderImageFile); }
+        catch (err) { setFormError(err.message || 'Image upload failed.'); setIsUploading(false); return; }
+        setIsUploading(false);
+      }
+      partnerDetails = { vehicleType, vehicleNumber, documentType: 'Driving License', documentNumber: drivingLicense, profileImage };
+    }
+
+    const res = await register(name.trim(), email.trim(), password, phone.trim(), role, partnerDetails);
+    if (!res.success) setFormError(res.message);
+  };
+
+  const isCustomerLogin = isLogin && role === 'customer';
 
   return (
     <div className="max-w-lg mx-auto w-full px-4 py-8 animate-fade-in pb-24 flex flex-col gap-6">
-      
+
       {/* Brand Header */}
       <div className="flex flex-col items-center gap-1.5 text-center">
-        <span className="w-11 h-11 rounded-2xl bg-primary flex items-center justify-center text-white font-extrabold text-xl shadow-lg shadow-violet-500/20">
-          Q
-        </span>
-        <h2 className="font-display font-black text-2xl text-main tracking-tight mt-1">
-          Welcome to Jinkzo
-        </h2>
+        <span className="w-11 h-11 rounded-2xl bg-primary flex items-center justify-center text-white font-extrabold text-xl shadow-lg shadow-violet-500/20">J</span>
+        <h2 className="font-display font-black text-2xl text-main tracking-tight mt-1">Welcome to Jinkzo</h2>
         <p className="text-xs text-muted font-semibold max-w-[320px]">
           {isLogin ? 'Sign in to access your dashboard' : 'Create a secure profile to unlock partner dashboard'}
         </p>
       </div>
 
-      {/* Main card */}
       <div className="bg-surface rounded-3xl p-6 border border-line shadow-sm flex flex-col gap-5">
-        
-        {/* Role Selector Tabs */}
+
+        {/* Role tabs */}
         <div className="flex flex-col gap-1.5">
           <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Access Channel</label>
           <div className="grid grid-cols-4 bg-base p-1 rounded-2xl border border-line/50 text-[10px] font-bold">
-            <button
-              type="button"
-              onClick={() => handleRoleChange('customer')}
-              className={`py-2 rounded-xl transition-all flex flex-col items-center gap-0.5 cursor-pointer ${
-                role === 'customer' ? 'bg-surface text-primary shadow-xs' : 'text-muted hover:text-muted'
-              }`}
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>Customer</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleRoleChange('restaurant')}
-              className={`py-2 rounded-xl transition-all flex flex-col items-center gap-0.5 cursor-pointer ${
-                role === 'restaurant' ? 'bg-surface text-primary shadow-xs' : 'text-muted hover:text-muted'
-              }`}
-            >
-              <Store className="w-3.5 h-3.5" />
-              <span>Restaurant</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleRoleChange('delivery')}
-              className={`py-2 rounded-xl transition-all flex flex-col items-center gap-0.5 cursor-pointer ${
-                role === 'delivery' ? 'bg-surface text-primary shadow-xs' : 'text-muted hover:text-muted'
-              }`}
-            >
-              <Bike className="w-3.5 h-3.5" />
-              <span>Delivery</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleRoleChange('admin')}
-              className={`py-2 rounded-xl transition-all flex flex-col items-center gap-0.5 cursor-pointer ${
-                role === 'admin' ? 'bg-surface text-red-600 shadow-xs' : 'text-muted hover:text-muted'
-              }`}
-            >
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>Super Admin</span>
-            </button>
+            {[
+              { val: 'customer', icon: <User className="w-3.5 h-3.5"/>, label: 'Customer' },
+              { val: 'restaurant', icon: <Store className="w-3.5 h-3.5"/>, label: 'Restaurant' },
+              { val: 'delivery', icon: <Bike className="w-3.5 h-3.5"/>, label: 'Delivery' },
+              { val: 'admin', icon: <ShieldAlert className="w-3.5 h-3.5"/>, label: 'Super Admin', red: true },
+            ].map(({ val, icon, label, red }) => (
+              <button key={val} type="button" onClick={() => handleRoleChange(val)}
+                className={`py-2 rounded-xl transition-all flex flex-col items-center gap-0.5 cursor-pointer ${
+                  role === val ? `bg-surface ${red ? 'text-red-600' : 'text-primary'} shadow-xs` : 'text-muted'
+                }`}>
+                {icon}<span>{label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Toggle tabs (Only show signup if not admin) */}
+        {/* Sign In / Sign Up toggle */}
         {role !== 'admin' && (
           <div className="grid grid-cols-2 bg-base p-1 rounded-2xl border border-line/50">
-            <button
-              onClick={() => handleToggleMode(true)}
-              className={`py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                isLogin ? 'bg-surface text-main shadow-xs' : 'text-muted hover:text-muted'
-              }`}
-            >
+            <button onClick={() => handleToggleMode(true)}
+              className={`py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${isLogin ? 'bg-surface text-main shadow-xs' : 'text-muted'}`}>
               Sign In
             </button>
-            <button
-              onClick={() => handleToggleMode(false)}
-              className={`py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                !isLogin ? 'bg-surface text-main shadow-xs' : 'text-muted hover:text-muted'
-              }`}
-            >
-              Partner Signup
+            <button onClick={() => handleToggleMode(false)}
+              className={`py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${!isLogin ? 'bg-surface text-main shadow-xs' : 'text-muted'}`}>
+              {role === 'customer' ? 'Sign Up' : 'Partner Signup'}
             </button>
           </div>
         )}
 
-        {/* Form fields */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          
-          {/* Form Error Message */}
-          {formError && (
-            <div className="bg-red-50 border border-red-100 text-red-600 text-[10px] font-bold p-2.5 rounded-xl flex gap-1.5 items-center">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{formError}</span>
-            </div>
-          )}
+        {/* ── CUSTOMER SIGN-IN HEADER SECTION ── */}
+        {isCustomerLogin && (
+          <>
+            {/* Google Sign-In */}
+            <button type="button" onClick={handleGoogleSignIn} disabled={loading}
+              className="w-full flex items-center justify-center gap-2.5 bg-white border border-gray-200 text-gray-700 text-xs font-semibold py-3 px-4 rounded-xl hover:bg-gray-50 hover:shadow-sm transition-all disabled:opacity-50 shadow-sm cursor-pointer">
+              <GoogleIcon /><span>Continue with Google</span>
+            </button>
 
-          {/* Name Field (Sign Up only) */}
-          {!isLogin && (
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Full Name</label>
-              <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all">
-                <User className="w-4 h-4 text-muted" />
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted"
-                />
-              </div>
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-line"/><span className="text-[10px] font-bold text-muted uppercase tracking-widest">or sign in with password</span><div className="flex-1 h-px bg-line"/>
             </div>
-          )}
+          </>
+        )}
 
-          {/* Email Field */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Email Address</label>
-            <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all">
-              <Mail className="w-4 h-4 text-muted" />
-              <input
-                type="email"
-                required
-                placeholder="e.g. john@Jinkzo.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted"
-              />
-            </div>
+        {/* Error Banner */}
+        {formError && (
+          <div className="bg-red-50 border border-red-100 text-red-600 text-[10px] font-bold p-2.5 rounded-xl flex gap-1.5 items-center">
+            <AlertCircle className="w-4 h-4 flex-shrink-0"/><span>{formError}</span>
           </div>
+        )}
 
-          {/* Phone Field (Sign Up only) */}
-          {!isLogin && (
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Phone Number</label>
-              <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all">
-                <Phone className="w-4 h-4 text-muted" />
-                <input
-                  type="tel"
-                  required
-                  placeholder="e.g. 9876543210"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted"
-                />
-              </div>
-            </div>
-          )}
+        {/* ══════════════════════════════════════════════════════ */}
+        {/* EMAIL / MOBILE NUMBER & PASSWORD FORM                */}
+        {/* ══════════════════════════════════════════════════════ */}
+        <form onSubmit={isLogin ? handleEmailLogin : handleRegister} className="flex flex-col gap-4">
 
-          {/* Dynamic Restaurant Signup Section */}
-          {!isLogin && role === 'restaurant' && (
-            <div className="border-t border-line pt-3 flex flex-col gap-3">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider text-primary px-1">Restaurant Specifications</span>
-              
+            {/* Name (signup only) */}
+            {!isLogin && (
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Restaurant Name</label>
-                <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2">
-                  <Store className="w-4 h-4 text-muted" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Spice Junction"
-                    value={restaurantName}
-                    onChange={(e) => setRestaurantName(e.target.value)}
-                    className="bg-transparent border-none outline-none text-xs text-main w-full"
-                  />
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Full Name</label>
+                <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all">
+                  <User className="w-4 h-4 text-muted shrink-0"/>
+                  <input type="text" required placeholder="e.g. John Doe" value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted"/>
                 </div>
               </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Restaurant Address</label>
-                <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2">
-                  <MapPin className="w-4 h-4 text-muted" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Shop 12, Indiranagar, Bengaluru"
-                    value={restaurantAddress}
-                    onChange={(e) => setRestaurantAddress(e.target.value)}
-                    className="bg-transparent border-none outline-none text-xs text-main w-full"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">KYC Verification - GSTIN ID</label>
-                <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2">
-                  <FileText className="w-4 h-4 text-muted" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 29AAAAA1111A1Z1"
-                    value={gstin}
-                    onChange={(e) => setGstin(e.target.value)}
-                    className="bg-transparent border-none outline-none text-xs text-main w-full uppercase"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Restaurant Cover Image</label>
-                <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 cursor-pointer relative">
-                  <Camera className="w-4 h-4 text-muted" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setRestaurantImageFile(e.target.files[0])}
-                    className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
-                  />
-                  <span className="text-xs text-main font-semibold truncate pr-6">
-                    {restaurantImageFile ? restaurantImageFile.name : 'Choose restaurant display image...'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Dynamic Delivery Rider Signup Section */}
-          {!isLogin && role === 'delivery' && (
-            <div className="border-t border-line pt-3 flex flex-col gap-3">
-              <span className="text-[10px] uppercase font-extrabold tracking-wider text-primary px-1">Rider Specifications</span>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Vehicle Type</label>
-                  <select
-                    value={vehicleType}
-                    onChange={(e) => setVehicleType(e.target.value)}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none"
-                  >
-                    <option value="Motorcycle">Motorcycle</option>
-                    <option value="Electric Scooter">Electric Scooter</option>
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Vehicle Plate No</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. KA-03-HA-1234"
-                    value={vehicleNumber}
-                    onChange={(e) => setVehicleNumber(e.target.value)}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main outline-none uppercase"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">KYC Verification - Driving License</label>
-                <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2">
-                  <FileText className="w-4 h-4 text-muted" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. DL-142026123456"
-                    value={drivingLicense}
-                    onChange={(e) => setDrivingLicense(e.target.value)}
-                    className="bg-transparent border-none outline-none text-xs text-main w-full uppercase"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Rider Profile Photo</label>
-                <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 cursor-pointer relative">
-                  <Camera className="w-4 h-4 text-muted" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setRiderImageFile(e.target.files[0])}
-                    className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
-                  />
-                  <span className="text-xs text-main font-semibold truncate pr-6">
-                    {riderImageFile ? riderImageFile.name : 'Choose rider avatar image...'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Password Field */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Password</label>
-            <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all">
-              <Lock className="w-4 h-4 text-muted" />
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted"
-              />
-            </div>
-          </div>
-
-          {/* Forgot Password Link — Sign In only */}
-          {isLogin && (
-            <div className="flex justify-end -mt-1">
-              <Link
-                to="/forgot-password"
-                className="text-[11px] font-semibold text-primary hover:underline transition-colors"
-              >
-                Forgot password?
-              </Link>
-            </div>
-          )}
-
-          {/* Submit Button */}
-           <button
-            type="submit"
-            disabled={loading || isUploading}
-            className={`w-full text-white text-xs font-bold py-3.5 px-4 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2 disabled:opacity-50 ${
-              role === 'admin' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary-hover'
-            }`}
-          >
-            {isUploading ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                <span>Uploading Image...</span>
-              </>
-            ) : loading ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                <span>Processing...</span>
-              </>
-            ) : (
-              <>
-                <span>
-                  {isLogin 
-                    ? `Sign In as ${role === 'customer' ? 'Customer' : role === 'admin' ? 'Super Admin' : role === 'restaurant' ? 'Restaurant Owner' : 'Delivery Rider'}` 
-                    : 'Submit Registration'}
-                </span>
-              </>
             )}
-          </button>
-        </form>
 
-        {/* Demo Accounts Panel */}
-        {import.meta.env.DEV && isLogin && (
+            {/* Mobile Number (signup only) */}
+            {!isLogin && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Mobile Number</label>
+                <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all">
+                  <Phone className="w-4 h-4 text-muted shrink-0"/>
+                  <input type="tel" required placeholder="e.g. 9876543210" value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted"/>
+                </div>
+              </div>
+            )}
+
+            {/* Email Address or Mobile Number */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                {isLogin ? 'Email or Mobile Number' : 'Email Address'}
+              </label>
+              <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all">
+                <Mail className="w-4 h-4 text-muted shrink-0"/>
+                <input
+                  type={isLogin ? 'text' : 'email'}
+                  required
+                  placeholder={isLogin ? 'e.g. john@jinkzo.com or 9876543210' : 'e.g. john@jinkzo.com'}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted"/>
+              </div>
+            </div>
+
+            {/* Address (Customer signup only) */}
+            {!isLogin && role === 'customer' && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Address</label>
+                <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all">
+                  <MapPin className="w-4 h-4 text-muted shrink-0"/>
+                  <input type="text" required placeholder="e.g. Flat 102, MG Road, Bengaluru" value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted"/>
+                </div>
+              </div>
+            )}
+
+            {/* Restaurant Partner Fields */}
+            {!isLogin && role === 'restaurant' && (
+              <div className="border-t border-line pt-3 flex flex-col gap-3">
+                <span className="text-[10px] uppercase font-extrabold tracking-wider text-primary px-1">Restaurant Specifications</span>
+                {[
+                  { label: 'Restaurant Name', icon: <Store className="w-4 h-4 text-muted"/>, val: restaurantName, set: setRestaurantName, ph: 'e.g. Spice Junction' },
+                  { label: 'Restaurant Address', icon: <MapPin className="w-4 h-4 text-muted"/>, val: restaurantAddress, set: setRestaurantAddress, ph: 'e.g. Shop 12, Indiranagar' },
+                  { label: 'KYC - GSTIN ID', icon: <FileText className="w-4 h-4 text-muted"/>, val: gstin, set: setGstin, ph: 'e.g. 29AAAAA1111A1Z1', cls: 'uppercase' },
+                ].map(({ label, icon, val, set, ph, cls }) => (
+                  <div key={label} className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">{label}</label>
+                    <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2">
+                      {icon}
+                      <input type="text" required placeholder={ph} value={val} onChange={(e) => set(e.target.value)}
+                        className={`bg-transparent border-none outline-none text-xs text-main w-full ${cls || ''}`}/>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Restaurant Cover Image</label>
+                  <div className="flex items-center bg-base border border-line-strong rounded-xl px-3 py-2.5 gap-2 cursor-pointer relative">
+                    <Camera className="w-4 h-4 text-muted"/>
+                    <input type="file" accept="image/*" onChange={(e) => setRestaurantImageFile(e.target.files[0])}
+                      className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"/>
+                    <span className="text-xs text-main font-semibold truncate pr-6">{restaurantImageFile ? restaurantImageFile.name : 'Choose restaurant display image...'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Delivery Partner Fields */}
+            {!isLogin && role === 'delivery' && (
+              <div className="border-t border-line pt-3 flex flex-col gap-3">
+                <span className="text-[10px] uppercase font-extrabold tracking-wider text-primary px-1">Rider Specifications</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Vehicle Type</label>
+                    <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}
+                      className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none">
+                      <option value="Motorcycle">Motorcycle</option>
+                      <option value="Electric Scooter">Electric Scooter</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Vehicle Plate No</label>
+                    <input type="text" required placeholder="e.g. KA-03-HA-1234" value={vehicleNumber}
+                      onChange={(e) => setVehicleNumber(e.target.value)}
+                      className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main outline-none uppercase"/>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">KYC - Driving License</label>
+                  <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2">
+                    <FileText className="w-4 h-4 text-muted"/>
+                    <input type="text" required placeholder="e.g. DL-142026123456" value={drivingLicense}
+                      onChange={(e) => setDrivingLicense(e.target.value)}
+                      className="bg-transparent border-none outline-none text-xs text-main w-full uppercase"/>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Rider Profile Photo</label>
+                  <div className="flex items-center bg-base border border-line-strong rounded-xl px-3 py-2.5 gap-2 cursor-pointer relative">
+                    <Camera className="w-4 h-4 text-muted"/>
+                    <input type="file" accept="image/*" onChange={(e) => setRiderImageFile(e.target.files[0])}
+                      className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"/>
+                    <span className="text-xs text-main font-semibold truncate pr-6">{riderImageFile ? riderImageFile.name : 'Choose rider avatar image...'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Password with Eye Icon Toggle */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Password</label>
+              <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all relative">
+                <Lock className="w-4 h-4 text-muted shrink-0"/>
+                <input type={showPassword ? 'text' : 'password'} required minLength={6} placeholder="••••••••" value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted pr-8"/>
+                <button type="button" onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 text-muted hover:text-main focus:outline-none transition-colors cursor-pointer"
+                  title={showPassword ? 'Hide password' : 'Show password'}>
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Password Strength Requirement Guidance (Signup mode) */}
+            {!isLogin && (
+              <div className="bg-violet-50/70 border border-violet-100 p-3 rounded-xl flex flex-col gap-2 text-[11px] text-muted">
+                <div className="flex items-center gap-1.5 font-bold text-violet-950 text-[11px]">
+                  <ShieldAlert className="w-3.5 h-3.5 text-primary shrink-0"/>
+                  <span>Make your password stronger with these characters:</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 font-semibold text-[10px]">
+                  <div className={`flex items-center gap-1.5 transition-colors ${password.length >= 6 ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${password.length >= 6 ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
+                    Min 6 characters
+                  </div>
+                  <div className={`flex items-center gap-1.5 transition-colors ${/[A-Z]/.test(password) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${/[A-Z]/.test(password) ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
+                    Uppercase letter (A-Z)
+                  </div>
+                  <div className={`flex items-center gap-1.5 transition-colors ${/[a-z]/.test(password) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${/[a-z]/.test(password) ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
+                    Lowercase letter (a-z)
+                  </div>
+                  <div className={`flex items-center gap-1.5 transition-colors ${/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
+                    Number / Special char
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Confirm Password with Eye Icon Toggle (Signup only) */}
+            {!isLogin && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Confirm Password</label>
+                <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all relative">
+                  <Lock className="w-4 h-4 text-muted shrink-0"/>
+                  <input type={showConfirmPassword ? 'text' : 'password'} required minLength={6} placeholder="••••••••" value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted pr-8"/>
+                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 text-muted hover:text-main focus:outline-none transition-colors cursor-pointer"
+                    title={showConfirmPassword ? 'Hide password' : 'Show password'}>
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Forgot Password link */}
+            {isLogin && (
+              <div className="flex justify-end -mt-1">
+                <Link to="/forgot-password" className="text-[11px] font-semibold text-primary hover:underline transition-colors">
+                  Forgot password?
+                </Link>
+              </div>
+            )}
+
+            {/* Submit */}
+            <button type="submit" disabled={loading || isUploading}
+              className={`w-full text-white text-xs font-bold py-3.5 px-4 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2 disabled:opacity-50 ${
+                role === 'admin' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary-hover'
+              }`}>
+              {(isUploading || loading)
+                ? <><svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg><span>{isUploading ? 'Uploading...' : 'Processing...'}</span></>
+                : <span>{isLogin ? `Sign In as ${role === 'customer' ? 'Customer' : role === 'admin' ? 'Super Admin' : role === 'restaurant' ? 'Restaurant Owner' : 'Delivery Rider'}` : role === 'customer' ? 'Create Customer Account' : 'Submit Registration'}</span>
+              }
+            </button>
+          </form>
+
+        {/* Demo Accounts */}
+        {import.meta.env.DEV && isLogin && loginMethod === 'email' && (
           <div className="border-t border-line pt-4 flex flex-col gap-2">
             <p className="text-[10px] text-muted font-bold uppercase">Quick Demo Credentials</p>
             <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => {
-                  setRole('customer');
-                  setEmail('john@Jinkzo.com');
-                  setPassword('password123');
-                }}
-                className="text-left bg-base hover:bg-gray-100 border border-line-strong/50 p-2 rounded-xl text-[9px] font-semibold text-muted transition-colors flex flex-col cursor-pointer leading-tight"
-              >
-                <span className="text-primary font-bold">Autofill Customer</span>
-                <span>john@Jinkzo.com</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  setRole('restaurant');
-                  setEmail('owner@Jinkzo.com');
-                  setPassword('password123');
-                }}
-                className="text-left bg-base hover:bg-gray-100 border border-line-strong/50 p-2 rounded-xl text-[9px] font-semibold text-muted transition-colors flex flex-col cursor-pointer leading-tight"
-              >
-                <span className="text-primary font-bold">Autofill Restaurant</span>
-                <span>owner@Jinkzo.com</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setRole('delivery');
-                  setEmail('rider@Jinkzo.com');
-                  setPassword('password123');
-                }}
-                className="text-left bg-base hover:bg-gray-100 border border-line-strong/50 p-2 rounded-xl text-[9px] font-semibold text-muted transition-colors flex flex-col cursor-pointer leading-tight"
-              >
-                <span className="text-primary font-bold">Autofill Delivery</span>
-                <span>rider@Jinkzo.com</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setRole('admin');
-                  setEmail('admin@Jinkzo.com');
-                  setPassword('admin123');
-                }}
-                className="text-left bg-base hover:bg-gray-100 border border-line-strong/50 p-2 rounded-xl text-[9px] font-semibold text-muted transition-colors flex flex-col cursor-pointer leading-tight"
-              >
-                <span className="text-red-600 font-bold">Autofill Super Admin</span>
-                <span>admin@Jinkzo.com</span>
-              </button>
+              {[
+                { r: 'customer', em: 'john@Jinkzo.com', label: 'Autofill Customer', color: 'text-primary' },
+                { r: 'restaurant', em: 'owner@Jinkzo.com', label: 'Autofill Restaurant', color: 'text-primary' },
+                { r: 'delivery', em: 'rider@Jinkzo.com', label: 'Autofill Delivery', color: 'text-primary' },
+                { r: 'admin', em: 'admin@Jinkzo.com', label: 'Autofill Super Admin', color: 'text-red-600', pw: 'admin123' },
+              ].map(({ r, em, label, color, pw }) => (
+                <button key={r} onClick={() => { setRole(r); setEmail(em); setPassword(pw || 'password123'); if (r === 'admin') setIsLogin(true); }}
+                  className="text-left bg-base hover:bg-gray-100 border border-line-strong/50 p-2 rounded-xl text-[9px] font-semibold text-muted transition-colors flex flex-col cursor-pointer leading-tight">
+                  <span className={`font-bold ${color}`}>{label}</span><span>{em}</span>
+                </button>
+              ))}
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

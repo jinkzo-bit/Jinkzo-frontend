@@ -1864,12 +1864,14 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Government Taxes (%)</label>
+                    <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Platform Fee (₹)</label>
                     <input
                       type="number"
                       required
-                      value={platformSettings.taxPercent}
-                      onChange={(e) => setPlatformSettings({ ...platformSettings, taxPercent: parseFloat(e.target.value) })}
+                      min="0"
+                      step="1"
+                      value={platformSettings.platformFee ?? 5}
+                      onChange={(e) => setPlatformSettings({ ...platformSettings, platformFee: parseFloat(e.target.value) || 0 })}
                       className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full"
                     />
                   </div>

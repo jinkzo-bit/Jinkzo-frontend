@@ -27,7 +27,7 @@ export default function Checkout() {
   const [addressSelectMode, setAddressSelectMode] = useState('autocomplete'); // 'autocomplete' or 'map'
 
   // Payment State
-  const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [paymentMethod] = useState('COD');
   const [isRazorpayOpen, setIsRazorpayOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -75,7 +75,7 @@ export default function Checkout() {
     if (token) fetchWallet();
   }, [token]);
 
-  const { subtotal, deliveryFee, taxes, promoDiscount, total, restaurantFees } = getCalculations();
+  const { subtotal, deliveryFee, platformFee, promoDiscount, total, restaurantFees } = getCalculations();
   
   const walletAmountUsed = useWallet ? Math.min(walletBalance, total) : 0;
   const finalPayable = Math.max(0, total - walletAmountUsed);
@@ -98,7 +98,7 @@ export default function Checkout() {
 
   // Safeguard: Redirect to cart if empty
   if (items.length === 0) {
-    setTimeout(() => navigate('/cart'), 50);
+    navigate('/cart');
     return null;
   }
 
@@ -107,46 +107,23 @@ export default function Checkout() {
   const handleAddAddress = async (e) => {
     e.preventDefault();
     if (!newStreet || !newCity || !newState || !newZip) return;
-
     setIsAddressSaving(true);
-    try {
-      const result = await addAddress({
-        street: newStreet,
-        city: newCity,
-        state: newState,
-        zip: newZip,
-        lat: newLat,
-        lng: newLng,
-        isDefault: activeAddresses.length === 0 // Default if it is the first address
-      });
-
-      if (result.success) {
-        showToast('New shipping address saved!', 'success');
-        setNewStreet('');
-        setNewCity('');
-        setNewState('');
-        setNewZip('');
-        setNewLat(null);
-        setNewLng(null);
-        setShowAddressForm(false);
-        setSelectedAddressIndex(activeAddresses.length); // Select the newly created index
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsAddressSaving(false);
+    const res = await addAddress({ street: newStreet, city: newCity, state: newState, zip: newZip, isDefault: true });
+    setIsAddressSaving(false);
+    if (res.success) {
+      setShowAddressForm(false);
+      setSelectedAddressIndex(user?.addresses ? user.addresses.length : 0);
+      setNewStreet(''); setNewCity(''); setNewState(''); setNewZip('');
+      setNewLat(null); setNewLng(null);
     }
   };
 
-  const handlePlaceOrderSubmit = async (e) => {
-    e.preventDefault();
+  const handlePlaceOrderSubmit = async () => {
     setErrorMsg('');
-
-    if (activeAddresses.length === 0) {
-      setErrorMsg('Please add a delivery address to proceed.');
-      return;
+    if (!activeAddresses[selectedAddressIndex]) {
+      return setErrorMsg('Please select or add a delivery address.');
     }
-
+    
     setIsSubmitting(true);
     try {
       const res = await fetch(`${API_BASE}/orders/riders/check?type=food`);
@@ -164,13 +141,8 @@ export default function Checkout() {
     }
     setIsSubmitting(false);
 
-    if (paymentMethod === 'COD') {
-      // Direct placement for COD
-      await completeOrderPlacement(null);
-    } else {
-      // Trigger Razorpay payment gateway modal
-      setIsRazorpayOpen(true);
-    }
+    // Direct placement via Cash on Delivery
+    await completeOrderPlacement(null);
   };
 
   const completeOrderPlacement = async (paymentId = null) => {
@@ -459,35 +431,21 @@ export default function Checkout() {
           <section className="bg-surface rounded-2xl p-5 border border-line shadow-2xs flex flex-col gap-4">
             <h3 className="font-display font-semibold text-sm md:text-base text-main flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-primary" />
-              <span>2. Choose Payment Option</span>
+              <span>2. Payment Method</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {['UPI', 'Card', 'COD'].map((method) => (
-                <div
-                  key={method}
-                  onClick={() => setPaymentMethod(method)}
-                  className={`p-4 rounded-xl border flex flex-col gap-2 cursor-pointer transition-all ${
-                    paymentMethod === method
-                      ? 'border-primary bg-violet-50/20'
-                      : 'border-line hover:border-line-strong bg-surface'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-main uppercase">
-                      {method === 'COD' ? 'Cash On Delivery' : method}
-                    </span>
-                    <div className={`w-4.5 h-4.5 rounded-full border flex items-center justify-center ${paymentMethod === method ? 'border-primary bg-primary' : 'border-line-strong'}`}>
-                      {paymentMethod === method && <Check className="w-3 h-3 text-white" />}
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-muted font-medium">
-                    {method === 'UPI' && 'Pay via PhonePe, GPay, Paytm'}
-                    {method === 'Card' && 'Debit / Credit cards checkout'}
-                    {method === 'COD' ? 'Pay cash at your doorstep' : 'Simulated Gateway'}
-                  </span>
-                </div>
-              ))}
+            <div className="p-4 rounded-xl border border-primary bg-violet-50/20 flex items-center justify-between">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-extrabold text-main uppercase flex items-center gap-2">
+                  💵 Cash On Delivery (COD)
+                </span>
+                <span className="text-[11px] text-muted font-medium">
+                  Pay cash at your doorstep when your food arrives
+                </span>
+              </div>
+              <div className="w-5 h-5 rounded-full border-2 border-primary bg-primary flex items-center justify-center">
+                <Check className="w-3 h-3 text-white" />
+              </div>
             </div>
           </section>
 
@@ -569,10 +527,12 @@ export default function Checkout() {
                   );
                 })}
               </div>
-              <div className="flex items-center justify-between">
-                <span>Taxes ({platformSettings ? platformSettings.taxPercent : 5}% GST)</span>
-                <span className="text-main font-bold">₹{taxes.toFixed(2)}</span>
-              </div>
+              {platformFee > 0 && (
+                <div className="flex items-center justify-between font-medium">
+                  <span>Platform Fee</span>
+                  <span className="text-main font-bold">₹{platformFee}</span>
+                </div>
+              )}
               {promoDiscount > 0 && (
                 <div className="flex items-center justify-between text-green-700 font-bold bg-green-50 p-1.5 rounded-lg">
                   <span>Promo Discount</span>

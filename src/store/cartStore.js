@@ -18,7 +18,8 @@ export const useCartStore = create(
   platformSettings: {
     commissionPercent: 15,
     deliveryBaseFee: 40,
-    taxPercent: 5,
+    platformFee: 5,
+    taxPercent: 0,
     isOpen: true
   },
 
@@ -256,30 +257,28 @@ export const useCartStore = create(
     
     Object.keys(uniqueRestaurants).forEach(rId => {
       const rest = uniqueRestaurants[rId];
-      // NC12 FIX: Delivery fee = baseFee + ₹5 per every 10 mins of estimated delivery time
-      // Removed the absurd (restaurantName.length % 3) * 5 component that caused identical
-      // restaurants to charge different fees based solely on their name's character count.
       const fee = baseFee + Math.floor(rest.deliveryTime / 10) * 5;
       restaurantFees[rId] = fee;
       deliveryFee += fee;
     });
 
-    const taxPercent = platformSettings ? platformSettings.taxPercent : 5;
-    const taxes = Math.round(subtotal * (taxPercent / 100) * 100) / 100;
+    const platformFee = platformSettings ? (platformSettings.platformFee ?? 5) : 5;
+    const taxes = 0; // Taxes (5% GST) removed as requested
 
-    return { subtotal, deliveryFee, taxes, restaurantFees };
+    return { subtotal, deliveryFee, platformFee, taxes: 0, restaurantFees };
   },
 
   getCalculations: () => {
-    const { subtotal, deliveryFee, taxes, restaurantFees } = get().getCalculationsWithoutPromo();
+    const { subtotal, deliveryFee, platformFee, restaurantFees } = get().getCalculationsWithoutPromo();
     const { promoDiscount } = get();
 
-    const total = Math.max(0, subtotal + deliveryFee + taxes - promoDiscount);
+    const total = Math.max(0, subtotal + deliveryFee + platformFee - promoDiscount);
 
     return {
       subtotal,
       deliveryFee,
-      taxes,
+      platformFee,
+      taxes: 0,
       promoDiscount,
       total,
       restaurantFees

@@ -3,9 +3,6 @@ import { create } from 'zustand';
 import { API_BASE } from '../config/api';
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
-// Use localStorage (not sessionStorage) so tokens persist across browser
-// sessions and tab closes. Users stay logged in for the full 7-day refresh
-// token lifetime without being forced to re-authenticate.
 const ACCESS_KEY  = 'qb-auth-token';
 const REFRESH_KEY = 'qb-refresh-token';
 
@@ -17,9 +14,6 @@ export const useAuthStore = create((set, get) => ({
   error: null,
 
   // ── Silent token refresh ────────────────────────────────────────────────────
-  // Uses the stored refresh token (valid 30 days) to obtain a new access token.
-  // Also rotates and saves the new refresh token returned by the server.
-  // Returns the new access token string on success, or null on failure.
   refreshAccessToken: async () => {
     const refreshToken = localStorage.getItem(REFRESH_KEY);
     if (!refreshToken) return null;
@@ -46,10 +40,6 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // ── Session initialisation on page load ────────────────────────────────────
-  // 1. Try stored access token against /auth/me.
-  // 2. On 401 (token expired after 30 min), silently refresh using the
-  //    refresh token (valid 30 days) and retry — user stays logged in.
-  // 3. Only logs out if refresh also fails (refresh token expired after 30 days).
   initialize: async () => {
     const sessionToken = localStorage.getItem(ACCESS_KEY);
     if (!sessionToken) {
@@ -63,7 +53,6 @@ export const useAuthStore = create((set, get) => ({
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
 
-      // Access token expired — try a silent refresh before giving up
       if (res.status === 401) {
         const newToken = await get().refreshAccessToken();
         if (newToken) {
@@ -78,7 +67,6 @@ export const useAuthStore = create((set, get) => ({
         const currentToken = get().token || sessionToken;
         set({ user: data, token: currentToken, isAuthenticated: true, error: null });
       } else {
-        // Refresh token also expired/invalid — full logout
         get().logout();
       }
     } catch (err) {
@@ -89,6 +77,7 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // ── Email + Password Login ──────────────────────────────────────────────────
   login: async (email, password) => {
     set({ loading: true, error: null });
     try {
@@ -99,16 +88,10 @@ export const useAuthStore = create((set, get) => ({
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || 'Login failed');
-      }
+      if (!res.ok) throw new Error(data.message || 'Login failed');
 
-      if (data.token) {
-        localStorage.setItem(ACCESS_KEY, data.token);
-      }
-      if (data.refreshToken) {
-        localStorage.setItem(REFRESH_KEY, data.refreshToken);
-      }
+      if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
+      if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
       return { success: true };
     } catch (err) {
@@ -119,6 +102,32 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // ── Google Sign-In ──────────────────────────────────────────────────────────
+  googleSignIn: async (idToken) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await fetch(`${API_BASE}/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Google Sign-In failed');
+
+      if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
+      if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
+      set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
+      return { success: true, isNewUser: data.isNewUser };
+    } catch (err) {
+      set({ error: err.message });
+      return { success: false, message: err.message };
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  // ── Register ────────────────────────────────────────────────────────────────
   register: async (name, email, password, phone, role = 'customer', partnerDetails = {}) => {
     set({ loading: true, error: null });
     try {
@@ -129,16 +138,10 @@ export const useAuthStore = create((set, get) => ({
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || 'Registration failed');
-      }
+      if (!res.ok) throw new Error(data.message || 'Registration failed');
 
-      if (data.token) {
-        localStorage.setItem(ACCESS_KEY, data.token);
-      }
-      if (data.refreshToken) {
-        localStorage.setItem(REFRESH_KEY, data.refreshToken);
-      }
+      if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
+      if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
       return { success: true };
     } catch (err) {
@@ -149,14 +152,13 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // ── Logout ──────────────────────────────────────────────────────────────────
   logout: async () => {
     try {
       const token = get().token;
       const refreshToken = localStorage.getItem(REFRESH_KEY);
       const headers = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
+      if (token) headers['Authorization'] = `Bearer ${token}`;
       await fetch(`${API_BASE}/auth/logout`, {
         method: 'POST',
         headers,
@@ -185,9 +187,7 @@ export const useAuthStore = create((set, get) => ({
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || 'KYC submission failed');
-      }
+      if (!res.ok) throw new Error(data.message || 'KYC submission failed');
 
       set({ user: data, error: null });
       return { success: true };
@@ -221,9 +221,7 @@ export const useAuthStore = create((set, get) => ({
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || 'Failed to add address');
-      }
+      if (!res.ok) throw new Error(data.message || 'Failed to add address');
 
       set({ user: data, error: null });
       return { success: true };
@@ -265,7 +263,79 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // ── Forgot Password ─────────────────────────────────────────────────────────
+  // ── Send Login OTP (Phone passwordless login step 1) ──────────────────
+  sendLoginOtp: async (phone) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/send-login-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, message: data.message || 'Failed to send OTP.' };
+      return { success: true };
+    } catch {
+      return { success: false, message: 'Network error. Please check your connection.' };
+    }
+  },
+
+  // ── Verify Login OTP (Phone passwordless login step 2) ────────────────
+  verifyLoginOtp: async (phone, otp) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-login-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'OTP verification failed.');
+      if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
+      if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
+      set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
+      return { success: true };
+    } catch (err) {
+      set({ error: err.message });
+      return { success: false, message: err.message };
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  // ── Smart Forgot Password ──────────────────────────────────────────
+  forgotPasswordSmart: async (identifier) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/forgot-password-smart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, message: data.message || 'Failed to send OTP.' };
+      // Returns { success, channel: 'email'|'sms', maskedTo }
+      return { success: true, channel: data.channel, maskedTo: data.maskedTo };
+    } catch {
+      return { success: false, message: 'Network error. Please check your connection.' };
+    }
+  },
+
+  // ── Verify Smart OTP (for forgot-password-smart) ───────────────────
+  verifySmartOtp: async (identifier, otp, channel) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-smart-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier, otp, channel }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, message: data.message || 'OTP verification failed.' };
+      return { success: true, resetToken: data.resetToken };
+    } catch {
+      return { success: false, message: 'Network error. Please check your connection.' };
+    }
+  },
+
+  // ── Forgot Password (Email) ─────────────────────────────────────────────────
   forgotPassword: async (email) => {
     try {
       const res = await fetch(`${API_BASE}/auth/forgot-password`, {
@@ -281,13 +351,45 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // ── Verify OTP ──────────────────────────────────────────────────────────────
+  // ── Forgot Password (Phone / SMS) ───────────────────────────────────────────
+  forgotPasswordPhone: async (phone) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/forgot-password-phone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, message: data.message || 'Failed to send OTP.' };
+      return { success: true, message: data.message };
+    } catch (err) {
+      return { success: false, message: 'Network error. Please check your connection.' };
+    }
+  },
+
+  // ── Verify Email OTP ────────────────────────────────────────────────────────
   verifyOtp: async (email, otp) => {
     try {
       const res = await fetch(`${API_BASE}/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, message: data.message || 'OTP verification failed.' };
+      return { success: true, resetToken: data.resetToken };
+    } catch (err) {
+      return { success: false, message: 'Network error. Please check your connection.' };
+    }
+  },
+
+  // ── Verify Phone OTP ────────────────────────────────────────────────────────
+  verifyPhoneOtp: async (phone, otp) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-phone-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp }),
       });
       const data = await res.json();
       if (!res.ok) return { success: false, message: data.message || 'OTP verification failed.' };

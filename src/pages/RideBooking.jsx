@@ -36,7 +36,7 @@ export default function RideBooking() {
   const [fare, setFare] = useState(0);
 
   // General State
-  const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [paymentMethod] = useState('COD');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [rideInstructions, setRideInstructions] = useState('');
@@ -439,30 +439,16 @@ export default function RideBooking() {
           <div className="bg-surface rounded-3xl p-6 border border-line shadow-2xs flex flex-col gap-4">
             <h3 className="font-display font-extrabold text-sm text-main uppercase tracking-wider pb-1 border-b border-line flex items-center gap-1.5">
               <CreditCard className="w-4.5 h-4.5 text-primary" />
-              <span>Choose Payment Method</span>
+              <span>Payment Method</span>
             </h3>
-            <div className="grid grid-cols-3 gap-3">
-              {['UPI', 'Card', 'COD'].map(method => (
-                <div
-                  key={method}
-                  onClick={() => setPaymentMethod(method)}
-                  className={`p-3.5 rounded-xl border flex flex-col gap-1 cursor-pointer transition-all ${
-                    paymentMethod === method ? 'border-yellow-400 bg-yellow-500/5' : 'border-line hover:border-line-strong bg-surface'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-main">{method}</span>
-                    <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${paymentMethod === method ? 'border-yellow-500 bg-yellow-500' : 'border-line-strong'}`}>
-                      {paymentMethod === method && <Check className="w-2 h-2 text-black fill-black" />}
-                    </div>
-                  </div>
-                  <span className="text-[8px] text-muted font-bold leading-none">
-                    {method === 'UPI' && 'GPay/PhonePe'}
-                    {method === 'Card' && 'Debit/Credit'}
-                    {method === 'COD' && 'Cash on Arrival'}
-                  </span>
-                </div>
-              ))}
+            <div className="p-3.5 rounded-xl border border-yellow-400 bg-yellow-500/5 flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-black text-main uppercase">💵 Cash On Delivery (COD)</span>
+                <span className="text-[9px] text-muted font-bold">Pay cash to captain on arrival</span>
+              </div>
+              <div className="w-4 h-4 rounded-full border border-yellow-500 bg-yellow-500 flex items-center justify-center">
+                <Check className="w-2.5 h-2.5 text-black fill-black" />
+              </div>
             </div>
           </div>
 
