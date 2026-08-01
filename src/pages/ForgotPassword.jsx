@@ -125,7 +125,6 @@ export default function ForgotPassword() {
   // Auto-detect what user typed
   const detectType = (val) => {
     if (/\S+@\S+\.\S+/.test(val)) return 'email';
-    if (/^\d{10,}$/.test(val.trim())) return 'phone';
     return null;
   };
 
@@ -135,8 +134,8 @@ export default function ForgotPassword() {
   const handleSendOtp = async (e) => {
     e.preventDefault();
     setError('');
-    if (!identifier.trim()) return setError('Please enter your email or mobile number.');
-    if (!inputType) return setError('Enter a valid email address or 10-digit mobile number.');
+    if (!identifier.trim()) return setError('Please enter your email address.');
+    if (!inputType) return setError('Enter a valid email address.');
     setLoading(true);
     const result = await forgotPasswordSmart(identifier.trim());
     setLoading(false);
@@ -209,9 +208,8 @@ export default function ForgotPassword() {
             </div>
             <h1 className="font-display font-black text-2xl text-main tracking-tight">Forgot Password?</h1>
             <p className="text-xs text-muted font-medium max-w-xs">
-              {step === 1 && "Enter your registered email or mobile number — we'll automatically send OTP to the right place."}
-              {step === 2 && channel === 'sms' && `OTP sent via SMS to ****${maskedTo}. Check your messages.`}
-              {step === 2 && channel === 'email' && `OTP sent to ${maskedTo}. Check your inbox (or backend console in dev mode).`}
+              {step === 1 && "Enter your registered email address — we'll automatically send an OTP to your inbox."}
+              {step === 2 && `OTP sent to ${maskedTo}. Check your inbox (or backend console in dev mode).`}
               {step === 3 && 'OTP verified! Now set your new password.'}
             </p>
           </div>
@@ -243,15 +241,13 @@ export default function ForgotPassword() {
                 <form onSubmit={handleSendOtp} className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
-                      Email Address or Mobile Number
+                      Email Address
                     </label>
                     <div className={`flex items-center gap-3 bg-base border rounded-xl px-4 py-3 focus-within:border-primary transition-colors ${
                       identifier && !inputType ? 'border-amber-400' : 'border-line'
                     }`}>
                       {/* Dynamic icon */}
-                      {inputType === 'phone'
-                        ? <Phone className="w-4 h-4 text-violet-500 shrink-0"/>
-                        : inputType === 'email'
+                      {inputType === 'email'
                         ? <Mail className="w-4 h-4 text-violet-500 shrink-0"/>
                         : <AtSign className="w-4 h-4 text-muted shrink-0"/>
                       }
@@ -259,28 +255,18 @@ export default function ForgotPassword() {
                         autoFocus
                         value={identifier}
                         onChange={(e) => setIdentifier(e.target.value)}
-                        placeholder="your@email.com  or  9876543210"
+                        placeholder="your@email.com"
                         className="flex-1 bg-transparent text-sm text-main outline-none placeholder:text-muted/50"
                       />
                       {/* Detected type badge */}
                       {inputType && (
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                          inputType === 'phone'
-                            ? 'bg-violet-100 text-violet-600'
-                            : 'bg-blue-100 text-blue-600'
-                        }`}>
-                          {inputType === 'phone' ? '📱 Mobile' : '✉️ Email'}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-blue-100 text-blue-600">
+                          ✉️ Email
                         </span>
                       )}
                     </div>
                     {identifier && !inputType && (
-                      <p className="text-[10px] text-amber-500 px-1">Enter a valid email or 10-digit mobile number</p>
-                    )}
-                    {inputType === 'phone' && (
-                      <p className="text-[10px] text-muted px-1">OTP will be sent via <strong>SMS</strong> to your registered number</p>
-                    )}
-                    {inputType === 'email' && (
-                      <p className="text-[10px] text-muted px-1">OTP will be sent via <strong>Email</strong> to your inbox</p>
+                      <p className="text-[10px] text-amber-500 px-1">Enter a valid email address</p>
                     )}
                   </div>
 
