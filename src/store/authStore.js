@@ -102,23 +102,18 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // ── Google Sign-In ──────────────────────────────────────────────────────────
-  googleSignIn: async (idToken) => {
+  // ── Send signup OTP for email verification ───────────────────────────────────
+  sendSignupOtp: async (email, name) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${API_BASE}/auth/google`, {
+      const res = await fetch(`${API_BASE}/auth/send-signup-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
+        body: JSON.stringify({ email, name }),
       });
-
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Google Sign-In failed');
-
-      if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
-      if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
-      set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
-      return { success: true, isNewUser: data.isNewUser };
+      if (!res.ok) throw new Error(data.message || 'Failed to send OTP');
+      return { success: true, message: data.message };
     } catch (err) {
       set({ error: err.message });
       return { success: false, message: err.message };

@@ -1,14 +1,63 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, ChevronRight, AlertCircle, ShoppingBag, Eye, LogOut, Send, FileText, Star, MessageSquare, Heart, Phone } from 'lucide-react';
+import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, ChevronRight, AlertCircle, ShoppingBag, Eye, LogOut, Send, FileText, Star, MessageSquare, Heart, Phone, Pencil, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import InteractiveMap from '../components/InteractiveMap';
 import { io } from 'socket.io-client';
 
 export default function DeliveryDashboard() {
-  const { user, token } = useAuthStore();
+  const { user, token, logout } = useAuthStore();
   const navigate = useNavigate();
+
+  // Edit Profile state
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
+
+  // Delete Account state
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    setProfileError(''); setProfileSuccess('');
+    setIsSavingProfile(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ name: editName, phone: editPhone })
+      });
+      const data = await res.json();
+      if (!res.ok) { setProfileError(data.message || 'Failed.'); return; }
+      setProfileSuccess('Profile updated!');
+      setTimeout(() => { setShowEditProfile(false); setProfileSuccess(''); window.location.reload(); }, 1200);
+    } catch { setProfileError('Server error.'); }
+    finally { setIsSavingProfile(false); }
+  };
+
+  const handleDeleteAccount = async (e) => {
+    e.preventDefault();
+    setDeleteError('');
+    setIsDeletingAccount(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/account`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ password: deletePassword })
+      });
+      const data = await res.json();
+      if (!res.ok) { setDeleteError(data.message || 'Failed.'); return; }
+      logout(); navigate('/');
+    } catch { setDeleteError('Server error.'); }
+    finally { setIsDeletingAccount(false); }
+  };
 
   const [activeSubTab, setActiveSubTab] = useState('orders'); // 'orders', 'wallet', 'history', 'kyc'
   
@@ -547,11 +596,12 @@ export default function DeliveryDashboard() {
         {/* Left Side: Navigation subtabs */}
         <div className="lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex flex-col gap-1">
           {[
-            { id: 'orders', label: 'Claimed runs', icon: Bike, badge: activeOrders.length },
+                      { id: 'orders', label: 'Claimed runs', icon: Bike, badge: activeOrders.length },
             { id: 'pool', label: 'Order Requests Pool', icon: ShoppingBag, badge: availableOrders.length },
             { id: 'wallet', label: 'Earnings & Withdrawals', icon: DollarSign },
             { id: 'history', label: 'Runs History Log', icon: Clock },
-            { id: 'kyc', label: 'KYC Partner Verification', icon: ShieldCheck }
+            { id: 'kyc', label: 'KYC Partner Verification', icon: ShieldCheck },
+            { id: 'profile', label: 'My Profile', icon: Pencil }
           ].map(tab => {
             const Icon = tab.icon;
             const active = activeSubTab === tab.id;
@@ -1048,6 +1098,87 @@ export default function DeliveryDashboard() {
 
         </div>
       </div>
+
+      {/* PROFILE TAB */}
+      {activeSubTab === 'profile' && (
+        <div className="lg:col-span-3 flex flex-col gap-5 animate-scale-up">
+          <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">My Profile</h3>
+          <div className="bg-surface border border-line rounded-3xl p-6 flex flex-col gap-4 max-w-md">
+            {[{ label: 'Full Name', value: user?.name }, { label: 'Email', value: user?.email }, { label: 'Phone', value: user?.phone }].map(({ label, value }) => (
+              <div key={label}>
+                <p className="text-[10px] text-muted font-extrabold uppercase">{label}</p>
+                <p className="text-sm font-bold text-main">{value}</p>
+              </div>
+            ))}
+            <button
+              onClick={() => { setEditName(user?.name || ''); setEditPhone(user?.phone || ''); setProfileError(''); setProfileSuccess(''); setShowEditProfile(true); }}
+              className="flex items-center gap-2 w-full justify-center py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl cursor-pointer mt-2"
+            >
+              <Pencil className="w-3.5 h-3.5"/> Edit Profile
+            </button>
+          </div>
+          <div className="bg-red-50 border border-red-100 rounded-3xl p-5 flex flex-col gap-3 max-w-md">
+            <h4 className="font-extrabold text-sm text-red-700 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/> Danger Zone</h4>
+            <p className="text-xs text-red-600 font-semibold">Permanently deletes your account and all data. Cannot be undone.</p>
+            <button onClick={() => { setDeletePassword(''); setDeleteError(''); setShowDeleteAccount(true); }}
+              className="py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer">
+              Delete My Account
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PROFILE MODAL */}
+      {showEditProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h3 className="font-display font-extrabold text-base text-main">Edit Profile</h3>
+              <button onClick={() => setShowEditProfile(false)} className="text-muted hover:text-main cursor-pointer">✕</button>
+            </div>
+            {profileError && <p className="text-[11px] font-bold text-red-500 bg-red-50 px-3 py-2 rounded-xl border border-red-100">{profileError}</p>}
+            {profileSuccess && <p className="text-[11px] font-bold text-green-700 bg-green-50 px-3 py-2 rounded-xl border border-green-100">{profileSuccess}</p>}
+            <form onSubmit={handleSaveProfile} className="flex flex-col gap-3">
+              {[{ label: 'Full Name', val: editName, set: setEditName, type: 'text' }, { label: 'Mobile', val: editPhone, set: setEditPhone, type: 'tel' }].map(({ label, val, set, type }) => (
+                <div key={label} className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold text-muted">{label}</label>
+                  <input type={type} value={val} onChange={e => set(e.target.value)}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary"/>
+                </div>
+              ))}
+              <div className="flex gap-2 mt-1">
+                <button type="button" onClick={() => setShowEditProfile(false)} className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isSavingProfile} className="flex-1 py-2.5 bg-primary text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50">{isSavingProfile ? 'Saving...' : 'Save'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE ACCOUNT MODAL */}
+      {showDeleteAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h3 className="font-display font-extrabold text-base text-red-600 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>Delete Account</h3>
+              <button onClick={() => setShowDeleteAccount(false)} className="text-muted cursor-pointer">✕</button>
+            </div>
+            <p className="text-xs text-muted bg-red-50 border border-red-100 px-3 py-2.5 rounded-xl">⚠️ This <strong>permanently</strong> deletes your account and cannot be undone.</p>
+            {deleteError && <p className="text-[11px] font-bold text-red-500 bg-red-50 px-3 py-2 rounded-xl border border-red-100">{deleteError}</p>}
+            <form onSubmit={handleDeleteAccount} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold text-muted">Confirm Password</label>
+                <input type="password" placeholder="Enter your password" value={deletePassword} onChange={e => setDeletePassword(e.target.value)} required
+                  className="bg-base border border-red-200 rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-red-400"/>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowDeleteAccount(false)} className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isDeletingAccount || !deletePassword} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50">{isDeletingAccount ? 'Deleting...' : 'Delete Forever'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

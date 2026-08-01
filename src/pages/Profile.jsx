@@ -1,7 +1,7 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, MapPin, ClipboardList, LogOut, ChevronRight, ShoppingBag, Trash2, Calendar, Star, Sparkles } from 'lucide-react';
+import { User, MapPin, ClipboardList, LogOut, ChevronRight, ShoppingBag, Trash2, Calendar, Star, Sparkles, Pencil, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import RiderFeedbackModal from '../components/RiderFeedbackModal';
@@ -18,6 +18,56 @@ export default function Profile() {
   // Rider review modal states
   const [selectedReviewOrder, setSelectedReviewOrder] = useState(null);
   const [isRiderModalOpen, setIsRiderModalOpen] = useState(false);
+
+  // Edit Profile modal
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
+
+  // Delete Account modal
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    setProfileError(''); setProfileSuccess('');
+    setIsSavingProfile(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ name: editName, phone: editPhone })
+      });
+      const data = await res.json();
+      if (!res.ok) { setProfileError(data.message || 'Failed to update.'); return; }
+      setProfileSuccess('Profile updated! Refresh to see changes.');
+      setTimeout(() => { setShowEditProfile(false); setProfileSuccess(''); window.location.reload(); }, 1200);
+    } catch { setProfileError('Server error.'); }
+    finally { setIsSavingProfile(false); }
+  };
+
+  const handleDeleteAccount = async (e) => {
+    e.preventDefault();
+    setDeleteError('');
+    setIsDeletingAccount(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/account`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ password: deletePassword })
+      });
+      const data = await res.json();
+      if (!res.ok) { setDeleteError(data.message || 'Failed to delete.'); return; }
+      logout();
+      navigate('/');
+    } catch { setDeleteError('Server error.'); }
+    finally { setIsDeletingAccount(false); }
+  };
 
   useEffect(() => {
     if (!token) {
@@ -144,10 +194,18 @@ export default function Profile() {
           
           {/* Profile Card */}
           <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4">
-            <h3 className="font-display font-extrabold text-sm text-main border-b border-line pb-2 flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
-              <span>Personal Details</span>
-            </h3>
+            <div className="flex items-center justify-between border-b border-line pb-2">
+              <h3 className="font-display font-extrabold text-sm text-main flex items-center gap-2">
+                <User className="w-5 h-5 text-primary" />
+                <span>Personal Details</span>
+              </h3>
+              <button
+                onClick={() => { setEditName(user.name || ''); setEditPhone(user.phone || ''); setProfileError(''); setProfileSuccess(''); setShowEditProfile(true); }}
+                className="flex items-center gap-1 text-[10px] font-bold text-primary hover:bg-violet-50 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                <Pencil className="w-3 h-3"/> Edit Profile
+              </button>
+            </div>
             <div className="flex flex-col gap-3">
               <div>
                 <p className="text-[10px] text-muted font-bold uppercase">Name</p>
@@ -196,7 +254,19 @@ export default function Profile() {
             )}
           </div>
 
-          {/* Digital Wallet panel */}
+      {/* Delete Account danger zone */}
+          <div className="bg-red-50 border border-red-100 rounded-3xl p-5 flex flex-col gap-3">
+            <h3 className="font-display font-extrabold text-sm text-red-700 flex items-center gap-2">
+              <AlertTriangle className="w-4.5 h-4.5"/> Danger Zone
+            </h3>
+            <p className="text-xs text-red-600 font-semibold">Permanently deletes your account and all associated data. This cannot be undone.</p>
+            <button
+              onClick={() => { setDeletePassword(''); setDeleteError(''); setShowDeleteAccount(true); }}
+              className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+            >
+              Delete My Account
+            </button>
+          </div>
           <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4">
             <div className="flex items-center justify-between border-b border-line pb-2">
               <h3 className="font-display font-extrabold text-sm text-main flex items-center gap-2">
@@ -377,6 +447,74 @@ export default function Profile() {
             setOrders(prev => prev.map(o => o._id === updatedOrder._id ? { ...o, riderReview: updatedOrder.riderReview } : o));
           }}
         />
+      )}
+
+      {/* ── EDIT PROFILE MODAL ─── */}
+      {showEditProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h3 className="font-display font-extrabold text-base text-main">Edit Profile</h3>
+              <button onClick={() => setShowEditProfile(false)} className="text-muted hover:text-main cursor-pointer">✕</button>
+            </div>
+            {profileError && <p className="text-[11px] font-bold text-red-500 bg-red-50 border border-red-100 px-3 py-2 rounded-xl">{profileError}</p>}
+            {profileSuccess && <p className="text-[11px] font-bold text-green-700 bg-green-50 border border-green-100 px-3 py-2 rounded-xl">{profileSuccess}</p>}
+            <form onSubmit={handleSaveProfile} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">Full Name</label>
+                <input type="text" value={editName} onChange={e => setEditName(e.target.value)} required
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary"/>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">Mobile Number</label>
+                <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary"/>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">Email (read-only)</label>
+                <input type="email" value={user?.email || ''} disabled
+                  className="bg-gray-50 border border-line rounded-xl px-3.5 py-2.5 text-xs text-muted font-bold cursor-not-allowed"/>
+              </div>
+              <div className="flex gap-2 mt-1">
+                <button type="button" onClick={() => setShowEditProfile(false)}
+                  className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isSavingProfile}
+                  className="flex-1 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50">
+                  {isSavingProfile ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE ACCOUNT MODAL ─── */}
+      {showDeleteAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h3 className="font-display font-extrabold text-base text-red-600 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>Delete Account</h3>
+              <button onClick={() => setShowDeleteAccount(false)} className="text-muted hover:text-main cursor-pointer">✕</button>
+            </div>
+            <p className="text-xs text-muted font-semibold bg-red-50 border border-red-100 px-3 py-2.5 rounded-xl">⚠️ This will permanently delete your account and all data. This action <strong>cannot be undone</strong>.</p>
+            {deleteError && <p className="text-[11px] font-bold text-red-500 bg-red-50 border border-red-100 px-3 py-2 rounded-xl">{deleteError}</p>}
+            <form onSubmit={handleDeleteAccount} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">Confirm your password</label>
+                <input type="password" placeholder="Enter your password" value={deletePassword} onChange={e => setDeletePassword(e.target.value)} required
+                  className="bg-base border border-red-200 rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-red-400"/>
+              </div>
+              <div className="flex gap-2 mt-1">
+                <button type="button" onClick={() => setShowDeleteAccount(false)}
+                  className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isDeletingAccount || !deletePassword}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50">
+                  {isDeletingAccount ? 'Deleting...' : 'Delete Forever'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

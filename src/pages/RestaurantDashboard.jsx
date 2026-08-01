@@ -2,13 +2,62 @@ import { API_BASE } from '../config/api';
 import { io } from 'socket.io-client';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus } from 'lucide-react';
+import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus, Pencil, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend } from '../utils/uploadUtil';
 
 export default function RestaurantDashboard() {
-  const { user, token } = useAuthStore();
+  const { user, token, logout } = useAuthStore();
   const navigate = useNavigate();
+
+  // ── Personal Edit Profile state ─────────────────────────────
+  const [showEditPersonalProfile, setShowEditPersonalProfile] = useState(false);
+  const [editPersonalName, setEditPersonalName] = useState('');
+  const [editPersonalPhone, setEditPersonalPhone] = useState('');
+  const [isSavingPersonal, setIsSavingPersonal] = useState(false);
+  const [personalProfileError, setPersonalProfileError] = useState('');
+  const [personalProfileSuccess, setPersonalProfileSuccess] = useState('');
+
+  // ── Delete Account state ─────────────────────────────────────
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleSavePersonalProfile = async (e) => {
+    e.preventDefault();
+    setPersonalProfileError(''); setPersonalProfileSuccess('');
+    setIsSavingPersonal(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ name: editPersonalName, phone: editPersonalPhone })
+      });
+      const data = await res.json();
+      if (!res.ok) { setPersonalProfileError(data.message || 'Failed to update.'); return; }
+      setPersonalProfileSuccess('Profile updated!');
+      setTimeout(() => { setShowEditPersonalProfile(false); setPersonalProfileSuccess(''); window.location.reload(); }, 1200);
+    } catch { setPersonalProfileError('Server error.'); }
+    finally { setIsSavingPersonal(false); }
+  };
+
+  const handleDeleteAccount = async (e) => {
+    e.preventDefault();
+    setDeleteError('');
+    setIsDeletingAccount(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/account`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ password: deletePassword })
+      });
+      const data = await res.json();
+      if (!res.ok) { setDeleteError(data.message || 'Failed to delete.'); return; }
+      logout(); navigate('/');
+    } catch { setDeleteError('Server error.'); }
+    finally { setIsDeletingAccount(false); }
+  };
 
   const [activeSubTab, setActiveSubTab] = useState('orders'); // 'orders', 'menu', 'offers', 'profile', 'kyc'
   
@@ -1280,6 +1329,25 @@ export default function RestaurantDashboard() {
                   {isProfileSaving ? 'Saving Updates...' : 'Save Kitchen Parameters'}
                 </button>
               </form>
+
+              {/* ── My Account section ── */}
+              <div className="flex flex-col gap-4 mt-2">
+                <h4 className="font-display font-extrabold text-sm text-main border-b border-line pb-2">My Account</h4>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={() => { setEditPersonalName(user?.name || ''); setEditPersonalPhone(user?.phone || ''); setPersonalProfileError(''); setPersonalProfileSuccess(''); setShowEditPersonalProfile(true); }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl cursor-pointer shadow-xs"
+                  >
+                    <Pencil className="w-3.5 h-3.5"/> Edit My Profile
+                  </button>
+                  <button
+                    onClick={() => { setDeletePassword(''); setDeleteError(''); setShowDeleteAccount(true); }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold rounded-xl cursor-pointer"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5"/> Delete Account
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1461,6 +1529,65 @@ export default function RestaurantDashboard() {
               <button type="submit" className="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 rounded-xl mt-2 cursor-pointer shadow-md">
                 {editingItem ? 'Update Menu Item' : 'Add Item to Menu'}
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT PERSONAL PROFILE MODAL ─────────────────────── */}
+      {showEditPersonalProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h3 className="font-display font-extrabold text-base text-main">Edit My Profile</h3>
+              <button onClick={() => setShowEditPersonalProfile(false)} className="text-muted hover:text-main cursor-pointer">✕</button>
+            </div>
+            {personalProfileError && <p className="text-[11px] font-bold text-red-500 bg-red-50 px-3 py-2 rounded-xl border border-red-100">{personalProfileError}</p>}
+            {personalProfileSuccess && <p className="text-[11px] font-bold text-green-700 bg-green-50 px-3 py-2 rounded-xl border border-green-100">{personalProfileSuccess}</p>}
+            <form onSubmit={handleSavePersonalProfile} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold text-muted">Full Name</label>
+                <input type="text" value={editPersonalName} onChange={e => setEditPersonalName(e.target.value)} required
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary"/>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold text-muted">Mobile Number</label>
+                <input type="tel" value={editPersonalPhone} onChange={e => setEditPersonalPhone(e.target.value)}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary"/>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold text-muted">Email (read-only)</label>
+                <input type="email" value={user?.email || ''} disabled className="bg-gray-50 border border-line rounded-xl px-3.5 py-2.5 text-xs text-muted font-bold cursor-not-allowed"/>
+              </div>
+              <div className="flex gap-2 mt-1">
+                <button type="button" onClick={() => setShowEditPersonalProfile(false)} className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isSavingPersonal} className="flex-1 py-2.5 bg-primary text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50">{isSavingPersonal ? 'Saving...' : 'Save Changes'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE ACCOUNT MODAL ─────────────────────────────── */}
+      {showDeleteAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h3 className="font-display font-extrabold text-base text-red-600 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>Delete Account</h3>
+              <button onClick={() => setShowDeleteAccount(false)} className="text-muted cursor-pointer">✕</button>
+            </div>
+            <p className="text-xs text-muted bg-red-50 border border-red-100 px-3 py-2.5 rounded-xl">⚠️ This <strong>permanently</strong> deletes your account, restaurant and all data. Cannot be undone.</p>
+            {deleteError && <p className="text-[11px] font-bold text-red-500 bg-red-50 px-3 py-2 rounded-xl border border-red-100">{deleteError}</p>}
+            <form onSubmit={handleDeleteAccount} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold text-muted">Confirm Password</label>
+                <input type="password" placeholder="Enter your password" value={deletePassword} onChange={e => setDeletePassword(e.target.value)} required
+                  className="bg-base border border-red-200 rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-red-400"/>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowDeleteAccount(false)} className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isDeletingAccount || !deletePassword} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50">{isDeletingAccount ? 'Deleting...' : 'Delete Forever'}</button>
+              </div>
             </form>
           </div>
         </div>

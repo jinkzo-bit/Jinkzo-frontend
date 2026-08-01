@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
   ShieldAlert, DollarSign, ShoppingBag, Users, Store, Bike, CheckCircle, Check,
   XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare, 
-  AlertCircle, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2
+  AlertCircle, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2,
+  Pencil, Plus, UserCircle
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend } from '../utils/uploadUtil';
@@ -46,6 +47,24 @@ export default function AdminDashboard() {
   const [isUsersLoading, setIsUsersLoading] = useState(true);
   const [blockingUserId, setBlockingUserId] = useState(null);
   const [deletingUserId, setDeletingUserId] = useState(null);
+
+  // Add/Edit User modals
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [addUserForm, setAddUserForm] = useState({ name: '', email: '', phone: '', password: '', role: 'customer' });
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [addUserError, setAddUserError] = useState('');
+
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [editUserForm, setEditUserForm] = useState({ _id: '', name: '', email: '', phone: '' });
+  const [isEditingUser, setIsEditingUser] = useState(false);
+  const [editUserError, setEditUserError] = useState('');
+
+  // Admin Edit Profile modal
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [editProfileForm, setEditProfileForm] = useState({ name: '', email: '', phone: '' });
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editProfileError, setEditProfileError] = useState('');
+  const [editProfileSuccess, setEditProfileSuccess] = useState('');
 
   // Payout Approvals
   const [withdrawals, setWithdrawals] = useState([]);
@@ -390,6 +409,65 @@ export default function AdminDashboard() {
     }
   };
 
+  // Add new user (admin)
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    setAddUserError('');
+    setIsAddingUser(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(addUserForm)
+      });
+      const data = await res.json();
+      if (!res.ok) { setAddUserError(data.message || 'Failed to create user.'); return; }
+      setAllUsers(prev => [data, ...prev]);
+      setShowAddUserModal(false);
+      setAddUserForm({ name: '', email: '', phone: '', password: '', role: 'customer' });
+      fetchAnalytics();
+    } catch (err) { setAddUserError('Server error.'); }
+    finally { setIsAddingUser(false); }
+  };
+
+  // Edit user (admin)
+  const handleEditUser = async (e) => {
+    e.preventDefault();
+    setEditUserError('');
+    setIsEditingUser(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${editUserForm._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ name: editUserForm.name, email: editUserForm.email, phone: editUserForm.phone })
+      });
+      const data = await res.json();
+      if (!res.ok) { setEditUserError(data.message || 'Failed to update user.'); return; }
+      setAllUsers(prev => prev.map(u => u._id === data._id ? data : u));
+      setShowEditUserModal(false);
+    } catch (err) { setEditUserError('Server error.'); }
+    finally { setIsEditingUser(false); }
+  };
+
+  // Admin edit own profile
+  const handleEditAdminProfile = async (e) => {
+    e.preventDefault();
+    setEditProfileError(''); setEditProfileSuccess('');
+    setIsEditingProfile(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ name: editProfileForm.name, phone: editProfileForm.phone })
+      });
+      const data = await res.json();
+      if (!res.ok) { setEditProfileError(data.message || 'Failed to update profile.'); return; }
+      setEditProfileSuccess('Profile updated successfully!');
+      setTimeout(() => { setShowEditProfileModal(false); setEditProfileSuccess(''); }, 1200);
+    } catch (err) { setEditProfileError('Server error.'); }
+    finally { setIsEditingProfile(false); }
+  };
+
   // Delete User
   const handleDeleteUser = async (userId) => {
     if (!window.confirm('Are you sure you want to permanently delete this user? This will also delete any associated restaurant and menu listings.')) {
@@ -717,9 +795,14 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Global Operational Status Badge */}
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted font-bold uppercase">System Status</span>
+        {/* Global Operational Status Badge + Edit Profile */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => { setEditProfileForm({ name: user?.name || '', email: user?.email || '', phone: user?.phone || '' }); setShowEditProfileModal(true); }}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-line-strong text-xs font-bold text-muted hover:bg-base hover:text-primary hover:border-primary transition-all cursor-pointer"
+          >
+            <UserCircle className="w-4 h-4" /> Edit Profile
+          </button>
           <span className={`text-[10px] font-extrabold px-3.5 py-1 rounded-full border flex items-center gap-1.5 ${
             platformSettings.isOpen 
               ? 'bg-green-50 border-green-200 text-green-700' 
@@ -1170,9 +1253,9 @@ export default function AdminDashboard() {
             <div className="flex flex-col gap-4 animate-scale-up">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-line pb-3 gap-3">
                 <h3 className="font-display font-extrabold text-base text-main">User Directory Manager</h3>
-                
-                {/* User Type Filters */}
-                <div className="flex gap-1.5 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* User Type Filters */}
+                  <div className="flex gap-1.5 flex-wrap">
                   {[
                     { id: 'all', label: 'All Accounts' },
                     { id: 'customer', label: 'Customers' },
@@ -1194,6 +1277,14 @@ export default function AdminDashboard() {
                       {filter.label}
                     </button>
                   ))}
+                  </div>
+                  {/* Add User Button */}
+                  <button
+                    onClick={() => { setAddUserError(''); setShowAddUserModal(true); }}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-primary text-white text-[10px] font-bold rounded-xl shadow-xs hover:bg-primary-hover transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5"/> Add User
+                  </button>
                 </div>
               </div>
 
@@ -1256,9 +1347,16 @@ export default function AdminDashboard() {
                             <span className="text-[9px] text-muted font-mono mt-0.5">{u.phone}</span>
                           </div>
  
-                          {/* Block / Delete Controls */}
+                          {/* Block / Edit / Delete Controls */}
                           {u.role !== 'admin' && (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => { setEditUserForm({ _id: u._id, name: u.name, email: u.email, phone: u.phone || '' }); setEditUserError(''); setShowEditUserModal(true); }}
+                                className="p-2 rounded-xl border border-line-strong bg-base text-muted hover:text-primary hover:bg-violet-50 hover:border-violet-200 flex items-center justify-center transition-all cursor-pointer"
+                                title="Edit Account"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 onClick={() => handleToggleBlockUser(u._id)}
                                 disabled={blockingUserId === u._id || deletingUserId === u._id}
@@ -2013,6 +2111,128 @@ export default function AdminDashboard() {
 
         </div>
       </div>
+
+      {/* ── ADD USER MODAL ─────────────────────────────────────────── */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2"><Plus className="w-4 h-4 text-primary"/>Add New User</h3>
+              <button onClick={() => setShowAddUserModal(false)} className="text-muted hover:text-main cursor-pointer"><X className="w-4 h-4"/></button>
+            </div>
+            {addUserError && <p className="text-[11px] font-bold text-red-500 bg-red-50 border border-red-100 px-3 py-2 rounded-xl">{addUserError}</p>}
+            <form onSubmit={handleAddUser} className="flex flex-col gap-3">
+              {[
+                { label: 'Full Name', key: 'name', type: 'text', placeholder: 'John Doe' },
+                { label: 'Email Address', key: 'email', type: 'email', placeholder: 'john@example.com' },
+                { label: 'Mobile Number', key: 'phone', type: 'tel', placeholder: '9876543210' },
+                { label: 'Password', key: 'password', type: 'password', placeholder: 'Min. 6 characters' },
+              ].map(({ label, key, type, placeholder }) => (
+                <div key={key} className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">{label}</label>
+                  <input type={type} required placeholder={placeholder} value={addUserForm[key]}
+                    onChange={e => setAddUserForm({ ...addUserForm, [key]: e.target.value })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary w-full"/>
+                </div>
+              ))}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Role</label>
+                <select value={addUserForm.role} onChange={e => setAddUserForm({ ...addUserForm, role: e.target.value })}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary cursor-pointer">
+                  <option value="customer">Customer</option>
+                  <option value="delivery">Delivery Rider</option>
+                  <option value="restaurant">Restaurant Partner</option>
+                </select>
+              </div>
+              <div className="flex gap-2 mt-2">
+                <button type="button" onClick={() => setShowAddUserModal(false)}
+                  className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isAddingUser}
+                  className="flex-1 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50">
+                  {isAddingUser ? 'Creating...' : 'Create Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT USER MODAL ─────────────────────────────────────────── */}
+      {showEditUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2"><Pencil className="w-4 h-4 text-primary"/>Edit User Profile</h3>
+              <button onClick={() => setShowEditUserModal(false)} className="text-muted hover:text-main cursor-pointer"><X className="w-4 h-4"/></button>
+            </div>
+            {editUserError && <p className="text-[11px] font-bold text-red-500 bg-red-50 border border-red-100 px-3 py-2 rounded-xl">{editUserError}</p>}
+            <form onSubmit={handleEditUser} className="flex flex-col gap-3">
+              {[
+                { label: 'Full Name', key: 'name', type: 'text', placeholder: 'Full Name' },
+                { label: 'Email Address', key: 'email', type: 'email', placeholder: 'Email' },
+                { label: 'Mobile Number', key: 'phone', type: 'tel', placeholder: 'Phone' },
+              ].map(({ label, key, type, placeholder }) => (
+                <div key={key} className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">{label}</label>
+                  <input type={type} required={key !== 'phone'} placeholder={placeholder} value={editUserForm[key]}
+                    onChange={e => setEditUserForm({ ...editUserForm, [key]: e.target.value })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary w-full"/>
+                </div>
+              ))}
+              <div className="flex gap-2 mt-2">
+                <button type="button" onClick={() => setShowEditUserModal(false)}
+                  className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isEditingUser}
+                  className="flex-1 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50">
+                  {isEditingUser ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADMIN EDIT PROFILE MODAL ────────────────────────────────── */}
+      {showEditProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2"><UserCircle className="w-4 h-4 text-primary"/>Edit Admin Profile</h3>
+              <button onClick={() => setShowEditProfileModal(false)} className="text-muted hover:text-main cursor-pointer"><X className="w-4 h-4"/></button>
+            </div>
+            {editProfileError && <p className="text-[11px] font-bold text-red-500 bg-red-50 border border-red-100 px-3 py-2 rounded-xl">{editProfileError}</p>}
+            {editProfileSuccess && <p className="text-[11px] font-bold text-green-700 bg-green-50 border border-green-100 px-3 py-2 rounded-xl">{editProfileSuccess}</p>}
+            <form onSubmit={handleEditAdminProfile} className="flex flex-col gap-3">
+              {[
+                { label: 'Full Name', key: 'name', type: 'text', placeholder: 'Your name' },
+                { label: 'Mobile Number', key: 'phone', type: 'tel', placeholder: 'Phone number' },
+              ].map(({ label, key, type, placeholder }) => (
+                <div key={key} className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">{label}</label>
+                  <input type={type} placeholder={placeholder} value={editProfileForm[key]}
+                    onChange={e => setEditProfileForm({ ...editProfileForm, [key]: e.target.value })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary w-full"/>
+                </div>
+              ))}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Email Address</label>
+                <input type="email" value={user?.email || ''} disabled
+                  className="bg-gray-50 border border-line rounded-xl px-3.5 py-2.5 text-xs text-muted font-bold outline-none w-full cursor-not-allowed"/>
+                <span className="text-[9px] text-muted px-1">Email cannot be changed for security reasons</span>
+              </div>
+              <div className="flex gap-2 mt-2">
+                <button type="button" onClick={() => setShowEditProfileModal(false)}
+                  className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isEditingProfile}
+                  className="flex-1 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50">
+                  {isEditingProfile ? 'Saving...' : 'Update Profile'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
