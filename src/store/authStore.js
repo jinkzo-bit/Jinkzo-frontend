@@ -66,12 +66,14 @@ export const useAuthStore = create((set, get) => ({
         const data = await res.json();
         const currentToken = get().token || sessionToken;
         set({ user: data, token: currentToken, isAuthenticated: true, error: null });
-      } else {
+      } else if (res.status === 401 || res.status === 403) {
         get().logout();
+      } else {
+        set({ error: 'Session initialization failed', isAuthenticated: false });
       }
     } catch (err) {
       console.error('Session initialization failed:', err);
-      set({ user: null, token: null, isAuthenticated: false });
+      set({ error: err.message, isAuthenticated: false });
     } finally {
       set({ loading: false });
     }

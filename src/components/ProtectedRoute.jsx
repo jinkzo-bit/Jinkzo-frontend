@@ -3,13 +3,13 @@ import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
 export const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, user, loading, initialize } = useAuthStore();
+  const { isAuthenticated, user, loading, initialize, error } = useAuthStore();
 
   useEffect(() => {
-    if (isAuthenticated && !user && !loading) {
+    if (isAuthenticated && !user && !loading && !error) {
       initialize();
     }
-  }, [isAuthenticated, user, loading, initialize]);
+  }, [isAuthenticated, user, loading, initialize, error]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
