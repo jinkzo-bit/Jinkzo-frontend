@@ -164,6 +164,14 @@ export const useAuthStore = create((set, get) => ({
     } catch (e) {
       console.error('Logout request failed:', e);
     }
+    
+    try {
+      const { useCartStore } = await import('./cartStore');
+      useCartStore.getState().clearCart();
+    } catch (e) {
+      console.error('Failed to clear cart on logout:', e);
+    }
+
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
     set({ user: null, token: null, isAuthenticated: false, error: null });
