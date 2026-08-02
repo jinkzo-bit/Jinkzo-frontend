@@ -243,7 +243,18 @@ export default function Profile() {
                 <span>Personal Details</span>
               </h3>
               <button
-                onClick={() => { setEditName(user.name || ''); setEditPhone(user.phone || ''); setProfileError(''); setProfileSuccess(''); setShowEditProfile(true); }}
+                onClick={() => { 
+                  setEditName(user.name || ''); 
+                  setEditPhone(user.phone || ''); 
+                  setEditEmail(user.email || '');
+                  setIsEmailOtpSent(false);
+                  setEmailOtp('');
+                  setEmailUpdateError('');
+                  setEmailUpdateSuccess('');
+                  setProfileError(''); 
+                  setProfileSuccess(''); 
+                  setShowEditProfile(true); 
+                }}
                 className="flex items-center gap-1 text-[10px] font-bold text-primary hover:bg-violet-50 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
               >
                 <Pencil className="w-3 h-3"/> Edit Profile

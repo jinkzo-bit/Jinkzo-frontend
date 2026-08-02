@@ -15,6 +15,13 @@ export default function DeliveryDashboard() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [emailOtp, setEmailOtp] = useState('');
+  const [isEmailOtpSent, setIsEmailOtpSent] = useState(false);
+  const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
+  const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] = useState(false);
+  const [emailUpdateError, setEmailUpdateError] = useState('');
+  const [emailUpdateSuccess, setEmailUpdateSuccess] = useState('');
   const [editProfileImage, setEditProfileImage] = useState(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState('');
@@ -61,6 +68,42 @@ export default function DeliveryDashboard() {
       setTimeout(() => { setShowEditProfile(false); setProfileSuccess(''); window.location.reload(); }, 1200);
     } catch { setProfileError('Server error.'); }
     finally { setIsSavingProfile(false); }
+  };
+
+  const handleSendEmailOtp = async () => {
+    if (!editEmail || editEmail === user?.email) return;
+    setEmailUpdateError(''); setEmailUpdateSuccess('');
+    setIsSendingEmailOtp(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/send-email-update-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ newEmail: editEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) { setEmailUpdateError(data.message || 'Failed to send OTP.'); return; }
+      setIsEmailOtpSent(true);
+      setEmailUpdateSuccess('OTP sent to new email!');
+    } catch { setEmailUpdateError('Server error.'); }
+    finally { setIsSendingEmailOtp(false); }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (!emailOtp) return;
+    setEmailUpdateError(''); setEmailUpdateSuccess('');
+    setIsVerifyingEmailOtp(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/update-email`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ otp: emailOtp })
+      });
+      const data = await res.json();
+      if (!res.ok) { setEmailUpdateError(data.message || 'Failed to verify OTP.'); return; }
+      setEmailUpdateSuccess('Email updated successfully!');
+      setTimeout(() => { window.location.reload(); }, 1200);
+    } catch { setEmailUpdateError('Server error.'); }
+    finally { setIsVerifyingEmailOtp(false); }
   };
 
   const handleDeleteAccount = async (e) => {
@@ -1146,7 +1189,19 @@ export default function DeliveryDashboard() {
               </div>
             )}
             <button
-              onClick={() => { setEditName(user?.name || ''); setEditPhone(user?.phone || ''); setEditProfileImage(null); setProfileError(''); setProfileSuccess(''); setShowEditProfile(true); }}
+              onClick={() => { 
+                setEditName(user?.name || ''); 
+                setEditPhone(user?.phone || ''); 
+                setEditEmail(user?.email || '');
+                setIsEmailOtpSent(false);
+                setEmailOtp('');
+                setEmailUpdateError('');
+                setEmailUpdateSuccess('');
+                setEditProfileImage(null); 
+                setProfileError(''); 
+                setProfileSuccess(''); 
+                setShowEditProfile(true); 
+              }}
               className="flex items-center gap-2 w-full justify-center py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl cursor-pointer mt-2"
             >
               <Pencil className="w-3.5 h-3.5"/> Edit Profile
@@ -1206,10 +1261,30 @@ export default function DeliveryDashboard() {
                   className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary text-main"/>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold text-muted tracking-wider">EMAIL (READ-ONLY)</label>
-                <input type="email" value={user?.email || ''} readOnly
-                  className="bg-surface border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none text-muted cursor-not-allowed"/>
+              <div className="flex flex-col gap-1 pb-3 border-b border-line-strong">
+                <label className="text-[10px] uppercase font-extrabold text-muted tracking-wider">EMAIL</label>
+                <div className="flex gap-2">
+                  <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} disabled={isEmailOtpSent}
+                    className="flex-1 bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary text-main disabled:opacity-60"/>
+                  {editEmail !== user?.email && !isEmailOtpSent && (
+                    <button type="button" onClick={handleSendEmailOtp} disabled={isSendingEmailOtp}
+                      className="px-3 bg-violet-100 text-[#7C3AED] hover:bg-violet-200 text-[10px] font-bold rounded-xl cursor-pointer disabled:opacity-50">
+                      {isSendingEmailOtp ? 'Sending...' : 'Verify'}
+                    </button>
+                  )}
+                </div>
+                {isEmailOtpSent && (
+                  <div className="flex gap-2 mt-2">
+                    <input type="text" placeholder="Enter 6-digit OTP" value={emailOtp} onChange={e => setEmailOtp(e.target.value)}
+                      className="flex-1 bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold tracking-widest outline-none focus:border-primary text-main"/>
+                    <button type="button" onClick={handleVerifyEmailOtp} disabled={isVerifyingEmailOtp}
+                      className="px-4 bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-[10px] font-bold rounded-xl cursor-pointer disabled:opacity-50">
+                      {isVerifyingEmailOtp ? '...' : 'Confirm'}
+                    </button>
+                  </div>
+                )}
+                {emailUpdateError && <p className="text-[10px] font-bold text-red-500 mt-1">{emailUpdateError}</p>}
+                {emailUpdateSuccess && <p className="text-[10px] font-bold text-green-600 mt-1">{emailUpdateSuccess}</p>}
               </div>
 
               <div className="flex gap-4 mt-2">
