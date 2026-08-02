@@ -211,7 +211,7 @@ export default function LoginSignup() {
       }
       partnerDetails = { restaurantName, restaurantAddress, documentType: 'GSTIN', documentNumber: gstin, restaurantImage };
     } else if (role === 'delivery') {
-      if (!vehicleNumber || !drivingLicense) return setFormError('Please complete all delivery partner details.');
+      if (!vehicleNumber) return setFormError('Please complete vehicle details.');
       let profileImage = '';
       if (riderImageFile) {
         setIsUploading(true);
@@ -468,10 +468,10 @@ export default function LoginSignup() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">KYC - Driving License</label>
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">KYC - Driving License (Optional)</label>
                   <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2">
                     <FileText className="w-4 h-4 text-muted"/>
-                    <input type="text" required placeholder="e.g. DL-142026123456" value={drivingLicense}
+                    <input type="text" placeholder="e.g. DL-142026123456" value={drivingLicense}
                       onChange={(e) => setDrivingLicense(e.target.value)}
                       className="bg-transparent border-none outline-none text-xs text-main w-full uppercase"/>
                   </div>
@@ -480,7 +480,7 @@ export default function LoginSignup() {
                   <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Rider Profile Photo</label>
                   <div className="flex items-center bg-base border border-line-strong rounded-xl px-3 py-2.5 gap-2 cursor-pointer relative">
                     <Camera className="w-4 h-4 text-muted"/>
-                    <input type="file" accept="image/*" onChange={(e) => setRiderImageFile(e.target.files[0])}
+                    <input type="file" accept=".jpeg, .jpg, .png" onChange={(e) => setRiderImageFile(e.target.files[0])}
                       className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"/>
                     <span className="text-xs text-main font-semibold truncate pr-6">{riderImageFile ? riderImageFile.name : 'Choose rider avatar image...'}</span>
                   </div>

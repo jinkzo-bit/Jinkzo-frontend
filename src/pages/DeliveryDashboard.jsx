@@ -14,6 +14,7 @@ export default function DeliveryDashboard() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editProfileImage, setEditProfileImage] = useState(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
@@ -29,10 +30,29 @@ export default function DeliveryDashboard() {
     setProfileError(''); setProfileSuccess('');
     setIsSavingProfile(true);
     try {
+      let profileImageUrl = riderProfile?.profileImage || user?.profileImage || '';
+      
+      if (editProfileImage) {
+        const formData = new FormData();
+        formData.append('image', editProfileImage);
+        const uploadRes = await fetch(`${API_BASE}/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadRes.ok && uploadData.imageUrl) {
+          profileImageUrl = uploadData.imageUrl;
+        } else {
+          setProfileError('Failed to upload image.');
+          setIsSavingProfile(false);
+          return;
+        }
+      }
+
       const res = await fetch(`${API_BASE}/auth/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ name: editName, phone: editPhone })
+        body: JSON.stringify({ name: editName, phone: editPhone, profileImage: profileImageUrl })
       });
       const data = await res.json();
       if (!res.ok) { setProfileError(data.message || 'Failed.'); return; }
@@ -59,7 +79,7 @@ export default function DeliveryDashboard() {
     finally { setIsDeletingAccount(false); }
   };
 
-  const [activeSubTab, setActiveSubTab] = useState('orders'); // 'orders', 'wallet', 'history', 'kyc'
+  const [activeSubTab, setActiveSubTab] = useState('pool'); // 'pool', 'orders', 'wallet', 'history', 'kyc'
   
   // Rider specific profile & availability
   const [riderProfile, setRiderProfile] = useState(null);
@@ -596,8 +616,8 @@ export default function DeliveryDashboard() {
         {/* Left Side: Navigation subtabs */}
         <div className="lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex flex-col gap-1">
           {[
-                      { id: 'orders', label: 'Claimed runs', icon: Bike, badge: activeOrders.length },
             { id: 'pool', label: 'Order Requests Pool', icon: ShoppingBag, badge: availableOrders.length },
+            { id: 'orders', label: 'Claimed runs', icon: Bike, badge: activeOrders.length },
             { id: 'wallet', label: 'Earnings & Withdrawals', icon: DollarSign },
             { id: 'history', label: 'Runs History Log', icon: Clock },
             { id: 'kyc', label: 'KYC Partner Verification', icon: ShieldCheck },
@@ -1110,8 +1130,14 @@ export default function DeliveryDashboard() {
                 <p className="text-sm font-bold text-main">{value}</p>
               </div>
             ))}
+            {user?.profileImage && (
+              <div>
+                <p className="text-[10px] text-muted font-extrabold uppercase">Profile Image</p>
+                <img src={user.profileImage} alt="Profile" className="w-16 h-16 rounded-xl object-cover mt-1 border border-line" />
+              </div>
+            )}
             <button
-              onClick={() => { setEditName(user?.name || ''); setEditPhone(user?.phone || ''); setProfileError(''); setProfileSuccess(''); setShowEditProfile(true); }}
+              onClick={() => { setEditName(user?.name || ''); setEditPhone(user?.phone || ''); setEditProfileImage(null); setProfileError(''); setProfileSuccess(''); setShowEditProfile(true); }}
               className="flex items-center gap-2 w-full justify-center py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl cursor-pointer mt-2"
             >
               <Pencil className="w-3.5 h-3.5"/> Edit Profile
@@ -1146,6 +1172,11 @@ export default function DeliveryDashboard() {
                     className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary"/>
                 </div>
               ))}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold text-muted">Profile Image</label>
+                <input type="file" accept=".jpeg, .jpg, .png" onChange={e => setEditProfileImage(e.target.files[0])}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary"/>
+              </div>
               <div className="flex gap-2 mt-1">
                 <button type="button" onClick={() => setShowEditProfile(false)} className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
                 <button type="submit" disabled={isSavingProfile} className="flex-1 py-2.5 bg-primary text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50">{isSavingProfile ? 'Saving...' : 'Save'}</button>
