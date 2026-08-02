@@ -1,7 +1,7 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, ChevronRight, AlertCircle, ShoppingBag, Eye, LogOut, Send, FileText, Star, MessageSquare, Heart, Phone, Pencil, AlertTriangle } from 'lucide-react';
+import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, ChevronRight, AlertCircle, ShoppingBag, Eye, LogOut, Send, FileText, Star, MessageSquare, Heart, Phone, Pencil, AlertTriangle, Camera } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import InteractiveMap from '../components/InteractiveMap';
 import { io } from 'socket.io-client';
@@ -501,9 +501,17 @@ export default function DeliveryDashboard() {
       {/* Rider Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-5">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
-            <Bike className="w-8 h-8" />
-          </div>
+          {user?.profileImage || riderProfile?.profileImage ? (
+            <img 
+              src={user?.profileImage || riderProfile?.profileImage} 
+              alt="Profile" 
+              className="w-12 h-12 rounded-2xl object-cover border border-line shadow-xs" 
+            />
+          ) : (
+            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+              <Bike className="w-8 h-8" />
+            </div>
+          )}
           <div>
             <h1 className="font-display font-black text-2xl text-main leading-tight">
               {riderProfile?.name || 'Rider Dashboard'}
@@ -1164,22 +1172,50 @@ export default function DeliveryDashboard() {
             </div>
             {profileError && <p className="text-[11px] font-bold text-red-500 bg-red-50 px-3 py-2 rounded-xl border border-red-100">{profileError}</p>}
             {profileSuccess && <p className="text-[11px] font-bold text-green-700 bg-green-50 px-3 py-2 rounded-xl border border-green-100">{profileSuccess}</p>}
-            <form onSubmit={handleSaveProfile} className="flex flex-col gap-3">
-              {[{ label: 'Full Name', val: editName, set: setEditName, type: 'text' }, { label: 'Mobile', val: editPhone, set: setEditPhone, type: 'tel' }].map(({ label, val, set, type }) => (
-                <div key={label} className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase font-extrabold text-muted">{label}</label>
-                  <input type={type} value={val} onChange={e => set(e.target.value)}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary"/>
+            <form onSubmit={handleSaveProfile} className="flex flex-col gap-4">
+              
+              {/* Profile Image Uploader */}
+              <div className="flex flex-col items-center justify-center mb-2">
+                <div className="relative w-24 h-24 rounded-full border-2 border-line-strong overflow-hidden bg-base flex items-center justify-center">
+                  {editProfileImage ? (
+                    <img src={URL.createObjectURL(editProfileImage)} alt="Preview" className="w-full h-full object-cover" />
+                  ) : user?.profileImage || riderProfile?.profileImage ? (
+                    <img src={user?.profileImage || riderProfile?.profileImage} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <Bike className="w-10 h-10 text-muted" />
+                  )}
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
+                    <Camera className="w-6 h-6 text-white" />
+                  </div>
+                  <input type="file" accept=".jpeg, .jpg, .png" onChange={e => setEditProfileImage(e.target.files[0])}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                 </div>
-              ))}
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold text-muted">Profile Image</label>
-                <input type="file" accept=".jpeg, .jpg, .png" onChange={e => setEditProfileImage(e.target.files[0])}
-                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary"/>
+                <span className="text-[10px] uppercase font-extrabold text-muted mt-2 tracking-wider">Update Photo</span>
               </div>
-              <div className="flex gap-2 mt-1">
-                <button type="button" onClick={() => setShowEditProfile(false)} className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
-                <button type="submit" disabled={isSavingProfile} className="flex-1 py-2.5 bg-primary text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50">{isSavingProfile ? 'Saving...' : 'Save'}</button>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold text-muted tracking-wider">FULL NAME</label>
+                <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary text-main"/>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold text-muted tracking-wider">MOBILE NUMBER</label>
+                <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary text-main"/>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold text-muted tracking-wider">EMAIL (READ-ONLY)</label>
+                <input type="email" value={user?.email || ''} readOnly
+                  className="bg-surface border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none text-muted cursor-not-allowed"/>
+              </div>
+
+              <div className="flex gap-4 mt-2">
+                <button type="button" onClick={() => setShowEditProfile(false)} className="flex-1 py-3 border border-line-strong text-xs font-bold text-main rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isSavingProfile} className="flex-1 py-3 bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50 transition-colors">
+                  {isSavingProfile ? 'Saving...' : 'Save Changes'}
+                </button>
               </div>
             </form>
           </div>
