@@ -673,9 +673,13 @@ export default function RestaurantDashboard() {
       {/* Upper header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-5">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-primary/10 text-primary rounded-2xl">
-            <Store className="w-8 h-8" />
-          </div>
+          {restaurantProfile?.image ? (
+            <img src={restaurantProfile.image} alt="Restaurant Cover" className="w-14 h-14 rounded-2xl object-cover shadow-sm border border-line" />
+          ) : (
+            <div className="p-2.5 bg-primary/10 text-primary rounded-2xl">
+              <Store className="w-8 h-8" />
+            </div>
+          )}
           <div>
             <h1 className="font-display font-black text-2xl text-main leading-tight">
               {restaurantProfile?.name || 'Restaurant Panel'}
