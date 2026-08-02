@@ -201,7 +201,7 @@ export default function LoginSignup() {
     if (role === 'customer') {
       partnerDetails = { address: address.trim() };
     } else if (role === 'restaurant') {
-      if (!restaurantName || !restaurantAddress || !gstin) return setFormError('Please complete all restaurant partner details.');
+      if (!restaurantName || !restaurantAddress) return setFormError('Please complete all restaurant partner details.');
       let restaurantImage = '';
       if (restaurantImageFile) {
         setIsUploading(true);
@@ -362,7 +362,9 @@ export default function LoginSignup() {
             {/* Name (signup only) */}
             {!isLogin && (
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Full Name</label>
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  {role === 'restaurant' ? "Restaurant Owner's Name" : 'Full Name'}
+                </label>
                 <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all">
                   <User className="w-4 h-4 text-muted shrink-0"/>
                   <input type="text" required placeholder="e.g. John Doe" value={name}
@@ -422,13 +424,13 @@ export default function LoginSignup() {
                 {[
                   { label: 'Restaurant Name', icon: <Store className="w-4 h-4 text-muted"/>, val: restaurantName, set: setRestaurantName, ph: 'e.g. Spice Junction' },
                   { label: 'Restaurant Address', icon: <MapPin className="w-4 h-4 text-muted"/>, val: restaurantAddress, set: setRestaurantAddress, ph: 'e.g. Shop 12, Indiranagar' },
-                  { label: 'KYC - GSTIN ID', icon: <FileText className="w-4 h-4 text-muted"/>, val: gstin, set: setGstin, ph: 'e.g. 29AAAAA1111A1Z1', cls: 'uppercase' },
-                ].map(({ label, icon, val, set, ph, cls }) => (
+                  { label: 'KYC - GSTIN ID (Optional)', icon: <FileText className="w-4 h-4 text-muted"/>, val: gstin, set: setGstin, ph: 'e.g. 29AAAAA1111A1Z1', cls: 'uppercase', req: false },
+                ].map(({ label, icon, val, set, ph, cls, req }) => (
                   <div key={label} className="flex flex-col gap-1">
                     <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">{label}</label>
                     <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2">
                       {icon}
-                      <input type="text" required placeholder={ph} value={val} onChange={(e) => set(e.target.value)}
+                      <input type="text" required={req !== false} placeholder={ph} value={val} onChange={(e) => set(e.target.value)}
                         className={`bg-transparent border-none outline-none text-xs text-main w-full ${cls || ''}`}/>
                     </div>
                   </div>
@@ -437,7 +439,7 @@ export default function LoginSignup() {
                   <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Restaurant Cover Image</label>
                   <div className="flex items-center bg-base border border-line-strong rounded-xl px-3 py-2.5 gap-2 cursor-pointer relative">
                     <Camera className="w-4 h-4 text-muted"/>
-                    <input type="file" accept="image/*" onChange={(e) => setRestaurantImageFile(e.target.files[0])}
+                    <input type="file" accept=".jpeg, .jpg, .png" onChange={(e) => setRestaurantImageFile(e.target.files[0])}
                       className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"/>
                     <span className="text-xs text-main font-semibold truncate pr-6">{restaurantImageFile ? restaurantImageFile.name : 'Choose restaurant display image...'}</span>
                   </div>
