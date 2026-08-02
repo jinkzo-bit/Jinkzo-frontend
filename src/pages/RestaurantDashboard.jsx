@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus, Pencil, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend } from '../utils/uploadUtil';
+import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
 
 export default function RestaurantDashboard() {
   const { user, token, logout } = useAuthStore();
@@ -14,6 +15,13 @@ export default function RestaurantDashboard() {
   const [showEditPersonalProfile, setShowEditPersonalProfile] = useState(false);
   const [editPersonalName, setEditPersonalName] = useState('');
   const [editPersonalPhone, setEditPersonalPhone] = useState('');
+  const [editPersonalEmail, setEditPersonalEmail] = useState('');
+  const [emailOtp, setEmailOtp] = useState('');
+  const [isEmailOtpSent, setIsEmailOtpSent] = useState(false);
+  const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
+  const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] = useState(false);
+  const [emailUpdateError, setEmailUpdateError] = useState('');
+  const [emailUpdateSuccess, setEmailUpdateSuccess] = useState('');
   const [isSavingPersonal, setIsSavingPersonal] = useState(false);
   const [personalProfileError, setPersonalProfileError] = useState('');
   const [personalProfileSuccess, setPersonalProfileSuccess] = useState('');
@@ -40,6 +48,42 @@ export default function RestaurantDashboard() {
       setTimeout(() => { setShowEditPersonalProfile(false); setPersonalProfileSuccess(''); window.location.reload(); }, 1200);
     } catch { setPersonalProfileError('Server error.'); }
     finally { setIsSavingPersonal(false); }
+  };
+
+  const handleSendEmailOtp = async () => {
+    if (!editPersonalEmail || editPersonalEmail === user?.email) return;
+    setEmailUpdateError(''); setEmailUpdateSuccess('');
+    setIsSendingEmailOtp(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/send-email-update-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ newEmail: editPersonalEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) { setEmailUpdateError(data.message || 'Failed to send OTP.'); return; }
+      setIsEmailOtpSent(true);
+      setEmailUpdateSuccess('OTP sent to new email!');
+    } catch { setEmailUpdateError('Server error.'); }
+    finally { setIsSendingEmailOtp(false); }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (!emailOtp) return;
+    setEmailUpdateError(''); setEmailUpdateSuccess('');
+    setIsVerifyingEmailOtp(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/update-email`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ otp: emailOtp })
+      });
+      const data = await res.json();
+      if (!res.ok) { setEmailUpdateError(data.message || 'Failed to verify OTP.'); return; }
+      setEmailUpdateSuccess('Email updated successfully!');
+      setTimeout(() => { window.location.reload(); }, 1200);
+    } catch { setEmailUpdateError('Server error.'); }
+    finally { setIsVerifyingEmailOtp(false); }
   };
 
   const handleDeleteAccount = async (e) => {
@@ -507,24 +551,24 @@ export default function RestaurantDashboard() {
 
   const getDateLabel = () => {
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-GB');
+    const todayStr = formatAppDateOnly(now);
     if (appliedDateFilter.type === 'all') return 'All Time';
     if (appliedDateFilter.type === 'today') return `${todayStr} / Today`;
     if (appliedDateFilter.type === 'yesterday') {
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      return `${yesterday.toLocaleDateString('en-GB')} / Yesterday`;
+      return `${formatAppDateOnly(yesterday)} / Yesterday`;
     }
     if (appliedDateFilter.type === '7days') {
       const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      return `${start.toLocaleDateString('en-GB')} - ${todayStr} / Last 7 Days`;
+      return `${formatAppDateOnly(start)} - ${todayStr} / Last 7 Days`;
     }
     if (appliedDateFilter.type === '30days') {
       const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      return `${start.toLocaleDateString('en-GB')} - ${todayStr} / Last 30 Days`;
+      return `${formatAppDateOnly(start)} - ${todayStr} / Last 30 Days`;
     }
     if (appliedDateFilter.type === 'custom') {
-      const startLabel = appliedDateFilter.start ? new Date(appliedDateFilter.start).toLocaleDateString('en-GB') : 'Start';
-      const endLabel = appliedDateFilter.end ? new Date(appliedDateFilter.end).toLocaleDateString('en-GB') : 'End';
+      const startLabel = appliedDateFilter.start ? formatAppDateOnly(appliedDateFilter.start) : 'Start';
+      const endLabel = appliedDateFilter.end ? formatAppDateOnly(appliedDateFilter.end) : 'End';
       return `${startLabel} - ${endLabel} / Custom Date Range`;
     }
     return 'Select Date Range';
@@ -869,8 +913,8 @@ export default function RestaurantDashboard() {
                         <div className="flex flex-col gap-1.5">
                           {[
                             { type: 'all', label: 'All Time' },
-                            { type: 'today', label: `Today (${new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })})` },
-                            { type: 'yesterday', label: `Yesterday (${new Date(Date.now() - 864e5).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })})` },
+                            { type: 'today', label: `Today (${formatAppDateOnly(new Date())})` },
+                            { type: 'yesterday', label: `Yesterday (${formatAppDateOnly(new Date(Date.now() - 864e5))})` },
                             { type: '7days', label: 'Last 7 Days' },
                             { type: '30days', label: 'Last 30 Days' },
                             { type: 'custom', label: 'Custom Date Range' }
@@ -985,7 +1029,7 @@ export default function RestaurantDashboard() {
                         <div className="flex justify-between items-center border-b border-line pb-2">
                           <div>
                             <span className="text-[10px] font-mono font-bold text-muted">#{order._id.substr(-8).toUpperCase()}</span>
-                            <span className="text-[10px] text-muted font-semibold ml-2">• Placed on {new Date(order.createdAt).toLocaleString('en-GB')}</span>
+                            <span className="text-[10px] text-muted font-semibold ml-2">• Placed on {order.createdAt ? formatAppDate(order.createdAt) : ''}</span>
                           </div>
                           <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
                             ['Delivered', 'Completed'].includes(order.status) ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-violet-100 text-violet-700 animate-pulse border border-violet-200'
@@ -1339,7 +1383,18 @@ export default function RestaurantDashboard() {
                 <h4 className="font-display font-extrabold text-sm text-main border-b border-line pb-2">My Account</h4>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
-                    onClick={() => { setEditPersonalName(user?.name || ''); setEditPersonalPhone(user?.phone || ''); setPersonalProfileError(''); setPersonalProfileSuccess(''); setShowEditPersonalProfile(true); }}
+                    onClick={() => { 
+                      setEditPersonalName(user?.name || ''); 
+                      setEditPersonalPhone(user?.phone || ''); 
+                      setEditPersonalEmail(user?.email || '');
+                      setIsEmailOtpSent(false);
+                      setEmailOtp('');
+                      setEmailUpdateError('');
+                      setEmailUpdateSuccess('');
+                      setPersonalProfileError(''); 
+                      setPersonalProfileSuccess(''); 
+                      setShowEditPersonalProfile(true); 
+                    }}
                     className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl cursor-pointer shadow-xs"
                   >
                     <Pencil className="w-3.5 h-3.5"/> Edit My Profile
@@ -1559,9 +1614,30 @@ export default function RestaurantDashboard() {
                 <input type="tel" value={editPersonalPhone} onChange={e => setEditPersonalPhone(e.target.value)}
                   className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary"/>
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold text-muted">Email (read-only)</label>
-                <input type="email" value={user?.email || ''} disabled className="bg-gray-50 border border-line rounded-xl px-3.5 py-2.5 text-xs text-muted font-bold cursor-not-allowed"/>
+              <div className="flex flex-col gap-1 pb-3 border-b border-line-strong">
+                <label className="text-[10px] uppercase font-extrabold text-muted">Email</label>
+                <div className="flex gap-2">
+                  <input type="email" value={editPersonalEmail} onChange={e => setEditPersonalEmail(e.target.value)} disabled={isEmailOtpSent}
+                    className="flex-1 bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold outline-none focus:border-primary disabled:opacity-60"/>
+                  {editPersonalEmail !== user?.email && !isEmailOtpSent && (
+                    <button type="button" onClick={handleSendEmailOtp} disabled={isSendingEmailOtp}
+                      className="px-3 bg-violet-100 text-primary hover:bg-violet-200 text-[10px] font-bold rounded-xl cursor-pointer disabled:opacity-50">
+                      {isSendingEmailOtp ? 'Sending...' : 'Verify'}
+                    </button>
+                  )}
+                </div>
+                {isEmailOtpSent && (
+                  <div className="flex gap-2 mt-2">
+                    <input type="text" placeholder="Enter 6-digit OTP" value={emailOtp} onChange={e => setEmailOtp(e.target.value)}
+                      className="flex-1 bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-bold tracking-widest outline-none focus:border-primary"/>
+                    <button type="button" onClick={handleVerifyEmailOtp} disabled={isVerifyingEmailOtp}
+                      className="px-4 bg-primary text-white hover:bg-primary-hover text-[10px] font-bold rounded-xl cursor-pointer disabled:opacity-50">
+                      {isVerifyingEmailOtp ? '...' : 'Confirm'}
+                    </button>
+                  </div>
+                )}
+                {emailUpdateError && <p className="text-[10px] font-bold text-red-500 mt-1">{emailUpdateError}</p>}
+                {emailUpdateSuccess && <p className="text-[10px] font-bold text-green-600 mt-1">{emailUpdateSuccess}</p>}
               </div>
               <div className="flex gap-2 mt-1">
                 <button type="button" onClick={() => setShowEditPersonalProfile(false)} className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>

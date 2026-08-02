@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend } from '../utils/uploadUtil';
+import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
 
 export default function AdminDashboard() {
   const { user, token } = useAuthStore();
@@ -245,24 +246,24 @@ export default function AdminDashboard() {
 
   const getAnalyticsDateLabel = () => {
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-GB');
+    const todayStr = formatAppDateOnly(now);
     if (analyticsAppliedDateFilter.type === 'all') return 'All Time';
     if (analyticsAppliedDateFilter.type === 'today') return `${todayStr} / Today`;
     if (analyticsAppliedDateFilter.type === 'yesterday') {
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      return `${yesterday.toLocaleDateString('en-GB')} / Yesterday`;
+      return `${formatAppDateOnly(yesterday)} / Yesterday`;
     }
     if (analyticsAppliedDateFilter.type === '7days') {
       const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      return `${start.toLocaleDateString('en-GB')} - ${todayStr} / Last 7 Days`;
+      return `${formatAppDateOnly(start)} - ${todayStr} / Last 7 Days`;
     }
     if (analyticsAppliedDateFilter.type === '30days') {
       const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      return `${start.toLocaleDateString('en-GB')} - ${todayStr} / Last 30 Days`;
+      return `${formatAppDateOnly(start)} - ${todayStr} / Last 30 Days`;
     }
     if (analyticsAppliedDateFilter.type === 'custom') {
-      const startLabel = analyticsAppliedDateFilter.start ? new Date(analyticsAppliedDateFilter.start).toLocaleDateString('en-GB') : 'Start';
-      const endLabel = analyticsAppliedDateFilter.end ? new Date(analyticsAppliedDateFilter.end).toLocaleDateString('en-GB') : 'End';
+      const startLabel = analyticsAppliedDateFilter.start ? formatAppDateOnly(analyticsAppliedDateFilter.start) : 'Start';
+      const endLabel = analyticsAppliedDateFilter.end ? formatAppDateOnly(analyticsAppliedDateFilter.end) : 'End';
       return `${startLabel} - ${endLabel} / Custom Date`;
     }
     return 'Select Date Range';
@@ -671,24 +672,24 @@ export default function AdminDashboard() {
 
   const getDateLabel = () => {
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-GB');
+    const todayStr = formatAppDateOnly(now);
     if (appliedDateFilter.type === 'all') return 'All Time';
     if (appliedDateFilter.type === 'today') return `${todayStr} / Today`;
     if (appliedDateFilter.type === 'yesterday') {
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      return `${yesterday.toLocaleDateString('en-GB')} / Yesterday`;
+      return `${formatAppDateOnly(yesterday)} / Yesterday`;
     }
     if (appliedDateFilter.type === '7days') {
       const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      return `${start.toLocaleDateString('en-GB')} - ${todayStr} / Last 7 Days`;
+      return `${formatAppDateOnly(start)} - ${todayStr} / Last 7 Days`;
     }
     if (appliedDateFilter.type === '30days') {
       const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      return `${start.toLocaleDateString('en-GB')} - ${todayStr} / Last 30 Days`;
+      return `${formatAppDateOnly(start)} - ${todayStr} / Last 30 Days`;
     }
     if (appliedDateFilter.type === 'custom') {
-      const startLabel = appliedDateFilter.start ? new Date(appliedDateFilter.start).toLocaleDateString('en-GB') : 'Start';
-      const endLabel = appliedDateFilter.end ? new Date(appliedDateFilter.end).toLocaleDateString('en-GB') : 'End';
+      const startLabel = appliedDateFilter.start ? formatAppDateOnly(appliedDateFilter.start) : 'Start';
+      const endLabel = appliedDateFilter.end ? formatAppDateOnly(appliedDateFilter.end) : 'End';
       return `${startLabel} - ${endLabel} / Custom Date Range`;
     }
     return 'Select Date Range';
@@ -1192,7 +1193,7 @@ export default function AdminDashboard() {
                           </div>
                           <h4 className="text-sm font-bold text-main">{user.name}</h4>
                         </div>
-                        <span className="text-xs text-muted font-mono">Registered on {new Date(user.createdAt).toLocaleDateString('en-GB')}</span>
+                        <span className="text-xs text-muted font-mono">Registered on {formatAppDateOnly(user.createdAt)}</span>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
@@ -1633,7 +1634,7 @@ export default function AdminDashboard() {
                           </span>
                           <span className="font-mono text-[10px] font-bold text-muted">#{String(order._id || '').slice(-8).toUpperCase()}</span>
                           <span className="text-gray-300">•</span>
-                          <span className="text-muted font-semibold">{order.createdAt ? new Date(order.createdAt).toLocaleString('en-GB') : ''}</span>
+                          <span className="text-muted font-semibold">{order.createdAt ? formatAppDate(order.createdAt) : ''}</span>
                         </div>
                         <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
                           ['Delivered', 'Completed'].includes(order.status) ? 'bg-green-50 border-green-200 text-green-700' :

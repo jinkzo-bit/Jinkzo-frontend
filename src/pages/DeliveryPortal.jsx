@@ -1,10 +1,11 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Bike, MapPin, Store, DollarSign, Clock, ShieldCheck, CheckCircle2, ChevronRight, RefreshCw, AlertCircle, ShoppingBag, Send, FileText, Phone } from 'lucide-react';
+import { Bike, MapPin, Store, DollarSign, Clock, ShieldCheck, CheckCircle, AlertCircle, Phone, Navigation, Camera, X, MessageSquare, Send, Bell, ChevronRight, RefreshCw, ShoppingBag, FileText } from 'lucide-react';
 import InteractiveMap from '../components/InteractiveMap';
 import { useAuthStore } from '../store/authStore';
 import { io } from 'socket.io-client';
+import { formatAppTimeOnly } from '../utils/dateUtils';
 
 export default function DeliveryPortal() {
   const { user, token } = useAuthStore();
@@ -513,7 +514,7 @@ export default function DeliveryPortal() {
                             {msg.text}
                           </div>
                           <span className="text-[7px] text-muted font-medium">
-                            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {formatAppTimeOnly(msg.createdAt)}
                           </span>
                         </div>
                       );

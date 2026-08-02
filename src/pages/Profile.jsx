@@ -5,6 +5,7 @@ import { User, MapPin, ClipboardList, LogOut, ChevronRight, ShoppingBag, Trash2,
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import RiderFeedbackModal from '../components/RiderFeedbackModal';
+import { formatAppDate } from '../utils/dateUtils';
 
 export default function Profile() {
   const { user, token, logout, deleteAddress } = useAuthStore();
@@ -23,6 +24,13 @@ export default function Profile() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [emailOtp, setEmailOtp] = useState('');
+  const [isEmailOtpSent, setIsEmailOtpSent] = useState(false);
+  const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
+  const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] = useState(false);
+  const [emailUpdateError, setEmailUpdateError] = useState('');
+  const [emailUpdateSuccess, setEmailUpdateSuccess] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
@@ -49,6 +57,42 @@ export default function Profile() {
       setTimeout(() => { setShowEditProfile(false); setProfileSuccess(''); window.location.reload(); }, 1200);
     } catch { setProfileError('Server error.'); }
     finally { setIsSavingProfile(false); }
+  };
+
+  const handleSendEmailOtp = async () => {
+    if (!editEmail || editEmail === user?.email) return;
+    setEmailUpdateError(''); setEmailUpdateSuccess('');
+    setIsSendingEmailOtp(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/send-email-update-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ newEmail: editEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) { setEmailUpdateError(data.message || 'Failed to send OTP.'); return; }
+      setIsEmailOtpSent(true);
+      setEmailUpdateSuccess('OTP sent to new email!');
+    } catch { setEmailUpdateError('Server error.'); }
+    finally { setIsSendingEmailOtp(false); }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (!emailOtp) return;
+    setEmailUpdateError(''); setEmailUpdateSuccess('');
+    setIsVerifyingEmailOtp(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/update-email`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ otp: emailOtp })
+      });
+      const data = await res.json();
+      if (!res.ok) { setEmailUpdateError(data.message || 'Failed to verify OTP.'); return; }
+      setEmailUpdateSuccess('Email updated successfully!');
+      setTimeout(() => { window.location.reload(); }, 1200);
+    } catch { setEmailUpdateError('Server error.'); }
+    finally { setIsVerifyingEmailOtp(false); }
   };
 
   const handleDeleteAccount = async (e) => {
@@ -166,8 +210,7 @@ export default function Profile() {
   };
 
   const formatDate = (dateStr) => {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-GB');
+    return formatAppDate(dateStr);
   };
 
   return (
@@ -470,10 +513,30 @@ export default function Profile() {
                 <input type="tel" value={editPhone} onChange={e => setEditPhone(e.target.value)}
                   className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary"/>
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">Email (read-only)</label>
-                <input type="email" value={user?.email || ''} disabled
-                  className="bg-gray-50 border border-line rounded-xl px-3.5 py-2.5 text-xs text-muted font-bold cursor-not-allowed"/>
+              <div className="flex flex-col gap-1 pb-3 border-b border-line-strong">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">Email</label>
+                <div className="flex gap-2">
+                  <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} disabled={isEmailOtpSent}
+                    className="flex-1 bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary disabled:opacity-60"/>
+                  {editEmail !== user?.email && !isEmailOtpSent && (
+                    <button type="button" onClick={handleSendEmailOtp} disabled={isSendingEmailOtp}
+                      className="px-3 bg-violet-100 text-primary hover:bg-violet-200 text-[10px] font-bold rounded-xl cursor-pointer disabled:opacity-50">
+                      {isSendingEmailOtp ? 'Sending...' : 'Verify'}
+                    </button>
+                  )}
+                </div>
+                {isEmailOtpSent && (
+                  <div className="flex gap-2 mt-2">
+                    <input type="text" placeholder="Enter 6-digit OTP" value={emailOtp} onChange={e => setEmailOtp(e.target.value)}
+                      className="flex-1 bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold tracking-widest outline-none focus:border-primary"/>
+                    <button type="button" onClick={handleVerifyEmailOtp} disabled={isVerifyingEmailOtp}
+                      className="px-4 bg-primary text-white hover:bg-primary-hover text-[10px] font-bold rounded-xl cursor-pointer disabled:opacity-50">
+                      {isVerifyingEmailOtp ? '...' : 'Confirm'}
+                    </button>
+                  </div>
+                )}
+                {emailUpdateError && <p className="text-[10px] font-bold text-red-500 mt-1">{emailUpdateError}</p>}
+                {emailUpdateSuccess && <p className="text-[10px] font-bold text-green-600 mt-1">{emailUpdateSuccess}</p>}
               </div>
               <div className="flex gap-2 mt-1">
                 <button type="button" onClick={() => setShowEditProfile(false)}

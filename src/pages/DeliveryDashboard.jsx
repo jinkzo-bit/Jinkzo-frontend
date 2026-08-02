@@ -5,6 +5,7 @@ import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, Chevr
 import { useAuthStore } from '../store/authStore';
 import InteractiveMap from '../components/InteractiveMap';
 import { io } from 'socket.io-client';
+import { formatAppDateOnly, formatAppTimeOnly } from '../utils/dateUtils';
 
 export default function DeliveryDashboard() {
   const { user, token, logout } = useAuthStore();
@@ -817,7 +818,7 @@ export default function DeliveryDashboard() {
                                   {msg.text}
                                 </div>
                                 <span className="text-[7px] text-muted font-medium">
-                                  {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  {formatAppTimeOnly(msg.createdAt)}
                                 </span>
                               </div>
                             );
@@ -1004,7 +1005,7 @@ export default function DeliveryDashboard() {
                         <div>
                           <span className="font-mono text-[9px] font-bold text-muted">#{order._id.substr(-8).toUpperCase()}</span>
                           <h4 className="font-bold text-main mt-1">To: {order.address?.street || 'Customer Location'}, {order.address?.city || ''}</h4>
-                          <p className="text-[9px] text-muted font-semibold mt-0.5">Delivered on {new Date(order.createdAt).toLocaleDateString('en-GB')}</p>
+                          <p className="text-[9px] text-muted font-semibold mt-0.5">Delivered on {formatAppDateOnly(order.createdAt)}</p>
                         </div>
                         <div className="text-right flex flex-col items-end gap-1">
                           <span className="text-xs font-black text-main">₹{(order.deliveryFee || 40) + 20}</span>

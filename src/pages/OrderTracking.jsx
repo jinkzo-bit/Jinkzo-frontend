@@ -4,6 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Phone, Star, Shield, ArrowLeft, RefreshCw, Calendar, ShoppingBag, Check, Send, FileText } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import InteractiveMap from '../components/InteractiveMap';
+import { formatAppDateOnly, formatAppTimeOnly } from '../utils/dateUtils';
 import RiderFeedbackModal from '../components/RiderFeedbackModal';
 import { playStatusChangeSound, playCaptainAssignedSound, playDeliveredSound } from '../utils/audio';
 import { io } from 'socket.io-client';
@@ -405,7 +406,7 @@ export default function OrderTracking() {
                   <span className="text-xs font-black uppercase text-green-700">Thank you for your feedback!</span>
                 </div>
                 <span className="text-[10px] text-muted font-bold">
-                  {new Date(order.review.createdAt).toLocaleDateString('en-GB')}
+                  {formatAppDateOnly(order.review.createdAt)}
                 </span>
               </div>
               <div className="flex items-center gap-1">
@@ -666,7 +667,7 @@ export default function OrderTracking() {
                           {msg.text}
                         </div>
                         <span className="text-[8px] text-muted font-medium">
-                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {formatAppTimeOnly(msg.createdAt)}
                         </span>
                       </div>
                     );
