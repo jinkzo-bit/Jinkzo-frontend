@@ -695,7 +695,7 @@ export default function AdminDashboard() {
     return 'Select Date Range';
   };
 
-  const renderCalendar = () => {
+  const renderCalendar = (onDateSelect) => {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
@@ -708,10 +708,12 @@ export default function AdminDashboard() {
       dayCells.push(<div key={`empty-${i}`} className="w-6 h-6" />);
     }
     for (let d = 1; d <= totalDays; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       dayCells.push(
         <button
           key={d}
           type="button"
+          onClick={() => onDateSelect && onDateSelect(dateStr)}
           className="w-6 h-6 rounded-full text-[10px] font-bold hover:bg-violet-50 hover:text-primary transition-all flex items-center justify-center cursor-pointer"
         >
           {d}
@@ -1067,7 +1069,13 @@ export default function AdminDashboard() {
 
                           {/* Calendar & Custom dates */}
                           <div className="flex flex-col gap-3">
-                            {renderCalendar()}
+                            {renderCalendar((dateStr) => {
+                              setAnalyticsDateFilterType('custom');
+                              setAnalyticsCustomStartDate(dateStr);
+                              setAnalyticsCustomEndDate(dateStr);
+                              setAnalyticsAppliedDateFilter({ type: 'custom', start: dateStr, end: dateStr });
+                              setAnalyticsShowDatePicker(false);
+                            })}
                             
                             {analyticsDateFilterType === 'custom' && (
                               <div className="flex gap-2">
@@ -1534,7 +1542,13 @@ export default function AdminDashboard() {
 
                         {/* Calendar & Custom dates */}
                         <div className="flex flex-col gap-3">
-                          {renderCalendar()}
+                          {renderCalendar((dateStr) => {
+                            setDateFilterType('custom');
+                            setCustomStartDate(dateStr);
+                            setCustomEndDate(dateStr);
+                            setAppliedDateFilter({ type: 'custom', start: dateStr, end: dateStr });
+                            setShowDatePicker(false);
+                          })}
                           
                           {dateFilterType === 'custom' && (
                             <div className="flex gap-2">
