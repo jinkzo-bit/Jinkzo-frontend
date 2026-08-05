@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   ShieldAlert, DollarSign, ShoppingBag, Users, Store, Bike, CheckCircle, Check,
   XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare, 
-  AlertCircle, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2,
+  AlertCircle, ChevronLeft, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2,
   Pencil, Plus, UserCircle
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
@@ -106,6 +106,7 @@ export default function AdminDashboard() {
   const [customEndDate, setCustomEndDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [appliedDateFilter, setAppliedDateFilter] = useState({ type: 'all', start: '', end: '' });
+  const [calendarViewDate, setCalendarViewDate] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; });
 
   // Platform Settings updating state
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
@@ -696,12 +697,24 @@ export default function AdminDashboard() {
   };
 
   const renderCalendar = (onDateSelect) => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
+    const { year, month } = calendarViewDate;
     const firstDay = new Date(year, month, 1).getDay();
     const totalDays = new Date(year, month + 1, 0).getDate();
-    const monthName = now.toLocaleString('default', { month: 'long' });
+    const monthName = new Date(year, month, 1).toLocaleString('default', { month: 'long' });
+
+    const goToPrevMonth = () => {
+      setCalendarViewDate(prev => {
+        if (prev.month === 0) return { year: prev.year - 1, month: 11 };
+        return { year: prev.year, month: prev.month - 1 };
+      });
+    };
+
+    const goToNextMonth = () => {
+      setCalendarViewDate(prev => {
+        if (prev.month === 11) return { year: prev.year + 1, month: 0 };
+        return { year: prev.year, month: prev.month + 1 };
+      });
+    };
 
     const dayCells = [];
     for (let i = 0; i < firstDay; i++) {
@@ -723,7 +736,25 @@ export default function AdminDashboard() {
 
     return (
       <div className="flex flex-col gap-1.5 border border-line p-2.5 rounded-2xl bg-base/50">
-        <h4 className="text-center font-display font-black text-xs text-primary">{monthName} {year}</h4>
+        <div className="flex items-center justify-between px-1">
+          <button
+            type="button"
+            onClick={goToPrevMonth}
+            className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-violet-100 hover:text-primary text-muted transition-all cursor-pointer"
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+          <h4 className="font-display font-black text-xs text-primary">{monthName} {year}</h4>
+          <button
+            type="button"
+            onClick={goToNextMonth}
+            className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-violet-100 hover:text-primary text-muted transition-all cursor-pointer"
+            aria-label="Next month"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
         <div className="grid grid-cols-7 gap-0.5 text-[9px] font-bold text-muted text-center">
           {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(w => <span key={w}>{w}</span>)}
         </div>
