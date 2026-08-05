@@ -1046,8 +1046,8 @@ export default function AdminDashboard() {
                           <div className="flex flex-col gap-1.5">
                             {[
                               { type: 'all', label: 'All Time' },
-                              { type: 'today', label: 'Today (Jun 10 2026)' },
-                              { type: 'yesterday', label: 'Yesterday (Jun 09 2026)' },
+                              { type: 'today', label: 'Today' },
+                              { type: 'yesterday', label: 'Yesterday' },
                               { type: '7days', label: 'Last 7 Days' },
                               { type: '30days', label: 'Last 30 Days' },
                               { type: 'custom', label: 'Custom Date Range' }
@@ -1513,8 +1513,8 @@ export default function AdminDashboard() {
                         <div className="flex flex-col gap-1.5">
                           {[
                             { type: 'all', label: 'All Time' },
-                            { type: 'today', label: 'Today (Jun 10 2026)' },
-                            { type: 'yesterday', label: 'Yesterday (Jun 09 2026)' },
+                            { type: 'today', label: 'Today' },
+                            { type: 'yesterday', label: 'Yesterday' },
                             { type: '7days', label: 'Last 7 Days' },
                             { type: '30days', label: 'Last 30 Days' },
                             { type: 'custom', label: 'Custom Date Range' }
