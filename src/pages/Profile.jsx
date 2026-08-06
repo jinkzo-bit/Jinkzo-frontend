@@ -60,10 +60,23 @@ export default function Profile() {
   const handleLocationConfirm = async (pickedAddr) => {
     setAddressSaving(true);
     setShowLocationPicker(false);
+    // Build a clean street string from houseNo + street
+    const streetLine = [pickedAddr.houseNo, pickedAddr.street].filter(Boolean).join(', ') || pickedAddr.street || 'Main Road';
+    const normalizedAddr = {
+      street: streetLine,
+      city: pickedAddr.city || '',
+      state: pickedAddr.state || '',
+      zip: pickedAddr.zip || '',
+      lat: pickedAddr.lat,
+      lng: pickedAddr.lng,
+      // Store extra fields as part of street if present
+      ...(pickedAddr.landmark ? { landmark: pickedAddr.landmark } : {}),
+      ...(pickedAddr.area ? { area: pickedAddr.area } : {}),
+    };
     if (locationPickerMode === 'edit' && editingAddressId) {
-      await editAddress(editingAddressId, pickedAddr);
+      await editAddress(editingAddressId, normalizedAddr);
     } else {
-      await addAddress({ ...pickedAddr, isDefault: !user?.addresses?.length });
+      await addAddress({ ...normalizedAddr, isDefault: !user?.addresses?.length });
     }
     setAddressSaving(false);
   };
@@ -341,8 +354,11 @@ export default function Profile() {
                         <span className="text-[9px] bg-green-100 text-green-700 font-extrabold px-1.5 py-0.5 rounded-md mb-1.5 inline-block">Default</span>
                       )}
                       <p className="text-[11px] text-muted leading-relaxed font-semibold">
-                        {addr.street}, {addr.city}, {addr.state}{addr.zip ? ` - ${addr.zip}` : ''}
+                        {[addr.street, addr.area, addr.city, addr.state, addr.zip].filter(Boolean).join(', ')}
                       </p>
+                      {addr.landmark && (
+                        <p className="text-[10px] text-primary/70 font-semibold mt-0.5">📍 Near {addr.landmark}</p>
+                      )}
                       {addr.lat && addr.lng && (
                         <p className="text-[9px] text-primary font-mono mt-1 flex items-center gap-1">
                           <MapPin className="w-2.5 h-2.5" />

@@ -1708,7 +1708,15 @@ export default function RestaurantDashboard() {
         isOpen={showRestaurantLocationPicker}
         onClose={() => setShowRestaurantLocationPicker(false)}
         onConfirm={(pickedAddr) => {
-          setProfileAddress(`${pickedAddr.street}, ${pickedAddr.city}, ${pickedAddr.state}${pickedAddr.zip ? ` - ${pickedAddr.zip}` : ''}`);
+          const parts = [
+            pickedAddr.houseNo,
+            pickedAddr.street,
+            pickedAddr.area,
+            pickedAddr.city,
+            pickedAddr.state,
+            pickedAddr.zip,
+          ].filter(Boolean);
+          setProfileAddress(parts.join(', '));
           setProfileLat(pickedAddr.lat);
           setProfileLng(pickedAddr.lng);
           setShowRestaurantLocationPicker(false);

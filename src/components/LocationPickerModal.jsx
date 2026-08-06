@@ -1,82 +1,34 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { MapPin, Navigation, Loader, Search, X, Check, ChevronDown } from 'lucide-react';
+import { MapPin, Navigation, Loader, Search, X, Check, Copy } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Fix Leaflet default marker icon broken by Vite bundling
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
+// ── Nominatim helpers (free, no API key needed) ──────────────────────────────
 
-// ── Custom animated pin icon ────────────────────────────────────────────────
-const pinIcon = L.divIcon({
-  html: `<div style="
-    position: relative;
-    width: 36px;
-    height: 44px;
-  ">
-    <div style="
-      position: absolute;
-      inset: 0;
-      background: #7c3aed;
-      border-radius: 50% 50% 50% 0;
-      transform: rotate(-45deg);
-      box-shadow: 0 4px 20px rgba(124,58,237,0.5);
-      border: 3px solid white;
-    "></div>
-    <div style="
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -62%) rotate(0deg);
-      width: 14px;
-      height: 14px;
-      background: white;
-      border-radius: 50%;
-    "></div>
-    <div style="
-      position: absolute;
-      bottom: -6px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 12px;
-      height: 6px;
-      background: rgba(124,58,237,0.25);
-      border-radius: 50%;
-      filter: blur(2px);
-    "></div>
-  </div>`,
-  className: '',
-  iconSize: [36, 44],
-  iconAnchor: [18, 44],
-  popupAnchor: [0, -44],
-});
-
-// ── Nominatim helpers (free, no API key) ────────────────────────────────────
 const reverseGeocode = async (lat, lng) => {
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`;
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&zoom=18`;
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Corior-App/1.0 (support@corior.in)' },
+      headers: { 'User-Agent': 'Corior-App/1.0 (support@corior.in)', 'Accept-Language': 'en' },
     });
     const data = await res.json();
     if (data?.address) {
       const a = data.address;
       return {
-        street: [a.road, a.suburb, a.neighbourhood, a.quarter].filter(Boolean)[0] || 'Main Road',
-        city: a.city || a.town || a.village || a.county || 'City',
-        state: a.state || 'State',
+        houseNo: a.house_number || '',
+        street: a.road || a.pedestrian || a.footway || a.path || '',
+        landmark: a.amenity || a.shop || a.tourism || a.leisure || '',
+        area: a.suburb || a.neighbourhood || a.quarter || a.village || a.hamlet || '',
+        city: a.city || a.town || a.municipality || a.county || '',
+        state: a.state || '',
         zip: a.postcode || '',
+        displayName: data.display_name || '',
         lat,
         lng,
-        displayName: data.display_name || '',
       };
     }
   } catch (_) {}
-  return { street: 'Selected Location', city: 'City', state: 'State', zip: '', lat, lng, displayName: '' };
+  return { houseNo: '', street: '', landmark: '', area: '', city: '', state: '', zip: '', displayName: '', lat, lng };
 };
 
 const searchAddress = async (query) => {
@@ -92,144 +44,159 @@ const searchAddress = async (query) => {
   }
 };
 
-// ── LocationPickerModal ─────────────────────────────────────────────────────
+// ── LocationPickerModal ──────────────────────────────────────────────────────
 /**
  * Props:
  *   isOpen          boolean
  *   onClose         () => void
- *   onConfirm       (address: {street, city, state, zip, lat, lng}) => void
- *   initialAddress  { street, city, state, zip, lat, lng } — optional, pre-fills modal
- *   title           string — optional modal title
+ *   onConfirm       (address) => void
+ *   initialAddress  { street, city, state, zip, lat, lng } — optional
+ *   title           string
  */
-export default function LocationPickerModal({ isOpen, onClose, onConfirm, initialAddress, title = 'Pick a Location' }) {
+export default function LocationPickerModal({ isOpen, onClose, onConfirm, initialAddress, title = 'Set Delivery Location' }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
-  const markerRef = useRef(null);
-  const debounceRef = useRef(null);
+  const moveDebounceRef = useRef(null);
+  const searchDebounceRef = useRef(null);
 
-  // Address form state
-  const [formStreet, setFormStreet] = useState('');
-  const [formCity, setFormCity] = useState('');
+  // Form fields
+  const [houseNo, setHouseNo]     = useState('');
+  const [street, setStreet]       = useState('');
+  const [landmark, setLandmark]   = useState('');
+  const [area, setArea]           = useState('');
+  const [city, setCity]           = useState('');
   const [formState, setFormState] = useState('');
-  const [formZip, setFormZip] = useState('');
-  const [formLat, setFormLat] = useState(null);
-  const [formLng, setFormLng] = useState(null);
+  const [zip, setZip]             = useState('');
+  const [centerLat, setCenterLat] = useState(null);
+  const [centerLng, setCenterLng] = useState(null);
 
-  // Search state
-  const [query, setQuery] = useState('');
+  // UI state
+  const [query, setQuery]             = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [isLocating, setIsLocating] = useState(false);
-  const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
+  const [isLocating, setIsLocating]   = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
+  const [displayName, setDisplayName] = useState('');
 
-  // Default center: Mumbai if no initial address
-  const DEFAULT_LAT = 19.0760;
-  const DEFAULT_LNG = 72.8777;
-  const DEFAULT_ZOOM = 13;
+  const DEFAULT_LAT  = 19.0760;
+  const DEFAULT_LNG  = 72.8777;
+  const HIGH_ZOOM    = 17; // Street + landmark level zoom
 
   const fillForm = useCallback((addr) => {
-    setFormStreet(addr.street || '');
-    setFormCity(addr.city || '');
-    setFormState(addr.state || '');
-    setFormZip(addr.zip || '');
-    setFormLat(addr.lat);
-    setFormLng(addr.lng);
+    setHouseNo(addr.houseNo   || '');
+    setStreet(addr.street     || '');
+    setLandmark(addr.landmark || '');
+    setArea(addr.area         || '');
+    setCity(addr.city         || '');
+    setFormState(addr.state   || '');
+    setZip(addr.zip           || '');
+    setCenterLat(addr.lat);
+    setCenterLng(addr.lng);
+    setDisplayName(addr.displayName || '');
   }, []);
 
-  // Move map & marker to given coordinates
-  const moveMapTo = useCallback((lat, lng, zoom) => {
-    if (!mapRef.current || !markerRef.current) return;
-    mapRef.current.setView([lat, lng], zoom || DEFAULT_ZOOM);
-    markerRef.current.setLatLng([lat, lng]);
-  }, []);
-
-  // Initialise Leaflet map once modal is open
+  // Initialise map
   useEffect(() => {
     if (!isOpen) return;
 
-    // Small delay to ensure DOM is rendered
     const timer = setTimeout(() => {
       if (!mapContainerRef.current || mapRef.current) return;
 
       const initLat = initialAddress?.lat || DEFAULT_LAT;
       const initLng = initialAddress?.lng || DEFAULT_LNG;
+      const initZoom = initialAddress?.lat ? HIGH_ZOOM : 13;
 
       const map = L.map(mapContainerRef.current, {
         center: [initLat, initLng],
-        zoom: initialAddress?.lat ? 15 : DEFAULT_ZOOM,
-        zoomControl: true,
+        zoom: initZoom,
+        zoomControl: false,
         attributionControl: false,
+        // smooth panning
+        inertia: true,
+        inertiaDeceleration: 3000,
       });
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
+      // ── HIGH DETAIL tile layer (Humanitarian OSM — shows temples, schools, etc.) ──
+      L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+        maxZoom: 20,
+        minZoom: 5,
       }).addTo(map);
 
-      const marker = L.marker([initLat, initLng], {
-        icon: pinIcon,
-        draggable: true,
-      }).addTo(map);
+      // Custom zoom control positioned bottom-right
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-      // On drag end — reverse geocode new position
-      marker.on('dragend', async (e) => {
-        const { lat, lng } = e.target.getLatLng();
-        setIsReverseGeocoding(true);
-        setFormLat(lat);
-        setFormLng(lng);
-        const addr = await reverseGeocode(lat, lng);
-        fillForm(addr);
-        setQuery(addr.displayName || `${addr.street}, ${addr.city}`);
-        setIsReverseGeocoding(false);
-      });
+      // Attribution small
+      L.control.attribution({ position: 'bottomleft', prefix: false })
+        .addTo(map)
+        .setPrefix('© OpenStreetMap');
 
-      // On map click — move marker and reverse geocode
-      map.on('click', async (e) => {
-        const { lat, lng } = e.latlng;
-        marker.setLatLng([lat, lng]);
-        setIsReverseGeocoding(true);
-        setFormLat(lat);
-        setFormLng(lng);
-        const addr = await reverseGeocode(lat, lng);
-        fillForm(addr);
-        setQuery(addr.displayName || `${addr.street}, ${addr.city}`);
-        setIsReverseGeocoding(false);
+      setCenterLat(initLat);
+      setCenterLng(initLng);
+
+      // Pre-fill from initial address if provided
+      if (initialAddress) {
+        fillForm({
+          houseNo: '',
+          street: initialAddress.street || '',
+          landmark: '',
+          area: initialAddress.area || '',
+          city: initialAddress.city || '',
+          state: initialAddress.state || '',
+          zip: initialAddress.zip || '',
+          displayName: '',
+          lat: initLat,
+          lng: initLng,
+        });
+        // Reverse geocode initial position to populate fields properly
+        setIsGeocoding(true);
+        reverseGeocode(initLat, initLng).then((addr) => {
+          fillForm(addr);
+          setIsGeocoding(false);
+        });
+      }
+
+      // ── On map move end → reverse geocode the center ──
+      map.on('moveend', () => {
+        const c = map.getCenter();
+        const lat = c.lat;
+        const lng = c.lng;
+        setCenterLat(lat);
+        setCenterLng(lng);
+
+        clearTimeout(moveDebounceRef.current);
+        moveDebounceRef.current = setTimeout(async () => {
+          setIsGeocoding(true);
+          const addr = await reverseGeocode(lat, lng);
+          fillForm(addr);
+          setQuery('');
+          setIsGeocoding(false);
+        }, 600);
       });
 
       mapRef.current = map;
-      markerRef.current = marker;
-
-      // Pre-fill form with initial address
-      if (initialAddress) {
-        fillForm(initialAddress);
-        setQuery(
-          initialAddress.displayName ||
-          `${initialAddress.street || ''}, ${initialAddress.city || ''}`.trim().replace(/^,|,$/g, '')
-        );
-      }
     }, 80);
 
     return () => clearTimeout(timer);
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Cleanup map on close
+  // Cleanup on close
   useEffect(() => {
     if (!isOpen && mapRef.current) {
       mapRef.current.remove();
       mapRef.current = null;
-      markerRef.current = null;
       setSuggestions([]);
       setQuery('');
     }
   }, [isOpen]);
 
-  // Search autocomplete with debounce
+  // Search autocomplete
   const handleQueryChange = (e) => {
     const val = e.target.value;
     setQuery(val);
     setSuggestions([]);
-    clearTimeout(debounceRef.current);
+    clearTimeout(searchDebounceRef.current);
     if (val.length < 3) return;
-    debounceRef.current = setTimeout(async () => {
+    searchDebounceRef.current = setTimeout(async () => {
       setIsSearching(true);
       const results = await searchAddress(val);
       setSuggestions(results);
@@ -237,23 +204,15 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     }, 600);
   };
 
-  const handleSelectSuggestion = async (place) => {
+  const handleSelectSuggestion = (place) => {
     setSuggestions([]);
     const lat = parseFloat(place.lat);
     const lng = parseFloat(place.lon);
-    const a = place.address || {};
-    const addr = {
-      street: a.road || a.suburb || a.neighbourhood || place.display_name.split(',')[0],
-      city: a.city || a.town || a.village || a.county || 'City',
-      state: a.state || 'State',
-      zip: a.postcode || '',
-      lat,
-      lng,
-      displayName: place.display_name,
-    };
     setQuery(place.display_name);
-    fillForm(addr);
-    moveMapTo(lat, lng, 16);
+    if (mapRef.current) {
+      mapRef.current.setView([lat, lng], HIGH_ZOOM, { animate: true });
+    }
+    // moveend will trigger the reverse geocode automatically
   };
 
   const handleGps = (e) => {
@@ -261,15 +220,13 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     if (!navigator.geolocation) { alert('Geolocation not supported by your browser.'); return; }
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
+      (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
-        setIsReverseGeocoding(true);
-        const addr = await reverseGeocode(lat, lng);
-        fillForm(addr);
-        setQuery(addr.displayName || `${addr.street}, ${addr.city}`);
-        moveMapTo(lat, lng, 16);
-        setIsReverseGeocoding(false);
+        if (mapRef.current) {
+          mapRef.current.setView([lat, lng], HIGH_ZOOM, { animate: true });
+        }
         setIsLocating(false);
+        // moveend will fire automatically
       },
       (err) => {
         console.error('GPS error:', err);
@@ -280,191 +237,258 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     );
   };
 
-  const handleConfirm = () => {
-    if (!formLat || !formLng) {
-      alert('Please pick a location on the map first.');
+  const handleSave = () => {
+    if (!centerLat || !centerLng) {
+      alert('Please select a location on the map first.');
       return;
     }
+    const fullStreet = [houseNo, street].filter(Boolean).join(', ');
     onConfirm({
-      street: formStreet,
-      city: formCity,
+      houseNo,
+      street: fullStreet || street,
+      landmark,
+      area,
+      city,
       state: formState,
-      zip: formZip,
-      lat: formLat,
-      lng: formLng,
+      zip,
+      lat: centerLat,
+      lng: centerLng,
     });
+  };
+
+  const handleCopyCoords = () => {
+    if (centerLat && centerLng) {
+      navigator.clipboard.writeText(`${centerLat.toFixed(6)}, ${centerLng.toFixed(6)}`);
+    }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden max-h-[95vh]">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in p-2 sm:p-4">
+      <div
+        className="bg-[#141414] border border-white/10 rounded-3xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden"
+        style={{ maxHeight: '96vh' }}
+      >
 
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-line flex-shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
-              <MapPin className="w-4.5 h-4.5 text-primary" />
-            </div>
-            <div>
-              <h3 className="font-display font-extrabold text-sm text-main">{title}</h3>
-              <p className="text-[10px] text-muted font-semibold">Drag the pin or click on map to set exact location</p>
-            </div>
-          </div>
+        {/* ── TOP BAR ── */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
+          <h3 className="font-display font-black text-white text-sm tracking-wide">{title}</h3>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-base text-muted hover:text-main transition-colors cursor-pointer"
+            className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all cursor-pointer"
           >
-            <X className="w-4.5 h-4.5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* ── Search Bar ── */}
-        <div className="px-5 pt-4 pb-2 flex-shrink-0">
-          <div className="relative flex items-center gap-2">
+        {/* ── SEARCH BAR ── */}
+        <div className="px-5 pb-3 flex-shrink-0 relative">
+          <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
               <input
                 type="text"
                 value={query}
                 onChange={handleQueryChange}
-                placeholder="Search for area, street, city..."
-                className="w-full bg-base border border-line-strong rounded-xl pl-10 pr-10 py-2.5 text-xs text-main placeholder:text-muted outline-none focus:border-primary transition-colors font-semibold"
+                placeholder="Search area, street, city..."
+                className="w-full bg-white/8 border border-white/12 rounded-xl pl-10 pr-10 py-2.5 text-[13px] text-white placeholder:text-white/30 outline-none focus:border-violet-500/60 transition-colors font-medium"
                 autoComplete="off"
               />
               {isSearching
-                ? <Loader className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary animate-spin" />
+                ? <Loader className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-violet-400 animate-spin" />
                 : query && (
                   <button
                     type="button"
                     onClick={() => { setQuery(''); setSuggestions([]); }}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted hover:text-main"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
-                )}
+                )
+              }
             </div>
             <button
               type="button"
               onClick={handleGps}
               disabled={isLocating}
-              title="Use my current GPS location"
-              className="flex-shrink-0 flex items-center gap-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[11px] font-bold py-2.5 px-3.5 rounded-xl cursor-pointer transition-all disabled:opacity-60"
+              title="Use GPS location"
+              className="flex-shrink-0 flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-[12px] font-bold py-2.5 px-3.5 rounded-xl cursor-pointer transition-all disabled:opacity-60 shadow-md"
             >
-              {isLocating ? <Loader className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4 fill-primary/20" />}
-              <span className="hidden sm:inline">{isLocating ? 'Locating...' : 'GPS'}</span>
+              {isLocating
+                ? <Loader className="w-4 h-4 animate-spin" />
+                : <Navigation className="w-4 h-4" />
+              }
+              <span>{isLocating ? '...' : 'GPS'}</span>
             </button>
           </div>
 
-          {/* Suggestion Dropdown */}
+          {/* Search Suggestions */}
           {suggestions.length > 0 && (
-            <div className="mt-1 bg-surface border border-line rounded-2xl shadow-xl overflow-hidden max-h-48 overflow-y-auto z-10 relative">
+            <div className="absolute left-5 right-5 top-[calc(100%-4px)] bg-[#1e1e1e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 max-h-52 overflow-y-auto">
               {suggestions.map((place, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => handleSelectSuggestion(place)}
-                  className="w-full text-left px-4 py-2.5 text-xs text-main hover:bg-primary/8 transition-colors flex items-start gap-2.5 border-b border-line last:border-b-0"
+                  className="w-full text-left px-4 py-3 text-[12px] text-white/80 hover:bg-violet-600/20 transition-colors flex items-start gap-3 border-b border-white/5 last:border-b-0"
                 >
-                  <MapPin className="w-3.5 h-3.5 mt-0.5 text-primary flex-shrink-0" />
-                  <span className="line-clamp-2 font-semibold">{place.display_name}</span>
+                  <MapPin className="w-3.5 h-3.5 mt-0.5 text-violet-400 flex-shrink-0" />
+                  <span className="line-clamp-2 font-medium leading-relaxed">{place.display_name}</span>
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* ── Map ── */}
-        <div className="relative flex-shrink-0 mx-5 rounded-2xl overflow-hidden border border-line" style={{ height: '300px' }}>
-          <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
-          {isReverseGeocoding && (
-            <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-10 rounded-2xl">
-              <div className="bg-surface border border-line rounded-xl px-4 py-2.5 flex items-center gap-2 shadow-lg">
-                <Loader className="w-4 h-4 text-primary animate-spin" />
-                <span className="text-xs font-bold text-main">Getting address...</span>
+        {/* ── MAP WITH FIXED CENTER PIN ── */}
+        <div
+          className="relative flex-shrink-0 mx-5 rounded-2xl overflow-hidden border border-white/10"
+          style={{ height: '260px' }}
+        >
+          {/* Map */}
+          <div ref={mapContainerRef} style={{ height: '100%', width: '100%', background: '#1a1a2e' }} />
+
+          {/* ── FIXED CENTER PIN (map moves underneath) ── */}
+          <div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
+            style={{ paddingBottom: '24px' }} // offset for pin tip
+          >
+            <div className="flex flex-col items-center" style={{ filter: 'drop-shadow(0 4px 12px rgba(124,58,237,0.7))' }}>
+              {/* Pin body */}
+              <div style={{
+                width: '36px',
+                height: '36px',
+                background: '#7c3aed',
+                borderRadius: '50% 50% 50% 0',
+                transform: 'rotate(-45deg)',
+                border: '3px solid white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <div style={{
+                  width: '10px',
+                  height: '10px',
+                  background: 'white',
+                  borderRadius: '50%',
+                  transform: 'rotate(45deg)',
+                }} />
+              </div>
+              {/* Pin shadow ellipse */}
+              <div style={{
+                width: '14px',
+                height: '5px',
+                background: 'rgba(124,58,237,0.35)',
+                borderRadius: '50%',
+                marginTop: '2px',
+                filter: 'blur(3px)',
+              }} />
+            </div>
+          </div>
+
+          {/* Geocoding spinner overlay */}
+          {isGeocoding && (
+            <div className="absolute inset-0 flex items-end justify-center pb-4 z-20 pointer-events-none">
+              <div className="bg-black/75 backdrop-blur-sm text-white text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg">
+                <Loader className="w-3 h-3 animate-spin text-violet-400" />
+                Getting address...
               </div>
             </div>
           )}
-          {/* Lat/Lng badge */}
-          {formLat && formLng && (
-            <div className="absolute bottom-3 left-3 z-10 bg-black/70 backdrop-blur-sm text-white text-[10px] font-mono font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-md">
-              <MapPin className="w-3 h-3 text-violet-400" />
-              {formLat.toFixed(6)}°N, {formLng.toFixed(6)}°E
+
+          {/* Lat/Lng badge + copy */}
+          {centerLat && centerLng && (
+            <div className="absolute top-3 left-3 z-20">
+              <button
+                type="button"
+                onClick={handleCopyCoords}
+                title="Copy coordinates"
+                className="bg-black/70 backdrop-blur-sm text-white/80 text-[10px] font-mono px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-black/90 transition-colors cursor-pointer"
+              >
+                <MapPin className="w-3 h-3 text-violet-400" />
+                {centerLat.toFixed(5)}°N {centerLng.toFixed(5)}°E
+                <Copy className="w-2.5 h-2.5 text-white/40" />
+              </button>
             </div>
           )}
-        </div>
 
-        {/* ── Address Fields ── */}
-        <div className="px-5 py-4 flex-shrink-0 border-t border-line/60 mt-2">
-          <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted mb-3 flex items-center gap-1.5">
-            <ChevronDown className="w-3.5 h-3.5" /> Confirm Address Details
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="sm:col-span-2 flex flex-col gap-1">
-              <label className="text-[10px] font-extrabold uppercase tracking-wider text-muted px-0.5">Street / Area</label>
-              <input
-                type="text"
-                value={formStreet}
-                onChange={(e) => setFormStreet(e.target.value)}
-                placeholder="Street, landmark, area..."
-                className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none focus:border-primary transition-colors"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-extrabold uppercase tracking-wider text-muted px-0.5">City</label>
-              <input
-                type="text"
-                value={formCity}
-                onChange={(e) => setFormCity(e.target.value)}
-                placeholder="City"
-                className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none focus:border-primary transition-colors"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-extrabold uppercase tracking-wider text-muted px-0.5">State</label>
-              <input
-                type="text"
-                value={formState}
-                onChange={(e) => setFormState(e.target.value)}
-                placeholder="State"
-                className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none focus:border-primary transition-colors"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-extrabold uppercase tracking-wider text-muted px-0.5">ZIP / Pincode</label>
-              <input
-                type="text"
-                value={formZip}
-                onChange={(e) => setFormZip(e.target.value)}
-                placeholder="000000"
-                className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none focus:border-primary transition-colors"
-              />
+          {/* "Move map to select" hint */}
+          <div className="absolute bottom-3 right-3 z-20">
+            <div className="bg-black/70 backdrop-blur-sm text-white/60 text-[10px] px-2.5 py-1 rounded-lg font-medium">
+              Drag map to adjust pin
             </div>
           </div>
         </div>
 
-        {/* ── Footer Buttons ── */}
-        <div className="px-5 pb-5 flex gap-3 flex-shrink-0">
+        {/* ── ADDRESS FIELDS (scrollable) ── */}
+        <div className="overflow-y-auto flex-1 px-5 pt-4 pb-3" style={{ minHeight: 0 }}>
+          
+          {/* Detected address banner */}
+          {displayName && (
+            <div className="bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 mb-4 flex items-start gap-2">
+              <MapPin className="w-3.5 h-3.5 text-violet-400 mt-0.5 flex-shrink-0" />
+              <p className="text-[11px] text-white/60 font-medium leading-relaxed line-clamp-2">{displayName}</p>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3">
+            {/* House No + Street — row */}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="House / Flat No." value={houseNo} onChange={setHouseNo} placeholder="e.g. 4A, B-302" />
+              <Field label="Street" value={street} onChange={setStreet} placeholder="e.g. MG Road" />
+            </div>
+
+            {/* Landmark */}
+            <Field label="Landmark" value={landmark} onChange={setLandmark} placeholder="e.g. Near Apollo Hospital" />
+
+            {/* Area */}
+            <Field label="Area / Locality" value={area} onChange={setArea} placeholder="e.g. Andheri West" />
+
+            {/* City + State — row */}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="City" value={city} onChange={setCity} placeholder="e.g. Mumbai" />
+              <Field label="State" value={formState} onChange={setFormState} placeholder="e.g. Maharashtra" />
+            </div>
+
+            {/* Pincode */}
+            <Field label="Pincode" value={zip} onChange={setZip} placeholder="e.g. 400053" type="tel" />
+          </div>
+        </div>
+
+        {/* ── SAVE BUTTON ── */}
+        <div className="px-5 pb-5 pt-3 flex-shrink-0 border-t border-white/8">
           <button
             type="button"
-            onClick={onClose}
-            className="flex-1 py-3 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer transition-colors"
+            onClick={handleSave}
+            disabled={!centerLat || !centerLng || isGeocoding}
+            className="w-full py-3.5 bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white text-[13px] font-extrabold rounded-2xl cursor-pointer shadow-lg shadow-violet-900/40 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
           >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={!formLat || !formLng || isReverseGeocoding}
-            className="flex-[2] py-3 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl cursor-pointer shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            <Check className="w-4 h-4" />
-            Confirm Location
+            <Check className="w-4.5 h-4.5" />
+            SAVE ADDRESS
           </button>
         </div>
+
       </div>
+    </div>
+  );
+}
+
+// ── Reusable dark-theme input field ─────────────────────────────────────────
+function Field({ label, value, onChange, placeholder, type = 'text' }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[10px] font-extrabold uppercase tracking-widest text-white/40 px-0.5">
+        {label}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-[13px] text-white placeholder:text-white/20 outline-none focus:border-violet-500/70 focus:bg-white/8 transition-all font-medium"
+      />
     </div>
   );
 }
