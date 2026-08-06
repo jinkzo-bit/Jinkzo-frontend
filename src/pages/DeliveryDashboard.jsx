@@ -242,18 +242,20 @@ export default function DeliveryDashboard() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const availData = await availRes.json();
-      setAvailableOrders(availData);
+      // Guard: only set state if the response is actually an array
+      setAvailableOrders(Array.isArray(availData) ? availData : []);
 
       // 2. Active Run
       const activeRes = await fetch(`${API_BASE}/delivery-partner/orders/active`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const activeData = await activeRes.json();
-      setActiveOrders(activeData);
-      
+      const safeActiveData = Array.isArray(activeData) ? activeData : [];
+      setActiveOrders(safeActiveData);
+
       // Auto-select active order if selectedOrder is null
-      if (activeData.length > 0 && !selectedOrder) {
-        setSelectedOrder(activeData[0]);
+      if (safeActiveData.length > 0 && !selectedOrder) {
+        setSelectedOrder(safeActiveData[0]);
       }
 
       // 3. Completed history
@@ -261,9 +263,10 @@ export default function DeliveryDashboard() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const historyData = await historyRes.json();
+      const safeHistoryData = Array.isArray(historyData) ? historyData : [];
       // Sort by most recently completed first
-      historyData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setHistoryOrders(historyData);
+      safeHistoryData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      setHistoryOrders(safeHistoryData);
 
     } catch (err) {
       console.error(err);
