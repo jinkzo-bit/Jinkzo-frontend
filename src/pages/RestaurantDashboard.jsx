@@ -6,6 +6,7 @@ import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
+import LocationPickerModal from '../components/LocationPickerModal';
 
 export default function RestaurantDashboard() {
   const { user, token, logout } = useAuthStore();
@@ -142,10 +143,15 @@ export default function RestaurantDashboard() {
   const [profileImage, setProfileImage] = useState('');
   const [profileImageFile, setProfileImageFile] = useState(null);
   const [profileAddress, setProfileAddress] = useState('');
+  const [profileLat, setProfileLat] = useState(null);
+  const [profileLng, setProfileLng] = useState(null);
   const [profileTime, setProfileTime] = useState(30);
   const [profileVeg, setProfileVeg] = useState(false);
   const [profileClosed, setProfileClosed] = useState(false);
   const [isProfileSaving, setIsProfileSaving] = useState(false);
+
+  // Location picker for restaurant address
+  const [showRestaurantLocationPicker, setShowRestaurantLocationPicker] = useState(false);
 
   // Local Coupons/Offers
   const [offers, setOffers] = useState([]);
@@ -262,6 +268,8 @@ export default function RestaurantDashboard() {
         setProfileName(data.name || '');
         setProfileImage(data.image || '');
         setProfileAddress(data.address || '');
+        setProfileLat(data.lat || null);
+        setProfileLng(data.lng || null);
         setProfileTime(data.deliveryTime || 30);
         setProfileVeg(data.isPureVeg || false);
         setProfileClosed(data.isClosed || false);
@@ -409,20 +417,24 @@ export default function RestaurantDashboard() {
     }
 
     try {
+      const payload = {
+        name: profileName,
+        image: finalProfileImageUrl,
+        address: profileAddress,
+        deliveryTime: parseInt(profileTime),
+        isPureVeg: profileVeg,
+        isClosed: profileClosed,
+      };
+      if (profileLat !== null) payload.lat = profileLat;
+      if (profileLng !== null) payload.lng = profileLng;
+
       const res = await fetch(`${API_BASE}/restaurant-partner/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          name: profileName,
-          image: finalProfileImageUrl,
-          address: profileAddress,
-          deliveryTime: parseInt(profileTime),
-          isPureVeg: profileVeg,
-          isClosed: profileClosed
-        })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         const updated = await res.json();
@@ -1322,14 +1334,32 @@ export default function RestaurantDashboard() {
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Kitchen Address</label>
-                  <input
-                    type="text"
-                    required
-                    value={profileAddress}
-                    onChange={(e) => setProfileAddress(e.target.value)}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none"
-                  />
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Kitchen Address & Location</label>
+                  
+                  {/* Current address display */}
+                  <div className="bg-base border border-line-strong rounded-xl p-3 flex flex-col gap-2">
+                    {profileAddress ? (
+                      <>
+                        <p className="text-xs font-semibold text-main leading-relaxed">{profileAddress}</p>
+                        {profileLat && profileLng && (
+                          <p className="text-[10px] text-primary font-mono flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {Number(profileLat).toFixed(5)}°N, {Number(profileLng).toFixed(5)}°E
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted italic">No location set yet. Click the button below to pick one.</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowRestaurantLocationPicker(true)}
+                      className="flex items-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[11px] font-bold py-2 px-3 rounded-lg cursor-pointer transition-all w-fit mt-1"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      {profileAddress ? 'Change Location on Map' : 'Pick Location on Map'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1">
@@ -1672,6 +1702,24 @@ export default function RestaurantDashboard() {
           </div>
         </div>
       )}
+
+      {/* ── RESTAURANT LOCATION PICKER MODAL ── */}
+      <LocationPickerModal
+        isOpen={showRestaurantLocationPicker}
+        onClose={() => setShowRestaurantLocationPicker(false)}
+        onConfirm={(pickedAddr) => {
+          setProfileAddress(`${pickedAddr.street}, ${pickedAddr.city}, ${pickedAddr.state}${pickedAddr.zip ? ` - ${pickedAddr.zip}` : ''}`);
+          setProfileLat(pickedAddr.lat);
+          setProfileLng(pickedAddr.lng);
+          setShowRestaurantLocationPicker(false);
+        }}
+        initialAddress={
+          profileLat && profileLng
+            ? { street: profileAddress, city: '', state: '', zip: '', lat: profileLat, lng: profileLng }
+            : null
+        }
+        title="Set Restaurant Location"
+      />
 
     </div>
   );

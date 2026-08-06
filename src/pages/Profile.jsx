@@ -1,14 +1,15 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, MapPin, ClipboardList, LogOut, ChevronRight, ShoppingBag, Trash2, Calendar, Star, Sparkles, Pencil, AlertTriangle } from 'lucide-react';
+import { User, MapPin, ClipboardList, LogOut, ShoppingBag, Trash2, Calendar, Star, Sparkles, Pencil, AlertTriangle, Plus } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import RiderFeedbackModal from '../components/RiderFeedbackModal';
+import LocationPickerModal from '../components/LocationPickerModal';
 import { formatAppDate } from '../utils/dateUtils';
 
 export default function Profile() {
-  const { user, token, logout, deleteAddress } = useAuthStore();
+  const { user, token, logout, deleteAddress, editAddress, addAddress } = useAuthStore();
   const { addItem, clearCart, showToast } = useCartStore();
   const navigate = useNavigate();
 
@@ -34,6 +35,38 @@ export default function Profile() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
+
+  // Location picker modal
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [locationPickerMode, setLocationPickerMode] = useState('add'); // 'add' | 'edit'
+  const [editingAddressId, setEditingAddressId] = useState(null);
+  const [editingAddressInitial, setEditingAddressInitial] = useState(null);
+  const [addressSaving, setAddressSaving] = useState(false);
+
+  const handleOpenAddAddress = () => {
+    setLocationPickerMode('add');
+    setEditingAddressId(null);
+    setEditingAddressInitial(null);
+    setShowLocationPicker(true);
+  };
+
+  const handleOpenEditAddress = (addr) => {
+    setLocationPickerMode('edit');
+    setEditingAddressId(addr._id);
+    setEditingAddressInitial(addr);
+    setShowLocationPicker(true);
+  };
+
+  const handleLocationConfirm = async (pickedAddr) => {
+    setAddressSaving(true);
+    setShowLocationPicker(false);
+    if (locationPickerMode === 'edit' && editingAddressId) {
+      await editAddress(editingAddressId, pickedAddr);
+    } else {
+      await addAddress({ ...pickedAddr, isDefault: !user?.addresses?.length });
+    }
+    setAddressSaving(false);
+  };
 
   // Delete Account modal
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
@@ -278,33 +311,75 @@ export default function Profile() {
 
           {/* Saved Addresses list */}
           <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4">
-            <h3 className="font-display font-extrabold text-sm text-main border-b border-line pb-2 flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-primary" />
-              <span>Saved Addresses</span>
-            </h3>
+            <div className="flex items-center justify-between border-b border-line pb-2">
+              <h3 className="font-display font-extrabold text-sm text-main flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-primary" />
+                <span>Saved Addresses</span>
+              </h3>
+              <button
+                onClick={handleOpenAddAddress}
+                disabled={addressSaving}
+                className="flex items-center gap-1 text-[10px] font-bold text-primary hover:bg-violet-50 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Plus className="w-3 h-3" /> Add New
+              </button>
+            </div>
+
+            {addressSaving && (
+              <div className="flex items-center gap-2 text-xs text-primary font-bold bg-primary/5 px-3 py-2 rounded-xl">
+                <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                Saving address...
+              </div>
+            )}
 
             {user.addresses && user.addresses.length > 0 ? (
               <div className="flex flex-col gap-3">
                 {user.addresses.map((addr) => (
                   <div key={addr._id} className="p-3 bg-base rounded-xl border border-line/50 flex justify-between items-start gap-2.5">
-                    <div>
-                      {addr.isDefault && <span className="text-[9px] bg-green-100 text-green-700 font-extrabold px-1.5 py-0.5 rounded-md mb-1.5 inline-block">Default</span>}
+                    <div className="flex-1 min-w-0">
+                      {addr.isDefault && (
+                        <span className="text-[9px] bg-green-100 text-green-700 font-extrabold px-1.5 py-0.5 rounded-md mb-1.5 inline-block">Default</span>
+                      )}
                       <p className="text-[11px] text-muted leading-relaxed font-semibold">
-                        {addr.street}, {addr.city}, {addr.state} - {addr.zip}
+                        {addr.street}, {addr.city}, {addr.state}{addr.zip ? ` - ${addr.zip}` : ''}
                       </p>
+                      {addr.lat && addr.lng && (
+                        <p className="text-[9px] text-primary font-mono mt-1 flex items-center gap-1">
+                          <MapPin className="w-2.5 h-2.5" />
+                          {Number(addr.lat).toFixed(5)}°N, {Number(addr.lng).toFixed(5)}°E
+                        </p>
+                      )}
                     </div>
-                    <button
-                      onClick={() => deleteAddress(addr._id)}
-                      className="text-muted hover:text-red-500 p-1 cursor-pointer transition-colors"
-                      title="Delete Address"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => handleOpenEditAddress(addr)}
+                        className="text-muted hover:text-primary p-1.5 cursor-pointer transition-colors rounded-lg hover:bg-violet-50"
+                        title="Edit Address on Map"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => deleteAddress(addr._id)}
+                        className="text-muted hover:text-red-500 p-1.5 cursor-pointer transition-colors rounded-lg hover:bg-red-50"
+                        title="Delete Address"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-muted italic">No saved addresses found. Add one during checkout.</p>
+              <div className="flex flex-col items-center gap-2 py-4 text-center">
+                <MapPin className="w-8 h-8 text-gray-300" />
+                <p className="text-xs text-muted italic">No saved addresses yet.</p>
+                <button
+                  onClick={handleOpenAddAddress}
+                  className="text-xs font-bold text-primary hover:underline cursor-pointer"
+                >
+                  + Add your first address
+                </button>
+              </div>
             )}
           </div>
 
@@ -502,6 +577,15 @@ export default function Profile() {
           }}
         />
       )}
+
+      {/* ── LOCATION PICKER MODAL ─── */}
+      <LocationPickerModal
+        isOpen={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onConfirm={handleLocationConfirm}
+        initialAddress={editingAddressInitial}
+        title={locationPickerMode === 'edit' ? 'Edit Address Location' : 'Add New Address'}
+      />
 
       {/* ── EDIT PROFILE MODAL ─── */}
       {showEditProfile && (

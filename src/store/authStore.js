@@ -268,6 +268,35 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  editAddress: async (addressId, updatedAddr) => {
+    const { user, isAuthenticated, token } = get();
+    if (!user || !isAuthenticated) return { success: false, message: 'Not authenticated' };
+
+    try {
+      const updatedAddresses = (user.addresses || []).map(addr =>
+        String(addr._id) === String(addressId)
+          ? { ...addr, ...updatedAddr }
+          : addr
+      );
+
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ addresses: updatedAddresses }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to update address');
+      set({ user: data });
+      return { success: true };
+    } catch (err) {
+      console.error('Edit address failed:', err);
+      return { success: false, message: err.message };
+    }
+  },
+
   // ── Send Login OTP (Phone passwordless login step 1) ──────────────────
   sendLoginOtp: async (phone) => {
     try {
