@@ -1,35 +1,24 @@
-import React, { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useJsApiLoader, GoogleMap, Marker, InfoWindow } from '@react-google-maps/api';
+import { Loader, MapPin } from 'lucide-react';
 
-const DEFAULT_CENTER = [15.8601, 78.2618];
+const DEFAULT_CENTER = { lat: 15.8601, lng: 78.2618 };
 
-const pulsingDotStyle = `
-  .user-pulse-dot {
-    width: 14px;
-    height: 14px;
-    background: #3b82f6;
-    border: 2px solid white;
-    border-radius: 50%;
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
-    animation: user-pulse 1.8s infinite;
-    display: inline-block;
-  }
-  @keyframes user-pulse {
-    0% {
-      transform: scale(0.95);
-      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
-    }
-    70% {
-      transform: scale(1);
-      box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
-    }
-    100% {
-      transform: scale(0.95);
-      box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
-    }
-  }
-`;
+const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
+
+const MAP_OPTIONS = {
+  disableDefaultUI: false,
+  zoomControl: true,
+  mapTypeControl: false,
+  streetViewControl: false,
+  fullscreenControl: false,
+  clickableIcons: false,
+  gestureHandling: 'greedy',
+  styles: [
+    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  ],
+};
 
 const geocodeAddress = async (address) => {
   try {
@@ -51,78 +40,49 @@ const geocodeAddress = async (address) => {
 };
 
 export default function RestaurantsMapView({ restaurants = [], userLocation = null }) {
-  const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
-  const markerGroupRef = useRef(null);
-  const userMarkerRef = useRef(null);
   const [geocodedCache, setGeocodedCache] = useState({});
+  const [restaurantMarkers, setRestaurantMarkers] = useState([]); // [{ restaurant, lat, lng }]
+  const [activeInfoWindow, setActiveInfoWindow] = useState(null); // restaurant._id
+  const [mapCenter, setMapCenter] = useState(
+    userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : DEFAULT_CENTER
+  );
 
-  // 1. Initialize Map
-  useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-    const center = userLocation ? [userLocation.lat, userLocation.lng] : DEFAULT_CENTER;
-    const map = L.map(mapContainerRef.current, {
-      center: center,
-      zoom: 13,
-      zoomControl: true,
-      attributionControl: false,
-    });
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: apiKey || '',
+    id: 'google-map-script',
+  });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-    }).addTo(map);
-
-    L.control.attribution({ prefix: '© OpenStreetMap' }).addTo(map);
-
-    const markerGroup = L.layerGroup().addTo(map);
-    markerGroupRef.current = markerGroup;
-
+  // ── Map load callback ──────────────────────────────────────────────────────
+  const onMapLoad = useCallback((map) => {
     mapRef.current = map;
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
   }, []);
 
-  // 2. Handle user location updates / centering
+  const onMapUnmount = useCallback(() => {
+    mapRef.current = null;
+  }, []);
+
+  // ── Handle user location updates ──────────────────────────────────────────
   useEffect(() => {
-    if (!mapRef.current) return;
-
-    const map = mapRef.current;
-
     if (userLocation) {
-      const userLatLng = [userLocation.lat, userLocation.lng];
-      map.setView(userLatLng, map.getZoom());
-
-      // Update or create user pulsing dot marker
-      if (userMarkerRef.current) {
-        userMarkerRef.current.setLatLng(userLatLng);
-      } else {
-        const userIcon = L.divIcon({
-          html: '<div class="user-pulse-dot"></div>',
-          className: '',
-          iconSize: [14, 14],
-          iconAnchor: [7, 7]
-        });
-        userMarkerRef.current = L.marker(userLatLng, { icon: userIcon }).addTo(map);
+      const newCenter = { lat: userLocation.lat, lng: userLocation.lng };
+      setMapCenter(newCenter);
+      if (mapRef.current) {
+        mapRef.current.panTo(newCenter);
       }
     }
   }, [userLocation]);
 
-  // 3. Geocode and place restaurant markers
+  // ── Geocode and collect restaurant marker positions ────────────────────────
   useEffect(() => {
-    if (!mapRef.current || !markerGroupRef.current) return;
-
-    const markerGroup = markerGroupRef.current;
-    markerGroup.clearLayers();
+    if (!isLoaded) return;
 
     const loadMarkers = async () => {
       const newCache = { ...geocodedCache };
       let cacheUpdated = false;
+      const markers = [];
 
       for (const restaurant of restaurants) {
         let lat = null;
@@ -150,49 +110,130 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
         }
 
         if (lat !== null && lng !== null) {
-          // Place marker
-          const marker = L.circleMarker([lat, lng], {
-            radius: 8,
-            fillColor: '#ff5a00',
-            color: '#ffffff',
-            weight: 2,
-            fillOpacity: 0.9
-          });
-
-          const popupContent = `
-            <div style="font-family: inherit; min-width: 180px; padding: 4px;">
-              <h4 style="margin: 0 0 4px 0; font-size: 14px; font-weight: 850; color: #111827;">${restaurant.name}</h4>
-              <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #4b5563; margin-bottom: 6px;">
-                <span style="color: #ff5a00;">⭐ ${restaurant.rating || '4.0'}</span>
-                <span style="color: #e5e7eb;">•</span>
-                <span>⏱️ ${restaurant.deliveryTime || '30'} mins</span>
-              </div>
-              <p style="margin: 0 0 8px 0; font-size: 10px; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;">
-                ${(restaurant.cuisineTags || []).join(', ')}
-              </p>
-              <a href="/restaurant/${restaurant._id}" style="display: block; text-align: center; background: #ff5a00; color: #ffffff; text-decoration: none; font-size: 11px; font-weight: 800; padding: 7px 12px; border-radius: 8px; text-transform: uppercase; letter-spacing: 0.5px; transition: background 0.2s;">
-                View Menu
-              </a>
-            </div>
-          `;
-
-          marker.bindPopup(popupContent);
-          markerGroup.addLayer(marker);
+          markers.push({ restaurant, lat, lng });
         }
       }
 
+      setRestaurantMarkers(markers);
       if (cacheUpdated) {
         setGeocodedCache(newCache);
       }
     };
 
     loadMarkers();
-  }, [restaurants]);
+  }, [restaurants, isLoaded]); // eslint-disable-line
+
+  // ── Restaurant marker icon ─────────────────────────────────────────────────
+  const restaurantIconDef = isLoaded && window.google ? {
+    path: window.google.maps.SymbolPath.CIRCLE,
+    scale: 9,
+    fillColor: '#ff5a00',
+    fillOpacity: 0.9,
+    strokeColor: '#ffffff',
+    strokeWeight: 2,
+  } : undefined;
+
+  // ── User location icon (pulsing blue dot simulation) ──────────────────────
+  const userIconDef = isLoaded && window.google ? {
+    path: window.google.maps.SymbolPath.CIRCLE,
+    scale: 8,
+    fillColor: '#3b82f6',
+    fillOpacity: 1,
+    strokeColor: '#ffffff',
+    strokeWeight: 2,
+  } : undefined;
+
+  // ── Render: missing API key ────────────────────────────────────────────────
+  if (!apiKey || apiKey === 'YOUR_GOOGLE_MAPS_API_KEY_HERE') {
+    return (
+      <div className="relative w-full rounded-2xl overflow-hidden border border-line shadow-xs bg-amber-50 flex items-center justify-center flex-col gap-2 p-8" style={{ height: '550px' }}>
+        <MapPin className="w-6 h-6 text-amber-600" />
+        <span className="text-xs font-bold text-amber-700 text-center">
+          Google Maps API key not configured.
+          <br />
+          Set <code className="font-mono bg-amber-100 px-1 rounded">VITE_GOOGLE_MAPS_API_KEY</code> in <code className="font-mono bg-amber-100 px-1 rounded">.env</code>
+        </span>
+      </div>
+    );
+  }
+
+  // ── Render: load error ─────────────────────────────────────────────────────
+  if (loadError) {
+    return (
+      <div className="relative w-full rounded-2xl overflow-hidden border border-red-100 bg-red-50 flex items-center justify-center flex-col gap-2 p-8" style={{ height: '550px' }}>
+        <MapPin className="w-6 h-6 text-red-500" />
+        <span className="text-xs font-bold text-red-500 text-center">Failed to load Google Maps. Check API key.</span>
+      </div>
+    );
+  }
+
+  // ── Render: loading ────────────────────────────────────────────────────────
+  if (!isLoaded) {
+    return (
+      <div className="relative w-full rounded-2xl overflow-hidden border border-line shadow-xs bg-surface flex items-center justify-center flex-col gap-2" style={{ height: '550px' }}>
+        <Loader className="w-8 h-8 text-primary animate-spin" />
+        <span className="text-xs text-muted font-bold">Loading Map...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full rounded-2xl overflow-hidden border border-line shadow-xs bg-surface" style={{ height: '550px' }}>
-      <style>{pulsingDotStyle}</style>
-      <div ref={mapContainerRef} className="w-full h-full z-0" style={{ minHeight: '100%' }} />
+      <GoogleMap
+        mapContainerStyle={MAP_CONTAINER_STYLE}
+        center={mapCenter}
+        zoom={13}
+        options={MAP_OPTIONS}
+        onLoad={onMapLoad}
+        onUnmount={onMapUnmount}
+      >
+        {/* ── User location marker ── */}
+        {userLocation && (
+          <Marker
+            position={{ lat: userLocation.lat, lng: userLocation.lng }}
+            icon={userIconDef}
+            title="Your Location"
+            zIndex={10}
+          />
+        )}
+
+        {/* ── Restaurant markers ── */}
+        {restaurantMarkers.map(({ restaurant, lat, lng }) => (
+          <Marker
+            key={restaurant._id}
+            position={{ lat, lng }}
+            icon={restaurantIconDef}
+            title={restaurant.name}
+            onClick={() => setActiveInfoWindow(
+              activeInfoWindow === restaurant._id ? null : restaurant._id
+            )}
+          >
+            {activeInfoWindow === restaurant._id && (
+              <InfoWindow onCloseClick={() => setActiveInfoWindow(null)}>
+                <div style={{ fontFamily: 'inherit', minWidth: '180px', padding: '4px' }}>
+                  <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: '850', color: '#111827' }}>
+                    {restaurant.name}
+                  </h4>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#4b5563', marginBottom: '6px' }}>
+                    <span style={{ color: '#ff5a00' }}>⭐ {restaurant.rating || '4.0'}</span>
+                    <span style={{ color: '#e5e7eb' }}>•</span>
+                    <span>⏱️ {restaurant.deliveryTime || '30'} mins</span>
+                  </div>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '10px', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '170px' }}>
+                    {(restaurant.cuisineTags || []).join(', ')}
+                  </p>
+                  <a
+                    href={`/restaurant/${restaurant._id}`}
+                    style={{ display: 'block', textAlign: 'center', background: '#ff5a00', color: '#ffffff', textDecoration: 'none', fontSize: '11px', fontWeight: '800', padding: '7px 12px', borderRadius: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                  >
+                    View Menu
+                  </a>
+                </div>
+              </InfoWindow>
+            )}
+          </Marker>
+        ))}
+      </GoogleMap>
     </div>
   );
 }

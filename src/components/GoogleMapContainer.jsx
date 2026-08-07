@@ -1,104 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MapPin, Loader } from 'lucide-react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useJsApiLoader, GoogleMap, Marker, Polyline, InfoWindow } from '@react-google-maps/api';
 import { io } from 'socket.io-client';
-
-// Fix Leaflet default marker icon paths broken by Vite bundling
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
-
-// ── Custom SVG icons ────────────────────────────────────────────────────────
-
-const makeIcon = (color, size = 28) => L.divIcon({
-  html: `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-  </svg>`,
-  className: '',
-  iconSize: [size, size],
-  iconAnchor: [size / 2, size],
-  popupAnchor: [0, -size],
-});
-
-const restaurantIcon = L.divIcon({
-  html: `<div style="
-    background: #18181b;
-    color: white;
-    border: 2.5px solid white;
-    border-radius: 50% 50% 50% 0;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    transform: rotate(-45deg);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.45);
-  "><span style="transform: rotate(45deg); display: inline-block;">🍴</span></div>`,
-  className: '',
-  iconSize: [36, 36],
-  iconAnchor: [18, 36],
-  popupAnchor: [0, -36],
-});
-
-const customerIcon = L.divIcon({
-  html: `<div style="
-    background: #18181b;
-    color: white;
-    border: 2.5px solid white;
-    border-radius: 50% 50% 50% 0;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    transform: rotate(-45deg);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.45);
-  "><span style="transform: rotate(45deg); display: inline-block;">🏠</span></div>`,
-  className: '',
-  iconSize: [36, 36],
-  iconAnchor: [18, 36],
-  popupAnchor: [0, -36],
-});
-
-const riderIcon = L.divIcon({
-  html: `<div style="
-    background: #e11d48;
-    color: white;
-    border: 2.5px solid white;
-    border-radius: 50%;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    box-shadow: 0 4px 12px rgba(225,29,72,0.5);
-  ">🛵</div>`,
-  className: '',
-  iconSize: [36, 36],
-  iconAnchor: [18, 18],
-  popupAnchor: [0, -18],
-});
-
-const pickerIcon = L.divIcon({
-  html: `<div style="
-    background:#FF5A00;
-    border:3px solid white;
-    border-radius:50% 50% 50% 0;
-    width:30px;height:30px;
-    transform:rotate(-45deg);
-    box-shadow:0 2px 8px rgba(0,0,0,0.35);
-  "></div>`,
-  className: '',
-  iconSize: [30, 30],
-  iconAnchor: [15, 30],
-});
 
 // ── Geocode helper (Nominatim — free, no key) ───────────────────────────────
 const geocodeAddress = async (address) => {
@@ -194,7 +97,8 @@ const calculateORSRoute = async (start, end, apiKey) => {
 
     const data = await res.json();
     const coordinates = data.features[0].geometry.coordinates;
-    const routePoints = coordinates.map(coord => [coord[1], coord[0]]);
+    // Google Maps uses { lat, lng } objects
+    const routePoints = coordinates.map(coord => ({ lat: coord[1], lng: coord[0] }));
     console.log('[Maps] ✅ ORS route received:', routePoints.length, 'waypoints along real roads');
     return routePoints;
   } catch (err) {
@@ -211,7 +115,7 @@ const calculateOSRMRoute = async (start, end) => {
     if (!res.ok) throw new Error('OSRM request failed');
     const data = await res.json();
     const coordinates = data.routes[0].geometry.coordinates;
-    return coordinates.map(coord => [coord[1], coord[0]]);
+    return coordinates.map(coord => ({ lat: coord[1], lng: coord[0] }));
   } catch (err) {
     console.warn('Primary OSRM failed, trying backup OpenStreetMap server...', err);
     try {
@@ -220,7 +124,7 @@ const calculateOSRMRoute = async (start, end) => {
       if (!res2.ok) throw new Error('Backup OSRM failed', { cause: err });
       const data2 = await res2.json();
       const coordinates2 = data2.routes[0].geometry.coordinates;
-      return coordinates2.map(coord => [coord[1], coord[0]]);
+      return coordinates2.map(coord => ({ lat: coord[1], lng: coord[0] }));
     } catch (err2) {
       console.warn('All OSRM routing servers failed:', err2);
       return null;
@@ -229,8 +133,39 @@ const calculateOSRMRoute = async (start, end) => {
 };
 
 // ── Default fallback coords (Nandikotkur, AP) ───────────────────────────────────
-const DEFAULT_CENTER = [15.8562, 78.2700];
+const DEFAULT_CENTER = { lat: 15.8562, lng: 78.2700 };
 const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
+
+// ── Map container style ───────────────────────────────────────────────────────
+const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
+
+// ── Map base options ──────────────────────────────────────────────────────────
+const MAP_OPTIONS = {
+  disableDefaultUI: false,
+  zoomControl: true,
+  mapTypeControl: false,
+  streetViewControl: false,
+  fullscreenControl: false,
+  clickableIcons: false,
+  gestureHandling: 'greedy',
+  styles: [
+    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  ],
+};
+
+// ── Custom marker icon builders ───────────────────────────────────────────────
+const makeMarkerIcon = (color, label) => ({
+  path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
+  fillColor: color,
+  fillOpacity: 1,
+  strokeColor: '#FFFFFF',
+  strokeWeight: 1.5,
+  scale: 1.5,
+  anchor: { x: 12, y: 24 },
+  labelOrigin: { x: 12, y: 9 },
+  label,
+});
 
 // ── Component ───────────────────────────────────────────────────────────────
 export default function GoogleMapContainer({
@@ -244,83 +179,51 @@ export default function GoogleMapContainer({
   deliveryMethod = 'Standard',
   orderId = null
 }) {
-  const mapDivRef = useRef(null);
-  const mapRef = useRef(null);           // Leaflet map instance
-  const markersRef = useRef({});         // { restaurant, customer, rider, picker }
-  const routeLayerRef = useRef(null);    // Leaflet polyline for route
-  const routePointsRef = useRef([]);     // Array of [lat,lng] along route
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: apiKey || '',
+    id: 'google-map-script',
+  });
+
+  const mapRef = useRef(null);                  // Google Maps instance
+  const pickerMarkerRef = useRef(null);         // picker mode draggable marker
+  const restaurantMarkerRef = useRef(null);     // tracking restaurant marker
+  const customerMarkerRef = useRef(null);       // tracking customer marker
+  const riderMarkerRef = useRef(null);          // tracking rider marker
+  const routePointsRef = useRef([]);            // Array of {lat,lng} along route
+
+  const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
+  const [pickerPos, setPickerPos] = useState(null);
+  const [restaurantPos, setRestaurantPos] = useState(null);
+  const [customerPos, setCustomerPos] = useState(null);
+  const [riderPos, setRiderPos] = useState(null);
+  const [routePath, setRoutePath] = useState([]);
+  const [activePopup, setActivePopup] = useState(null); // 'restaurant' | 'customer' | 'rider'
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null); // eslint-disable-line no-unused-vars
 
-  // ── Init map ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!mapDivRef.current || mapRef.current) return;
-
-    const map = L.map(mapDivRef.current, {
-      center: DEFAULT_CENTER,
-      zoom: 15,
-      zoomControl: true,
-      attributionControl: false,
-    });
-
-    // OSM Standard tiles — most detailed: road numbers (544F), alleys, building names
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      tileSize: 256,
-      zoomOffset: 0,
-    }).addTo(map);
-
-    // Subtle attribution
-    L.control.attribution({ prefix: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
-
+  // ── Map load callback ──────────────────────────────────────────────────────
+  const onMapLoad = useCallback((map) => {
     mapRef.current = map;
-    setLoading(false);
+  }, []);
 
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
+  const onMapUnmount = useCallback(() => {
+    mapRef.current = null;
   }, []);
 
   // ── Picker mode ───────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!mapRef.current || mode !== 'picker') return;
-    const map = mapRef.current;
-    const m = markersRef.current;
+    if (!isLoaded || mode !== 'picker') return;
 
-    // Remove tracking markers
-    if (m.restaurant) { m.restaurant.remove(); delete m.restaurant; }
-    if (m.customer) { m.customer.remove(); delete m.customer; }
-    if (m.rider) { m.rider.remove(); delete m.rider; }
-    if (routeLayerRef.current) {
-      if (Array.isArray(routeLayerRef.current)) {
-        routeLayerRef.current.forEach(l => l.remove());
-      } else {
-        routeLayerRef.current.remove();
-      }
-      routeLayerRef.current = null;
-    }
+    setRestaurantPos(null);
+    setCustomerPos(null);
+    setRiderPos(null);
+    setRoutePath([]);
 
     const placeOrMovePicker = (lat, lng) => {
-      if (!m.picker) {
-        m.picker = L.marker([lat, lng], { icon: pickerIcon, draggable: true }).addTo(map);
-
-        m.picker.on('dragend', async () => {
-          const pos = m.picker.getLatLng();
-          const result = await reverseGeocode(pos.lat, pos.lng);
-          if (onAddressSelect) onAddressSelect(result);
-        });
-
-        map.on('click', async (e) => {
-          m.picker.setLatLng(e.latlng);
-          const result = await reverseGeocode(e.latlng.lat, e.latlng.lng);
-          if (onAddressSelect) onAddressSelect(result);
-        });
-      } else {
-        m.picker.setLatLng([lat, lng]);
-      }
-      map.setView([lat, lng], 15);
+      setPickerPos({ lat, lng });
+      setMapCenter({ lat, lng });
     };
 
     // Geocode initial address or use default
@@ -328,21 +231,38 @@ export default function GoogleMapContainer({
       const addr = `${initialAddress.street}, ${initialAddress.city}, ${initialAddress.state} ${initialAddress.zip}`;
       geocodeAddress(addr).then(pos => {
         if (pos) placeOrMovePicker(pos.lat, pos.lng);
-        else placeOrMovePicker(...DEFAULT_CENTER);
+        else placeOrMovePicker(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
       });
     } else {
-      placeOrMovePicker(...DEFAULT_CENTER);
+      placeOrMovePicker(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
     }
-  }, [mapRef.current, mode]);
+  }, [isLoaded, mode, initialAddress]);
+
+  // ── Picker — handle marker drag ────────────────────────────────────────────
+  const handlePickerDragEnd = useCallback(async (e) => {
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    setPickerPos({ lat, lng });
+    const result = await reverseGeocode(lat, lng);
+    if (onAddressSelect) onAddressSelect(result);
+  }, [onAddressSelect]);
+
+  // ── Picker — handle map click ──────────────────────────────────────────────
+  const handlePickerMapClick = useCallback(async (e) => {
+    if (mode !== 'picker') return;
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    setPickerPos({ lat, lng });
+    const result = await reverseGeocode(lat, lng);
+    if (onAddressSelect) onAddressSelect(result);
+  }, [mode, onAddressSelect]);
 
   // ── Tracking mode ─────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!mapRef.current || mode !== 'tracking') return;
-    const map = mapRef.current;
-    const m = markersRef.current;
+    if (!isLoaded || mode !== 'tracking') return;
 
-    // Remove picker marker
-    if (m.picker) { m.picker.remove(); delete m.picker; }
+    // Clear picker state
+    setPickerPos(null);
 
     const restAddr = restaurantAddress || '15-22-32, Manoj Nagar, Nandikotkur, Andhra Pradesh 518401';
     const custAddr = customerAddress || '4-12-8, Main Bazar, Nandikotkur, Andhra Pradesh 518401';
@@ -353,99 +273,66 @@ export default function GoogleMapContainer({
         geocodeAddress(custAddr),
       ]);
 
-      let restLatLng = restPos ? [restPos.lat, restPos.lng] : [15.8600, 78.2618];
-      let custLatLng = custPos ? [custPos.lat, custPos.lng] : [15.8520, 78.2700];
+      let restLatLng = restPos ? { lat: restPos.lat, lng: restPos.lng } : { lat: 15.8600, lng: 78.2618 };
+      let custLatLng = custPos ? { lat: custPos.lat, lng: custPos.lng } : { lat: 15.8520, lng: 78.2700 };
 
-      // Map Nandikotkur orders to actual streets of Nandikotkur (MDR0106 to SH48 / Main Bazar)
-      // so OSRM/ORS returns 11+ turns tracing every road curve, corner, and alley in Nandikotkur!
+      // Map Nandikotkur orders to actual streets so routing returns real road curves
       if (restAddr.includes('Nandikotkur') || !restPos) {
-        restLatLng = [15.8600, 78.2618];
+        restLatLng = { lat: 15.8600, lng: 78.2618 };
       }
       if (custAddr.includes('Nandikotkur') || !custPos) {
-        custLatLng = [15.8520, 78.2700];
+        custLatLng = { lat: 15.8520, lng: 78.2700 };
       }
 
-      const dist = Math.hypot(restLatLng[0] - custLatLng[0], restLatLng[1] - custLatLng[1]);
+      const dist = Math.hypot(restLatLng.lat - custLatLng.lat, restLatLng.lng - custLatLng.lng);
       if (dist < 0.005) {
-        restLatLng = [15.8600, 78.2618];
-        custLatLng = [15.8520, 78.2700];
+        restLatLng = { lat: 15.8600, lng: 78.2618 };
+        custLatLng = { lat: 15.8520, lng: 78.2700 };
       }
 
-      // Restaurant marker (Zomato style: dark teardrop pin with Cutlery 🍴)
-      if (m.restaurant) m.restaurant.remove();
-      m.restaurant = L.marker(restLatLng, { icon: restaurantIcon })
-        .addTo(map).bindPopup('🍽️ Restaurant • Kitchen');
+      setRestaurantPos(restLatLng);
+      setCustomerPos(custLatLng);
 
-      // Customer marker (Zomato style: dark teardrop pin with House 🏠)
-      if (m.customer) m.customer.remove();
-      m.customer = L.marker(custLatLng, { icon: customerIcon })
-        .addTo(map).bindPopup('🏠 Delivery Address • Your Home');
+      // Route calculation — ORS primary / OSRM fallback
+      const orsApiKey = import.meta.env.VITE_OPENROUTE_SERVICE_API_KEY;
+      const restArr = [restLatLng.lat, restLatLng.lng];
+      const custArr = [custLatLng.lat, custLatLng.lng];
 
-      // Route polyline with OpenRouteService / OSRM fallback
-      const apiKey = import.meta.env.VITE_OPENROUTE_SERVICE_API_KEY;
       let routePoints = null;
-      
-      if (apiKey && apiKey !== 'YOUR_ORS_KEY_HERE' && !apiKey.startsWith('YOUR_')) {
-        routePoints = await calculateORSRoute(restLatLng, custLatLng, apiKey);
+      if (orsApiKey && orsApiKey !== 'YOUR_ORS_KEY_HERE' && !orsApiKey.startsWith('YOUR_')) {
+        routePoints = await calculateORSRoute(restArr, custArr, orsApiKey);
       }
       if (!routePoints) {
-        routePoints = await calculateOSRMRoute(restLatLng, custLatLng);
+        routePoints = await calculateOSRMRoute(restArr, custArr);
       }
       if (!routePoints || routePoints.length === 0) {
-        // Realistic orthogonal street corner grid fallback instead of diagonal lines
-        const [lat1, lng1] = restLatLng;
-        const [lat2, lng2] = custLatLng;
+        // Orthogonal street corner grid fallback
         routePoints = [
-          [lat1, lng1],
-          [lat1, (lng1 + lng2) / 2],
-          [lat2, (lng1 + lng2) / 2],
-          [lat2, lng2]
+          restLatLng,
+          { lat: restLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
+          { lat: custLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
+          custLatLng,
         ];
       }
 
-      if (routeLayerRef.current) {
-        if (Array.isArray(routeLayerRef.current)) {
-          routeLayerRef.current.forEach(l => l.remove());
-        } else {
-          routeLayerRef.current.remove();
-        }
-      }
-
-      // Draw shadow border line first for 3D Zomato pop effect
-      const shadowLine = L.polyline(routePoints, {
-        color: '#1E3A8A',
-        weight: 8,
-        opacity: 0.25,
-        lineCap: 'round',
-        lineJoin: 'round'
-      }).addTo(map);
-
-      // Draw primary vibrant blue street route line (Zomato style #2563EB)
-      const mainLine = L.polyline(routePoints, {
-        color: '#2563EB',
-        weight: 5.5,
-        opacity: 0.95,
-        lineCap: 'round',
-        lineJoin: 'round'
-      }).addTo(map);
-
-      routeLayerRef.current = [shadowLine, mainLine];
-
-      // Store points for rider interpolation
       routePointsRef.current = routePoints;
+      setRoutePath(routePoints);
 
-      // Fit both markers in view with clean padding
-      map.fitBounds([restLatLng, custLatLng], { padding: [50, 50], maxZoom: 16 });
+      // Fit map to both markers
+      if (mapRef.current && window.google) {
+        const bounds = new window.google.maps.LatLngBounds();
+        bounds.extend(restLatLng);
+        bounds.extend(custLatLng);
+        mapRef.current.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+      }
     };
 
     drawRoute();
-  }, [mapRef.current, mode, restaurantAddress, customerAddress]);
+  }, [isLoaded, mode, restaurantAddress, customerAddress]); // eslint-disable-line
 
   // ── Socket.IO Live Driver GPS tracking listener ────────────────────────────
   useEffect(() => {
-    if (!mapRef.current || !orderId || mode !== 'tracking') return;
-    const map = mapRef.current;
-    const m = markersRef.current;
+    if (!isLoaded || !orderId || mode !== 'tracking') return;
 
     const token = sessionStorage.getItem('qb-auth-token');
     const socket = io(socketHost, {
@@ -458,32 +345,21 @@ export default function GoogleMapContainer({
 
     socket.on('locationUpdated', ({ lat, lng }) => {
       console.log('[SOCKET] Rider coordinate update:', lat, lng);
-      
-      if (!m.rider) {
-        m.rider = L.marker([lat, lng], { icon: riderIcon })
-          .addTo(map)
-          .bindPopup(deliveryMethod === 'Ride' ? '🚗 Ride Captain' : '🛵 Delivery Rider');
-      } else {
-        m.rider.setLatLng([lat, lng]);
-      }
-
-      if (status === 'Out for Delivery') {
-        map.panTo([lat, lng]);
+      setRiderPos({ lat, lng });
+      if (status === 'Out for Delivery' && mapRef.current) {
+        mapRef.current.panTo({ lat, lng });
       }
     });
 
     return () => {
       socket.disconnect();
     };
-  }, [mapRef.current, orderId, mode, status, deliveryMethod]);
+  }, [isLoaded, orderId, mode, status]); // eslint-disable-line
 
   // ── Update simulated rider position when progress changes ──────────────────
   useEffect(() => {
-    if (!mapRef.current || mode !== 'tracking') return;
-    const map = mapRef.current;
-    const m = markersRef.current;
+    if (mode !== 'tracking') return;
     const points = routePointsRef.current;
-
     if (!points || points.length < 2) return;
 
     // Interpolate position along the route (simulated rider fallback if no live GPS)
@@ -494,25 +370,47 @@ export default function GoogleMapContainer({
 
     const p1 = points[segIndex];
     const p2 = points[Math.min(segIndex + 1, totalSegments)];
-    const lat = p1[0] + (p2[0] - p1[0]) * segProgress;
-    const lng = p1[1] + (p2[1] - p1[1]) * segProgress;
+    const lat = p1.lat + (p2.lat - p1.lat) * segProgress;
+    const lng = p1.lng + (p2.lng - p1.lng) * segProgress;
 
-    if (!m.rider) {
-      m.rider = L.marker([lat, lng], { icon: riderIcon })
-        .addTo(map)
-        .bindPopup(deliveryMethod === 'Ride' ? '🚗 Ride Captain' : '🛵 Delivery Rider');
-    } else {
-      // Only animate simulated rider if we don't have active live tracking socket updates override
-      m.rider.setLatLng([lat, lng]);
-    }
+    setRiderPos({ lat, lng });
 
-    if (status === 'Out for Delivery') {
-      map.panTo([lat, lng]);
+    if (status === 'Out for Delivery' && mapRef.current) {
+      mapRef.current.panTo({ lat, lng });
     }
   }, [progress, status, mode]);
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  if (loading) {
+  // ── Polyline options ───────────────────────────────────────────────────────
+  const shadowPolylineOptions = {
+    strokeColor: '#1E3A8A',
+    strokeOpacity: 0.25,
+    strokeWeight: 8,
+    geodesic: true,
+  };
+  const mainPolylineOptions = {
+    strokeColor: '#2563EB',
+    strokeOpacity: 0.95,
+    strokeWeight: 5.5,
+    geodesic: true,
+  };
+
+  // ── Render: missing API key ────────────────────────────────────────────────
+  if (!apiKey || apiKey === 'YOUR_GOOGLE_MAPS_API_KEY_HERE') {
+    return (
+      <div className="w-full h-full min-h-[200px] bg-amber-50 flex items-center justify-center flex-col gap-2 rounded-2xl border border-amber-200 text-amber-700 p-4">
+        <MapPin className="w-6 h-6" />
+        <span className="text-xs font-bold text-center">
+          Google Maps API key not set.
+          <br />
+          Add <code className="font-mono bg-amber-100 px-1 rounded">VITE_GOOGLE_MAPS_API_KEY</code> to{' '}
+          <code className="font-mono bg-amber-100 px-1 rounded">.env</code>
+        </span>
+      </div>
+    );
+  }
+
+  // ── Render: loading ────────────────────────────────────────────────────────
+  if (loading || !isLoaded) {
     return (
       <div className="w-full h-full min-h-[200px] bg-base flex items-center justify-center flex-col gap-2 rounded-2xl border border-line">
         <Loader className="w-8 h-8 text-primary animate-spin" />
@@ -521,21 +419,139 @@ export default function GoogleMapContainer({
     );
   }
 
-  if (error) {
+  // ── Render: load error ─────────────────────────────────────────────────────
+  if (loadError || error) {
     return (
       <div className="w-full h-full min-h-[200px] bg-red-50 flex items-center justify-center flex-col gap-2 rounded-2xl border border-red-100 text-red-500 p-4">
         <MapPin className="w-6 h-6" />
-        <span className="text-xs font-bold text-center">{error}</span>
+        <span className="text-xs font-bold text-center">{error || 'Failed to load Google Maps.'}</span>
       </div>
     );
   }
 
+  // ── Picker mode marker icon ────────────────────────────────────────────────
+  const pickerIconDef = isLoaded && window.google ? {
+    path: window.google.maps.SymbolPath.CIRCLE,
+    scale: 10,
+    fillColor: '#FF5A00',
+    fillOpacity: 1,
+    strokeColor: '#FFFFFF',
+    strokeWeight: 2.5,
+  } : undefined;
+
+  // ── Restaurant marker icon ─────────────────────────────────────────────────
+  const restaurantIconDef = isLoaded && window.google ? {
+    path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+    scale: 8,
+    fillColor: '#18181b',
+    fillOpacity: 1,
+    strokeColor: '#FFFFFF',
+    strokeWeight: 2,
+  } : undefined;
+
+  // ── Customer marker icon ───────────────────────────────────────────────────
+  const customerIconDef = isLoaded && window.google ? {
+    path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+    scale: 8,
+    fillColor: '#18181b',
+    fillOpacity: 1,
+    strokeColor: '#FFFFFF',
+    strokeWeight: 2,
+  } : undefined;
+
+  // ── Rider marker icon ──────────────────────────────────────────────────────
+  const riderIconDef = isLoaded && window.google ? {
+    path: window.google.maps.SymbolPath.CIRCLE,
+    scale: 11,
+    fillColor: '#e11d48',
+    fillOpacity: 1,
+    strokeColor: '#FFFFFF',
+    strokeWeight: 2.5,
+  } : undefined;
+
   return (
     <div className="w-full h-full relative rounded-2xl overflow-hidden border border-line shadow-inner">
-      <div ref={mapDivRef} style={{ width: '100%', height: '100%' }} />
+      <GoogleMap
+        mapContainerStyle={MAP_CONTAINER_STYLE}
+        center={mapCenter}
+        zoom={15}
+        options={MAP_OPTIONS}
+        onLoad={onMapLoad}
+        onUnmount={onMapUnmount}
+        onClick={mode === 'picker' ? handlePickerMapClick : undefined}
+      >
+        {/* ── PICKER MODE MARKER ── */}
+        {mode === 'picker' && pickerPos && (
+          <Marker
+            position={pickerPos}
+            draggable={true}
+            onDragEnd={handlePickerDragEnd}
+            icon={pickerIconDef}
+          />
+        )}
+
+        {/* ── TRACKING MODE: Route polylines ── */}
+        {mode === 'tracking' && routePath.length > 1 && (
+          <>
+            <Polyline path={routePath} options={shadowPolylineOptions} />
+            <Polyline path={routePath} options={mainPolylineOptions} />
+          </>
+        )}
+
+        {/* ── TRACKING MODE: Restaurant marker ── */}
+        {mode === 'tracking' && restaurantPos && (
+          <Marker
+            position={restaurantPos}
+            icon={restaurantIconDef}
+            title="Restaurant"
+            onClick={() => setActivePopup(activePopup === 'restaurant' ? null : 'restaurant')}
+          >
+            {activePopup === 'restaurant' && (
+              <InfoWindow onCloseClick={() => setActivePopup(null)}>
+                <div style={{ fontFamily: 'inherit', fontSize: '13px', fontWeight: '700' }}>
+                  🍽️ Restaurant · Kitchen
+                </div>
+              </InfoWindow>
+            )}
+          </Marker>
+        )}
+
+        {/* ── TRACKING MODE: Customer marker ── */}
+        {mode === 'tracking' && customerPos && (
+          <Marker
+            position={customerPos}
+            icon={customerIconDef}
+            title="Delivery Address"
+            onClick={() => setActivePopup(activePopup === 'customer' ? null : 'customer')}
+          >
+            {activePopup === 'customer' && (
+              <InfoWindow onCloseClick={() => setActivePopup(null)}>
+                <div style={{ fontFamily: 'inherit', fontSize: '13px', fontWeight: '700' }}>
+                  🏠 Delivery Address · Your Home
+                </div>
+              </InfoWindow>
+            )}
+          </Marker>
+        )}
+
+        {/* ── TRACKING MODE: Rider marker ── */}
+        {mode === 'tracking' && riderPos && (
+          <Marker
+            position={riderPos}
+            icon={riderIconDef}
+            title={deliveryMethod === 'Ride' ? 'Ride Captain' : 'Delivery Rider'}
+            onClick={() => setActivePopup(activePopup === 'rider' ? null : 'rider')}
+          >
+            {activePopup === 'rider' && (
+              <InfoWindow onCloseClick={() => setActivePopup(null)}>
+                <div style={{ fontFamily: 'inherit', fontSize: '13px', fontWeight: '700' }}>
+                  {deliveryMethod === 'Ride' ? '🚗 Ride Captain' : '🛵 Delivery Rider'}
+                </div>
+              </InfoWindow>
+            )}
+          </Marker>
+        )}
+      </GoogleMap>
     </div>
   );
 }
-
-// Keep this local function so no reference errors occur
-const loadGoogleMapsScript = () => Promise.resolve(null);

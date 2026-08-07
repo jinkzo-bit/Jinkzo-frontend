@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MapPin, Navigation, Loader, Search, X, Check, Copy } from 'lucide-react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useJsApiLoader, GoogleMap } from '@react-google-maps/api';
 
 // ── Nominatim helpers (free, no API key needed) ──────────────────────────────
 
@@ -27,7 +26,9 @@ const reverseGeocode = async (lat, lng) => {
         lng,
       };
     }
-  } catch (_) {}
+  } catch (_e) {
+    // Ignore geocoding errors
+  }
   return { houseNo: '', street: '', landmark: '', area: '', city: '', state: '', zip: '', displayName: '', lat, lng };
 };
 
@@ -44,6 +45,27 @@ const searchAddress = async (query) => {
   }
 };
 
+// ── Default location & zoom ───────────────────────────────────────────────────
+const DEFAULT_LAT  = 19.0760;
+const DEFAULT_LNG  = 72.8777;
+const HIGH_ZOOM    = 17;
+
+const MAP_CONTAINER_STYLE = { height: '100%', width: '100%' };
+
+const MAP_OPTIONS = {
+  disableDefaultUI: false,
+  zoomControl: true,
+  mapTypeControl: false,
+  streetViewControl: false,
+  fullscreenControl: false,
+  clickableIcons: false,
+  gestureHandling: 'greedy',
+  styles: [
+    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  ],
+};
+
 // ── LocationPickerModal ──────────────────────────────────────────────────────
 /**
  * Props:
@@ -54,9 +76,8 @@ const searchAddress = async (query) => {
  *   title           string
  */
 export default function LocationPickerModal({ isOpen, onClose, onConfirm, initialAddress, title = 'Set Delivery Location' }) {
-  const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
-  const moveDebounceRef = useRef(null);
+  const idleListenerRef = useRef(null);
   const searchDebounceRef = useRef(null);
 
   // Form fields
@@ -70,6 +91,13 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
   const [centerLat, setCenterLat] = useState(null);
   const [centerLng, setCenterLng] = useState(null);
 
+  // Map center state for GoogleMap component
+  const [mapCenter, setMapCenter] = useState({
+    lat: initialAddress?.lat || DEFAULT_LAT,
+    lng: initialAddress?.lng || DEFAULT_LNG,
+  });
+  const [mapZoom, setMapZoom] = useState(initialAddress?.lat ? HIGH_ZOOM : 13);
+
   // UI state
   const [query, setQuery]             = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -78,9 +106,12 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [displayName, setDisplayName] = useState('');
 
-  const DEFAULT_LAT  = 19.0760;
-  const DEFAULT_LNG  = 72.8777;
-  const HIGH_ZOOM    = 17; // Street + landmark level zoom
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: apiKey || '',
+    id: 'google-map-script',
+  });
 
   const fillForm = useCallback((addr) => {
     setHouseNo(addr.houseNo   || '');
@@ -95,101 +126,89 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     setDisplayName(addr.displayName || '');
   }, []);
 
-  // Initialise map
+  // ── When modal opens, initialise center and pre-fill from initialAddress ──
   useEffect(() => {
     if (!isOpen) return;
 
-    const timer = setTimeout(() => {
-      if (!mapContainerRef.current || mapRef.current) return;
+    const initLat = initialAddress?.lat || DEFAULT_LAT;
+    const initLng = initialAddress?.lng || DEFAULT_LNG;
+    const initZoom = initialAddress?.lat ? HIGH_ZOOM : 13;
 
-      const initLat = initialAddress?.lat || DEFAULT_LAT;
-      const initLng = initialAddress?.lng || DEFAULT_LNG;
-      const initZoom = initialAddress?.lat ? HIGH_ZOOM : 13;
+    setMapCenter({ lat: initLat, lng: initLng });
+    setMapZoom(initZoom);
+    setCenterLat(initLat);
+    setCenterLng(initLng);
 
-      const map = L.map(mapContainerRef.current, {
-        center: [initLat, initLng],
-        zoom: initZoom,
-        zoomControl: false,
-        attributionControl: false,
-        // smooth panning
-        inertia: true,
-        inertiaDeceleration: 3000,
+    if (initialAddress) {
+      fillForm({
+        houseNo: '',
+        street: initialAddress.street || '',
+        landmark: '',
+        area: initialAddress.area || '',
+        city: initialAddress.city || '',
+        state: initialAddress.state || '',
+        zip: initialAddress.zip || '',
+        displayName: '',
+        lat: initLat,
+        lng: initLng,
       });
-
-      // ── HIGH DETAIL tile layer (Humanitarian OSM — shows temples, schools, etc.) ──
-      L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
-        maxZoom: 20,
-        minZoom: 5,
-      }).addTo(map);
-
-      // Custom zoom control positioned bottom-right
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-      // Attribution small
-      L.control.attribution({ position: 'bottomleft', prefix: false })
-        .addTo(map)
-        .setPrefix('© OpenStreetMap');
-
-      setCenterLat(initLat);
-      setCenterLng(initLng);
-
-      // Pre-fill from initial address if provided
-      if (initialAddress) {
-        fillForm({
-          houseNo: '',
-          street: initialAddress.street || '',
-          landmark: '',
-          area: initialAddress.area || '',
-          city: initialAddress.city || '',
-          state: initialAddress.state || '',
-          zip: initialAddress.zip || '',
-          displayName: '',
-          lat: initLat,
-          lng: initLng,
-        });
-        // Reverse geocode initial position to populate fields properly
-        setIsGeocoding(true);
-        reverseGeocode(initLat, initLng).then((addr) => {
-          fillForm(addr);
-          setIsGeocoding(false);
-        });
-      }
-
-      // ── On map move end → reverse geocode the center ──
-      map.on('moveend', () => {
-        const c = map.getCenter();
-        const lat = c.lat;
-        const lng = c.lng;
-        setCenterLat(lat);
-        setCenterLng(lng);
-
-        clearTimeout(moveDebounceRef.current);
-        moveDebounceRef.current = setTimeout(async () => {
-          setIsGeocoding(true);
-          const addr = await reverseGeocode(lat, lng);
-          fillForm(addr);
-          setQuery('');
-          setIsGeocoding(false);
-        }, 600);
+      // Reverse geocode initial position to populate fields
+      setIsGeocoding(true);
+      reverseGeocode(initLat, initLng).then((addr) => {
+        fillForm(addr);
+        setIsGeocoding(false);
       });
+    }
+  }, [isOpen]); // eslint-disable-line
 
-      mapRef.current = map;
-    }, 80);
-
-    return () => clearTimeout(timer);
-  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Cleanup on close
+  // ── Cleanup on close ──────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isOpen && mapRef.current) {
-      mapRef.current.remove();
-      mapRef.current = null;
+    if (!isOpen) {
+      // Remove idle listener if any
+      if (idleListenerRef.current && window.google?.maps?.event) {
+        window.google.maps.event.removeListener(idleListenerRef.current);
+        idleListenerRef.current = null;
+      }
       setSuggestions([]);
       setQuery('');
     }
   }, [isOpen]);
 
-  // Search autocomplete
+  // ── Map load callback — attach idle listener for center detection ──────────
+  const onMapLoad = useCallback((map) => {
+    mapRef.current = map;
+
+    // On every drag/zoom end → reverse geocode the new center
+    const listener = map.addListener('idle', async () => {
+      const center = map.getCenter();
+      if (!center) return;
+      const lat = center.lat();
+      const lng = center.lng();
+      setCenterLat(lat);
+      setCenterLng(lng);
+
+      clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = setTimeout(async () => {
+        setIsGeocoding(true);
+        const addr = await reverseGeocode(lat, lng);
+        fillForm(addr);
+        setQuery('');
+        setIsGeocoding(false);
+      }, 600);
+    });
+
+    idleListenerRef.current = listener;
+  }, [fillForm]);
+
+  const onMapUnmount = useCallback(() => {
+    if (idleListenerRef.current && window.google?.maps?.event) {
+      window.google.maps.event.removeListener(idleListenerRef.current);
+      idleListenerRef.current = null;
+    }
+    mapRef.current = null;
+  }, []);
+
+  // ── Search autocomplete ───────────────────────────────────────────────────
   const handleQueryChange = (e) => {
     const val = e.target.value;
     setQuery(val);
@@ -209,10 +228,14 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     const lat = parseFloat(place.lat);
     const lng = parseFloat(place.lon);
     setQuery(place.display_name);
+    // Pan map to selected location — idle listener will fire reverseGeocode
     if (mapRef.current) {
-      mapRef.current.setView([lat, lng], HIGH_ZOOM, { animate: true });
+      mapRef.current.panTo({ lat, lng });
+      mapRef.current.setZoom(HIGH_ZOOM);
+    } else {
+      setMapCenter({ lat, lng });
+      setMapZoom(HIGH_ZOOM);
     }
-    // moveend will trigger the reverse geocode automatically
   };
 
   const handleGps = (e) => {
@@ -223,10 +246,14 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
         if (mapRef.current) {
-          mapRef.current.setView([lat, lng], HIGH_ZOOM, { animate: true });
+          mapRef.current.panTo({ lat, lng });
+          mapRef.current.setZoom(HIGH_ZOOM);
+        } else {
+          setMapCenter({ lat, lng });
+          setMapZoom(HIGH_ZOOM);
         }
         setIsLocating(false);
-        // moveend will fire automatically
+        // idle listener will fire and reverseGeocode automatically
       },
       (err) => {
         console.error('GPS error:', err);
@@ -348,7 +375,30 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           style={{ height: '260px' }}
         >
           {/* Map */}
-          <div ref={mapContainerRef} style={{ height: '100%', width: '100%', background: '#1a1a2e' }} />
+          {!isLoaded || loadError ? (
+            <div
+              className="w-full h-full flex items-center justify-center"
+              style={{ background: '#1a1a2e' }}
+            >
+              {loadError ? (
+                <div className="text-red-400 text-xs font-bold text-center px-4">
+                  <MapPin className="w-5 h-5 mx-auto mb-1" />
+                  Failed to load map. Check API key.
+                </div>
+              ) : (
+                <Loader className="w-6 h-6 text-violet-400 animate-spin" />
+              )}
+            </div>
+          ) : (
+            <GoogleMap
+              mapContainerStyle={MAP_CONTAINER_STYLE}
+              center={mapCenter}
+              zoom={mapZoom}
+              options={MAP_OPTIONS}
+              onLoad={onMapLoad}
+              onUnmount={onMapUnmount}
+            />
+          )}
 
           {/* ── FIXED CENTER PIN (map moves underneath) ── */}
           <div
