@@ -72,6 +72,9 @@
 
   
   --animate-float: float 3s ease-in-out infinite;
+  --animate-float-slow: float 6s ease-in-out infinite;
+  --animate-float-delayed: float 4s ease-in-out 2s infinite;
+  --animate-spin-slow: spin 15s linear infinite;
   --animate-pulse-slow: pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 

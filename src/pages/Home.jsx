@@ -264,36 +264,57 @@ Nandikotkur, AP
       </div>
 
       {/* Hero Banner Section */}
-      <section className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#6b21a8] via-[#db2777] to-[#ea580c] text-white py-10 md:py-14 px-6 md:px-12 flex flex-col md:flex-row justify-between items-center shadow-[0_10px_40px_rgba(219,39,119,0.3)] min-h-[340px]">
+      <section className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#6b21a8] to-[#db2777] text-white py-10 md:py-14 px-6 md:px-12 flex flex-col md:flex-row justify-between items-center shadow-[0_10px_40px_rgba(219,39,119,0.3)] min-h-[340px]">
         
+        {/* Background Curve (Orange) */}
+        <div className="absolute right-[-20%] top-[-50%] w-[800px] h-[800px] rounded-full bg-[#f97316] opacity-90 blur-[2px] pointer-events-none"></div>
+
         {/* Left Content */}
         <div className="flex flex-col gap-4 max-w-lg z-20">
-          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm text-white font-bold text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full w-max">
+          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm text-white font-bold text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full w-max shadow-sm">
             <Sparkles className="w-3.5 h-3.5 fill-white" />
             WEEKEND BONANZA - FREE DELIVERY!
           </div>
           
-          <h1 className="font-display font-extrabold text-3xl md:text-5xl tracking-tight leading-tight mt-2">
-            Hungry? Grab your <span className="text-[#fde047]">Jinkzo</span> now!
+          <h1 className="font-display font-extrabold text-4xl md:text-5xl tracking-tight leading-tight mt-2 flex flex-col items-start">
+            <span>Hungry? Grab your</span>
+            <div className="relative inline-block mt-1">
+              <span className="text-[#fde047]">Jinkzo</span> now!
+              {/* Wavy Underline SVG */}
+              <svg className="absolute left-0 -bottom-2 w-full h-3 text-[#fde047]" preserveAspectRatio="none" viewBox="0 0 100 20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M0 10 Q 12.5 0, 25 10 T 50 10 T 75 10 T 100 10"></path>
+              </svg>
+            </div>
           </h1>
           
-          <p className="text-sm md:text-base text-white/90 leading-relaxed font-medium mb-2">
+          <p className="text-sm md:text-base text-white/90 leading-relaxed font-medium mb-2 mt-4">
             Explore 100+ top restaurants near you delivering piping hot, fresh meals within 25 minutes. Free delivery on orders over ₹200.
           </p>
 
-          <Link to="/restaurants" className="bg-[#fde047] hover:bg-[#facc15] text-gray-900 font-extrabold px-6 py-3 rounded-xl w-max flex items-center gap-2 shadow-lg transition-transform active:scale-95 cursor-pointer">
+          <Link to="/restaurants" className="bg-[#fde047] hover:bg-[#facc15] text-gray-900 font-extrabold px-7 py-3.5 rounded-xl w-max flex items-center gap-2 shadow-xl shadow-yellow-500/20 transition-transform active:scale-95 cursor-pointer mt-2">
             Order Food Now
             <ChevronRight className="w-4 h-4 font-bold" />
           </Link>
         </div>
 
-        {/* Right Image (Biryani Plate) */}
-        <div className="absolute right-[-10%] md:right-0 top-1/2 -translate-y-1/2 w-[350px] md:w-[450px] z-10 pointer-events-none opacity-40 md:opacity-100">
-          <img src="https://images.unsplash.com/photo-1633945274405-b6c8069047b0?auto=format&fit=crop&w=600&q=80" alt="Biryani Plate" className="w-full h-full object-contain rounded-full drop-shadow-2xl" />
+        {/* Right Content - Animated Plate & Floating Elements */}
+        <div className="absolute right-[-15%] md:right-[-5%] top-1/2 -translate-y-1/2 w-[400px] md:w-[500px] z-10 pointer-events-none opacity-40 md:opacity-100 flex items-center justify-center">
+          
+          {/* Main Plate Image */}
+          <div className="relative animate-float-slow w-full h-full drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+            <img src="https://images.unsplash.com/photo-1633945274405-b6c8069047b0?auto=format&fit=crop&w=800&q=80" alt="Biryani Plate" className="w-full h-full object-contain rounded-full" />
+          </div>
+
+          {/* Floating Ingredients */}
+          <div className="absolute top-10 left-10 text-4xl animate-float drop-shadow-md">🌿</div>
+          <div className="absolute top-20 right-20 text-3xl animate-float-delayed drop-shadow-md">🌶️</div>
+          <div className="absolute bottom-10 left-20 text-4xl animate-spin-slow drop-shadow-md">🧅</div>
+          <div className="absolute bottom-20 right-10 text-3xl animate-float drop-shadow-md">🍅</div>
+          <div className="absolute top-1/2 left-0 -translate-x-full text-5xl animate-float-delayed drop-shadow-md opacity-80">🌶️</div>
         </div>
 
-        {/* Dots */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20">
+        {/* Dots Pagination Simulator */}
+        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-2 z-20">
           <div className="w-6 h-1.5 bg-white rounded-full"></div>
           <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
           <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
