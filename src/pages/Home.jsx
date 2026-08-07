@@ -223,10 +223,10 @@ Nandikotkur, AP
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 mt-6 md:mt-8">
         <Link 
           to="/restaurants"
-          className="bg-surface hover:bg-violet-50/5 p-5 rounded-3xl border border-line shadow-2xs transition-all hover:shadow-md hover:scale-[1.01] duration-300 flex items-center justify-between gap-4 cursor-pointer"
+          className="bg-white/90 backdrop-blur-md p-5 rounded-3xl border border-white/50 shadow-sm transition-all hover:shadow-md hover:scale-[1.01] duration-300 flex items-center justify-between gap-4 cursor-pointer"
         >
           <div className="flex flex-col gap-1 w-full">
             <span className="text-[10px] text-primary font-black uppercase tracking-wider">Food</span>
@@ -245,7 +245,7 @@ Nandikotkur, AP
 
         <Link 
           to="/ride"
-          className="bg-surface hover:bg-yellow-50/5 p-5 rounded-3xl border border-line shadow-2xs transition-all hover:shadow-md hover:scale-[1.01] duration-300 flex items-center justify-between gap-4 cursor-pointer"
+          className="bg-white/90 backdrop-blur-md p-5 rounded-3xl border border-white/50 shadow-sm transition-all hover:shadow-md hover:scale-[1.01] duration-300 flex items-center justify-between gap-4 cursor-pointer"
         >
           <div className="flex flex-col gap-1 w-full">
             <span className="text-[10px] text-yellow-600 font-black uppercase tracking-wider font-extrabold">Ride & Courier</span>
@@ -264,69 +264,42 @@ Nandikotkur, AP
       </div>
 
       {/* Hero Banner Section */}
-      {banners.length > 0 ? (
-        <section className="relative rounded-3xl overflow-hidden h-[300px] md:h-[400px] shadow-xl group">
-          {banners.map((banner, idx) => (
-            <div 
-              key={banner._id}
-              className={`absolute inset-0 transition-opacity duration-1000 ${idx === currentBannerIdx ? 'opacity-100 z-10' : 'opacity-0 z-0'}`} 
-            >
-              <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-black/40" />
-            </div>
-          ))}
-
-          {/* Controls */} 
-          {banners.length > 1 && (
-            <>
-              <div className="absolute bottom-6 left-0 right-0 z-20 flex justify-center gap-2">
-                {banners.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setCurrentBannerIdx(idx)}
-                    className={`w-2 h-2 rounded-full transition-all cursor-pointer ${idx === currentBannerIdx ? 'bg-surface w-6' : 'bg-surface/50 hover:bg-surface/80'}`}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* Hero Content Overlaid */}
-          <div className="absolute inset-0 z-20 flex flex-col justify-center px-6 md:px-12 pointer-events-none">
-            <div className="flex flex-col gap-2 max-w-2xl">
-              <div className="inline-flex items-center gap-1 bg-surface/20 backdrop-blur-md text-white font-bold text-xs uppercase tracking-wider px-3 py-1 rounded-full w-max shadow-sm">
-                <Sparkles className="w-3.5 h-3.5 fill-white" />
-                {banners[currentBannerIdx]?.title || 'Jinkzo Delivery'}
-              </div>
-              <h1 className="font-display font-extrabold text-3xl md:text-5xl tracking-tight leading-tight my-2 text-white drop-shadow-md">
-                Hungry? Grab your <span className="underline decoration-wavy decoration-violet-300">Jinkzo</span> now!
-              </h1>
-              <p className="text-sm md:text-base text-gray-100 leading-relaxed font-medium drop-shadow-md max-w-lg">
-                Explore 100+ top restaurants near you delivering piping hot, fresh meals within 25 minutes. Free delivery on orders over â‚¹200.
-              </p>
-            </div>
+      <section className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#6b21a8] via-[#db2777] to-[#ea580c] text-white py-10 md:py-14 px-6 md:px-12 flex flex-col md:flex-row justify-between items-center shadow-[0_10px_40px_rgba(219,39,119,0.3)] min-h-[340px]">
+        
+        {/* Left Content */}
+        <div className="flex flex-col gap-4 max-w-lg z-20">
+          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm text-white font-bold text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full w-max">
+            <Sparkles className="w-3.5 h-3.5 fill-white" />
+            WEEKEND BONANZA - FREE DELIVERY!
           </div>
-        </section>
-      ) : (
-        <section className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-violet-600 to-indigo-900 text-white py-12 md:py-16 px-6 md:px-12 flex flex-col gap-6 md:gap-8 shadow-xl">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/10 via-transparent to-transparent pointer-events-none" />
           
-          <div className="flex flex-col gap-2 max-w-2xl">
-            <div className="inline-flex items-center gap-1 bg-surface/10 text-white font-bold text-xs uppercase tracking-wider px-3 py-1 rounded-full w-max">
-              <Sparkles className="w-3.5 h-3.5 fill-white" />
-              Jinkzo Delivery
-            </div>
-            <h1 className="font-display font-extrabold text-3xl md:text-5xl tracking-tight leading-tight my-2">
-              Hungry? Grab your <span className="underline decoration-wavy decoration-violet-300">Jinkzo</span> now!
-            </h1>
-            <p className="text-sm md:text-base text-violet-50/80 leading-relaxed font-medium">
-              Explore 100+ top restaurants near you delivering piping hot, fresh meals within 25 minutes. Free delivery on orders over â‚¹200.
-            </p>
-          </div>
+          <h1 className="font-display font-extrabold text-3xl md:text-5xl tracking-tight leading-tight mt-2">
+            Hungry? Grab your <span className="text-[#fde047]">Jinkzo</span> now!
+          </h1>
+          
+          <p className="text-sm md:text-base text-white/90 leading-relaxed font-medium mb-2">
+            Explore 100+ top restaurants near you delivering piping hot, fresh meals within 25 minutes. Free delivery on orders over ₹200.
+          </p>
 
+          <Link to="/restaurants" className="bg-[#fde047] hover:bg-[#facc15] text-gray-900 font-extrabold px-6 py-3 rounded-xl w-max flex items-center gap-2 shadow-lg transition-transform active:scale-95 cursor-pointer">
+            Order Food Now
+            <ChevronRight className="w-4 h-4 font-bold" />
+          </Link>
+        </div>
 
-        </section>
-      )}
+        {/* Right Image (Biryani Plate) */}
+        <div className="absolute right-[-10%] md:right-0 top-1/2 -translate-y-1/2 w-[350px] md:w-[450px] z-10 pointer-events-none opacity-40 md:opacity-100">
+          <img src="https://images.unsplash.com/photo-1633945274405-b6c8069047b0?auto=format&fit=crop&w=600&q=80" alt="Biryani Plate" className="w-full h-full object-contain rounded-full drop-shadow-2xl" />
+        </div>
+
+        {/* Dots */}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20">
+          <div className="w-6 h-1.5 bg-white rounded-full"></div>
+          <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
+          <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
+          <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
+        </div>
+      </section>
 
 
 
@@ -334,19 +307,19 @@ Nandikotkur, AP
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <h2 className="font-display font-extrabold text-xl text-main leading-tight flex items-center gap-2">
+            <h2 className="font-display font-extrabold text-2xl text-[#1e1b4b] leading-tight flex items-center gap-3">
               Top Restaurants Near You
               {!isLoading && (
-                <span className="text-xs bg-violet-100 text-primary font-bold px-2 py-0.5 rounded-full animate-fade-in">
+                <span className="text-[10px] bg-purple-100/80 text-purple-700 font-extrabold px-3 py-1 rounded-md tracking-wider">
                   {totalCount} Available
                 </span> 
               )}
             </h2>
-            <p className="text-xs text-muted font-medium">Handpicked premium dining places with fastest delivery times</p>
+            <p className="text-xs text-gray-500 font-semibold mt-1">Handpicked premium dining places with fastest delivery times</p>
           </div>
           <Link 
             to="/restaurants" 
-            className="flex items-center text-xs font-bold text-primary hover:underline gap-0.5 cursor-pointer"
+            className="flex items-center text-sm font-bold text-primary hover:underline gap-0.5 cursor-pointer"
           >
             <span>See all</span>
             <ChevronRight className="w-4 h-4" />

@@ -42,7 +42,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
-        <div className="flex flex-col min-h-screen bg-base">
+        <div className="flex flex-col min-h-screen relative">
           
           {/* Global Navigation Header */}
           <Navbar />

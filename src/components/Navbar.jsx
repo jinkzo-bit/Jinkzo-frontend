@@ -24,7 +24,7 @@ export default function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-surface border-b border-line shadow-xs h-18 flex items-center justify-between px-4 md:px-8 max-w-7xl mx-auto w-full">
+    <header className="sticky top-4 z-50 bg-white/90 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.04)] h-16 flex items-center justify-between px-6 md:px-8 max-w-7xl mx-auto w-[92%] lg:w-[96%] rounded-full border border-white/50">
       {/* Brand Logo & Location */}
       <div className="flex items-center gap-6">
         <Link to="/" className="flex items-center gap-1.5 cursor-pointer">
