@@ -15,6 +15,8 @@ import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import OrderTracking from './pages/OrderTracking';
 import Profile from './pages/Profile';
+import Favourites from './pages/Favourites';
+import Orders from './pages/Orders';
 import LoginSignup from './pages/LoginSignup';
 import ForgotPassword from './pages/ForgotPassword';
 import DeliveryPortal from './pages/DeliveryPortal';
@@ -70,6 +72,16 @@ export default function App() {
               <Route path="/profile" element={
                 <ProtectedRoute>
                   <Profile />
+                </ProtectedRoute>
+              } />
+              <Route path="/favourites" element={
+                <ProtectedRoute>
+                  <Favourites />
+                </ProtectedRoute>
+              } />
+              <Route path="/orders" element={
+                <ProtectedRoute>
+                  <Orders />
                 </ProtectedRoute>
               } />
               <Route path="/login" element={<LoginSignup />} />
