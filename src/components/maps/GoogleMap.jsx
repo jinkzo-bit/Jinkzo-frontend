@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GoogleMap as GoogleMapComponent, Marker, useJsApiLoader } from '@react-google-maps/api';
 import { MapPin, Loader, AlertTriangle } from 'lucide-react';
+import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMapsLoader';
 
 // ── Default location: Nandikotkur, Andhra Pradesh ────────────────────────────
 const DEFAULT_LAT = 15.8567;
@@ -53,10 +54,7 @@ export default function GoogleMap({
 }) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: apiKey || '',
-    id: 'google-map-script',
-  });
+  const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const mapRef = useRef(null);
   const [markerPos, setMarkerPos] = useState(null);

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MapPin, Loader } from 'lucide-react';
 import { useJsApiLoader, GoogleMap, Marker, Polyline, InfoWindow } from '@react-google-maps/api';
 import { io } from 'socket.io-client';
+import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
 
 // ── Geocode helper (Nominatim — free, no key) ───────────────────────────────
 const geocodeAddress = async (address) => {
@@ -181,10 +182,7 @@ export default function GoogleMapContainer({
 }) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: apiKey || '',
-    id: 'google-map-script',
-  });
+  const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const mapRef = useRef(null);                  // Google Maps instance
   const pickerMarkerRef = useRef(null);         // picker mode draggable marker

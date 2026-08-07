@@ -1,148 +1,126 @@
-import React, { useRef, useState } from 'react';
-import { MapPin, Navigation, Loader, Search, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Navigation, Loader } from 'lucide-react';
+import { parseAddressComponents } from '../utils/parseAddressComponents';
+import PlacesAutocomplete from './maps/PlacesAutocomplete';
 
-// Nominatim reverse geocode (free, no key)
-const reverseGeocode = async (lat, lng) => {
+// ── Google Geocoding API — reverse geocode GPS coords to address ──────────────
+const googleReverseGeocode = async (lat, lng) => {
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    return { street: 'Current Location', city: '', state: '', zip: '', lat, lng };
+  }
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'Jinkzo-App/1.0 (support@Jinkzo.com)' } });
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Network error');
     const data = await res.json();
-    if (data && data.address) {
-      const a = data.address;
+    if (data.status === 'OK' && data.results?.[0]) {
+      const result = data.results[0];
+      const parsed = parseAddressComponents(result.address_components || []);
       return {
-        street: a.road || a.suburb || a.neighbourhood || a.quarter || 'Main Road',
-        city: a.city || a.town || a.village || 'Nandikotkur',
-        state: a.state || 'Andhra Pradesh',
-        zip: a.postcode || '518401',
+        street: [parsed.houseNo, parsed.street].filter(Boolean).join(', ') || result.formatted_address?.split(',')[0] || 'Current Location',
+        city: parsed.city || '',
+        state: parsed.state || '',
+        zip: parsed.zip || '',
         lat,
         lng,
+        placeId: null,
+        formattedAddress: result.formatted_address || '',
       };
     }
-  } catch (_) {
-    // Ignore reverse geocode failures
+  } catch (_e) {
+    // fall through to default
   }
-  return { street: 'Current Location', city: 'Nandikotkur', state: 'Andhra Pradesh', zip: '518401', lat, lng };
+  return { street: 'Current Location', city: '', state: '', zip: '', lat, lng, placeId: null, formattedAddress: '' };
 };
 
-// Nominatim forward search (free, no key)
-const searchAddress = async (query) => {
-  if (!query || query.length < 3) return [];
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&countrycodes=in&addressdetails=1`;
-    const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'Jinkzo-App/1.0 (support@Jinkzo.com)' } });
-    return await res.json();
-  } catch (_) {
-    return [];
-  }
-};
-
+/**
+ * Google Places-powered address search component.
+ *
+ * Props:
+ *   onAddressSelect  fn({ street, city, state, zip, lat, lng, placeId?, formattedAddress? })
+ *
+ * Drop-in replacement for the previous Nominatim-based component.
+ * Keeps the exact same props interface — Checkout.jsx needs no changes.
+ */
 export default function AddressAutocomplete({ onAddressSelect }) {
-  const [query, setQuery] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
-  const debounceRef = useRef(null);
+  const [locationError, setLocationError] = useState(null);
 
-  const handleInputChange = (e) => {
-    const val = e.target.value;
-    setQuery(val);
+  // ── Handle Places autocomplete selection ──────────────────────────────────
+  const handlePlaceSelect = (placeResult) => {
+    const { lat, lng, placeId, formattedAddress, addressComponents } = placeResult;
+    const parsed = parseAddressComponents(addressComponents);
 
-    clearTimeout(debounceRef.current);
-    if (val.length < 3) { setSuggestions([]); return; }
-
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-      const results = await searchAddress(val);
-      setSuggestions(results);
-      setLoading(false);
-    }, 600);
-  };
-
-  const handleSelect = (place) => {
-    const a = place.address || {};
     const result = {
-      street: a.road || a.suburb || a.neighbourhood || place.display_name.split(',')[0],
-      city: a.city || a.town || a.village || 'Nandikotkur',
-      state: a.state || 'Andhra Pradesh',
-      zip: a.postcode || '518401',
-      lat: parseFloat(place.lat),
-      lng: parseFloat(place.lon),
+      street: [parsed.houseNo, parsed.street].filter(Boolean).join(', ') || formattedAddress.split(',')[0] || 'Main Road',
+      city: parsed.city || '',
+      state: parsed.state || '',
+      zip: parsed.zip || '',
+      lat,
+      lng,
+      // Non-breaking additions
+      placeId: placeId || null,
+      formattedAddress: formattedAddress || '',
     };
-    setQuery(place.display_name);
-    setSuggestions([]);
+
     if (onAddressSelect) onAddressSelect(result);
   };
 
+  // ── Handle GPS / "Use current location" ──────────────────────────────────
   const handleGetCurrentLocation = (e) => {
     e.preventDefault();
-    if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+    setLocationError(null);
+
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser.');
+      return;
+    }
+
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
-        const result = await reverseGeocode(lat, lng);
-        setQuery(`${result.street}, ${result.city}`);
-        setSuggestions([]);
+        const result = await googleReverseGeocode(lat, lng);
         setLocating(false);
         if (onAddressSelect) onAddressSelect(result);
       },
       (err) => {
-        console.error('Geolocation failed:', err);
         setLocating(false);
-        alert('Unable to retrieve location. Check browser permissions.');
+        if (err.code === 1) {
+          setLocationError('Location access denied. Please enable it in browser settings.');
+        } else if (err.code === 2) {
+          setLocationError('Location unavailable. Check your device GPS.');
+        } else {
+          setLocationError('Could not get location. Please try again.');
+        }
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
   return (
     <div className="flex flex-col gap-3 w-full">
-      {/* Search input */}
-      <div className="relative flex items-center">
-        <Search className="absolute left-3.5 w-4 h-4 text-muted pointer-events-none" />
-        <input
-          type="text"
-          value={query}
-          onChange={handleInputChange}
-          placeholder="Search for your delivery area or building..."
-          className="w-full bg-base border border-line-strong rounded-xl pl-10 pr-10 py-3 text-xs text-main placeholder:text-muted outline-none focus:border-primary transition-colors font-semibold"
-          autoComplete="off"
-        />
-        {loading && <Loader className="absolute right-3.5 w-4 h-4 text-primary animate-spin" />}
-        {query && !loading && (
-          <button
-            type="button"
-            onClick={() => { setQuery(''); setSuggestions([]); }}
-            className="absolute right-3.5 text-muted hover:text-main"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+      {/* ── Google Places search input ── */}
+      <PlacesAutocomplete
+        onPlaceSelect={handlePlaceSelect}
+        placeholder="Search for your delivery area or building..."
+        darkMode={false}
+      />
 
-      {/* Suggestions dropdown */}
-      {suggestions.length > 0 && (
-        <div className="bg-surface border border-line rounded-xl shadow-lg overflow-hidden">
-          {suggestions.map((place, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => handleSelect(place)}
-              className="w-full text-left px-4 py-2.5 text-xs text-main hover:bg-primary/10 transition-colors flex items-start gap-2 border-b border-line last:border-b-0"
-            >
-              <MapPin className="w-3.5 h-3.5 mt-0.5 text-primary flex-shrink-0" />
-              <span className="line-clamp-2">{place.display_name}</span>
-            </button>
-          ))}
-        </div>
+      {/* ── Location error ── */}
+      {locationError && (
+        <p className="text-[11px] font-medium text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+          {locationError}
+        </p>
       )}
 
-      {/* Current location button */}
+      {/* ── Current location button ── */}
       <button
         type="button"
         onClick={handleGetCurrentLocation}
         disabled={locating}
-        className="flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 active:scale-98 transition-all text-xs font-bold py-2.5 px-4 rounded-xl cursor-pointer w-full"
+        className="flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 active:scale-98 transition-all text-xs font-bold py-2.5 px-4 rounded-xl cursor-pointer w-full disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {locating ? (
           <>

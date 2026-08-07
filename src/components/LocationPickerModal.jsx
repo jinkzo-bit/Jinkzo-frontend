@@ -1,48 +1,35 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MapPin, Navigation, Loader, Search, X, Check, Copy } from 'lucide-react';
+import { MapPin, Navigation, Loader, X, Check, Copy } from 'lucide-react';
 import { useJsApiLoader, GoogleMap } from '@react-google-maps/api';
+import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
+import { parseAddressComponents } from '../utils/parseAddressComponents';
+import PlacesAutocomplete from './maps/PlacesAutocomplete';
 
-// ── Nominatim helpers (free, no API key needed) ──────────────────────────────
-
-const reverseGeocode = async (lat, lng) => {
+// ── Google Geocoding API — reverse geocode coords to address ──────────────────
+const googleReverseGeocode = async (lat, lng, apiKey) => {
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&zoom=18`;
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Corior-App/1.0 (support@corior.in)', 'Accept-Language': 'en' },
-    });
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Network error');
     const data = await res.json();
-    if (data?.address) {
-      const a = data.address;
+    if (data.status === 'OK' && data.results?.[0]) {
+      const result = data.results[0];
+      const parsed = parseAddressComponents(result.address_components || []);
       return {
-        houseNo: a.house_number || '',
-        street: a.road || a.pedestrian || a.footway || a.path || '',
-        landmark: a.amenity || a.shop || a.tourism || a.leisure || '',
-        area: a.suburb || a.neighbourhood || a.quarter || a.village || a.hamlet || '',
-        city: a.city || a.town || a.municipality || a.county || '',
-        state: a.state || '',
-        zip: a.postcode || '',
-        displayName: data.display_name || '',
+        ...parsed,
+        displayName: result.formatted_address || '',
+        formattedAddress: result.formatted_address || '',
         lat,
         lng,
       };
     }
   } catch (_e) {
-    // Ignore geocoding errors
+    // Ignore — form fields will retain last known values
   }
-  return { houseNo: '', street: '', landmark: '', area: '', city: '', state: '', zip: '', displayName: '', lat, lng };
-};
-
-const searchAddress = async (query) => {
-  if (!query || query.length < 3) return [];
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&countrycodes=in&addressdetails=1`;
-    const res = await fetch(url, {
-      headers: { 'Accept-Language': 'en', 'User-Agent': 'Corior-App/1.0 (support@corior.in)' },
-    });
-    return await res.json();
-  } catch (_) {
-    return [];
-  }
+  return {
+    houseNo: '', street: '', area: '', city: '', state: '', zip: '',
+    displayName: '', formattedAddress: '', lat, lng,
+  };
 };
 
 // ── Default location & zoom ───────────────────────────────────────────────────
@@ -66,7 +53,7 @@ const MAP_OPTIONS = {
   ],
 };
 
-// ── LocationPickerModal ──────────────────────────────────────────────────────
+// ── LocationPickerModal ───────────────────────────────────────────────────────
 /**
  * Props:
  *   isOpen          boolean
@@ -74,13 +61,22 @@ const MAP_OPTIONS = {
  *   onConfirm       (address) => void
  *   initialAddress  { street, city, state, zip, lat, lng } — optional
  *   title           string
+ *
+ * onConfirm receives:
+ *   { houseNo, street, landmark, area, city, state, zip, lat, lng, placeId, formattedAddress }
  */
 export default function LocationPickerModal({ isOpen, onClose, onConfirm, initialAddress, title = 'Set Delivery Location' }) {
   const mapRef = useRef(null);
   const idleListenerRef = useRef(null);
-  const searchDebounceRef = useRef(null);
+  const geocodeDebounceRef = useRef(null);
+  // Prevents the idle listener from double-geocoding after a Places selection
+  const skipNextGeocodeRef = useRef(false);
 
-  // Form fields
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+  const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
+
+  // ── Form fields ──────────────────────────────────────────────────────────
   const [houseNo, setHouseNo]     = useState('');
   const [street, setStreet]       = useState('');
   const [landmark, setLandmark]   = useState('');
@@ -91,27 +87,19 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
   const [centerLat, setCenterLat] = useState(null);
   const [centerLng, setCenterLng] = useState(null);
 
-  // Map center state for GoogleMap component
+  // ── Map center state ─────────────────────────────────────────────────────
   const [mapCenter, setMapCenter] = useState({
     lat: initialAddress?.lat || DEFAULT_LAT,
     lng: initialAddress?.lng || DEFAULT_LNG,
   });
   const [mapZoom, setMapZoom] = useState(initialAddress?.lat ? HIGH_ZOOM : 13);
 
-  // UI state
-  const [query, setQuery]             = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
+  // ── UI state ─────────────────────────────────────────────────────────────
   const [isLocating, setIsLocating]   = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [displayName, setDisplayName] = useState('');
-
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: apiKey || '',
-    id: 'google-map-script',
-  });
+  const [placeId, setPlaceId]         = useState(null);
+  const [formattedAddress, setFormattedAddress] = useState('');
 
   const fillForm = useCallback((addr) => {
     setHouseNo(addr.houseNo   || '');
@@ -123,10 +111,11 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     setZip(addr.zip           || '');
     setCenterLat(addr.lat);
     setCenterLng(addr.lng);
-    setDisplayName(addr.displayName || '');
+    setDisplayName(addr.displayName || addr.formattedAddress || '');
+    if (addr.formattedAddress) setFormattedAddress(addr.formattedAddress);
   }, []);
 
-  // ── When modal opens, initialise center and pre-fill from initialAddress ──
+  // ── When modal opens — initialise center & pre-fill form ─────────────────
   useEffect(() => {
     if (!isOpen) return;
 
@@ -138,6 +127,8 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     setMapZoom(initZoom);
     setCenterLat(initLat);
     setCenterLng(initLng);
+    setPlaceId(null);
+    setFormattedAddress('');
 
     if (initialAddress) {
       fillForm({
@@ -149,36 +140,36 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
         state: initialAddress.state || '',
         zip: initialAddress.zip || '',
         displayName: '',
+        formattedAddress: '',
         lat: initLat,
         lng: initLng,
       });
-      // Reverse geocode initial position to populate fields
-      setIsGeocoding(true);
-      reverseGeocode(initLat, initLng).then((addr) => {
-        fillForm(addr);
-        setIsGeocoding(false);
-      });
+      // Reverse geocode initial position
+      if (apiKey) {
+        setIsGeocoding(true);
+        googleReverseGeocode(initLat, initLng, apiKey).then((addr) => {
+          fillForm(addr);
+          setIsGeocoding(false);
+        });
+      }
     }
   }, [isOpen]); // eslint-disable-line
 
-  // ── Cleanup on close ──────────────────────────────────────────────────────
+  // ── Cleanup on close ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) {
-      // Remove idle listener if any
       if (idleListenerRef.current && window.google?.maps?.event) {
         window.google.maps.event.removeListener(idleListenerRef.current);
         idleListenerRef.current = null;
       }
-      setSuggestions([]);
-      setQuery('');
+      clearTimeout(geocodeDebounceRef.current);
     }
   }, [isOpen]);
 
-  // ── Map load callback — attach idle listener for center detection ──────────
+  // ── Map load — attach idle listener for reverse geocoding ────────────────
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
 
-    // On every drag/zoom end → reverse geocode the new center
     const listener = map.addListener('idle', async () => {
       const center = map.getCenter();
       if (!center) return;
@@ -187,18 +178,26 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       setCenterLat(lat);
       setCenterLng(lng);
 
-      clearTimeout(searchDebounceRef.current);
-      searchDebounceRef.current = setTimeout(async () => {
+      // Skip geocoding if a Places selection just happened
+      if (skipNextGeocodeRef.current) {
+        skipNextGeocodeRef.current = false;
+        return;
+      }
+
+      clearTimeout(geocodeDebounceRef.current);
+      geocodeDebounceRef.current = setTimeout(async () => {
+        if (!apiKey) return;
         setIsGeocoding(true);
-        const addr = await reverseGeocode(lat, lng);
+        const addr = await googleReverseGeocode(lat, lng, apiKey);
         fillForm(addr);
-        setQuery('');
+        // A map drag clears the saved placeId since the pin moved away
+        setPlaceId(null);
         setIsGeocoding(false);
-      }, 600);
+      }, 700);
     });
 
     idleListenerRef.current = listener;
-  }, [fillForm]);
+  }, [fillForm, apiKey]);
 
   const onMapUnmount = useCallback(() => {
     if (idleListenerRef.current && window.google?.maps?.event) {
@@ -208,27 +207,27 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     mapRef.current = null;
   }, []);
 
-  // ── Search autocomplete ───────────────────────────────────────────────────
-  const handleQueryChange = (e) => {
-    const val = e.target.value;
-    setQuery(val);
-    setSuggestions([]);
-    clearTimeout(searchDebounceRef.current);
-    if (val.length < 3) return;
-    searchDebounceRef.current = setTimeout(async () => {
-      setIsSearching(true);
-      const results = await searchAddress(val);
-      setSuggestions(results);
-      setIsSearching(false);
-    }, 600);
-  };
+  // ── Google Places selection handler ──────────────────────────────────────
+  const handlePlaceSelect = useCallback((placeResult) => {
+    const { lat, lng, placeId: pid, formattedAddress: fa, addressComponents } = placeResult;
 
-  const handleSelectSuggestion = (place) => {
-    setSuggestions([]);
-    const lat = parseFloat(place.lat);
-    const lng = parseFloat(place.lon);
-    setQuery(place.display_name);
-    // Pan map to selected location — idle listener will fire reverseGeocode
+    // Parse components into form fields immediately
+    const parsed = parseAddressComponents(addressComponents);
+    fillForm({
+      ...parsed,
+      displayName: fa,
+      formattedAddress: fa,
+      lat,
+      lng,
+    });
+
+    setPlaceId(pid);
+    setFormattedAddress(fa);
+
+    // Prevent idle listener from running a second reverse geocode pass
+    skipNextGeocodeRef.current = true;
+
+    // Pan map to the selected place
     if (mapRef.current) {
       mapRef.current.panTo({ lat, lng });
       mapRef.current.setZoom(HIGH_ZOOM);
@@ -236,15 +235,20 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       setMapCenter({ lat, lng });
       setMapZoom(HIGH_ZOOM);
     }
-  };
+  }, [fillForm]);
 
+  // ── GPS — use current position ────────────────────────────────────────────
   const handleGps = (e) => {
     e.preventDefault();
-    if (!navigator.geolocation) { alert('Geolocation not supported by your browser.'); return; }
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
+        setPlaceId(null); // GPS doesn't give a Place ID
         if (mapRef.current) {
           mapRef.current.panTo({ lat, lng });
           mapRef.current.setZoom(HIGH_ZOOM);
@@ -253,17 +257,24 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           setMapZoom(HIGH_ZOOM);
         }
         setIsLocating(false);
-        // idle listener will fire and reverseGeocode automatically
+        // idle listener will fire and reverse geocode automatically
       },
       (err) => {
-        console.error('GPS error:', err);
+        console.error('GPS error:', err.code, err.message);
         setIsLocating(false);
-        alert('Unable to retrieve location. Please check browser permissions.');
+        if (err.code === 1) {
+          alert('Location permission denied. Please enable it in your browser settings.');
+        } else if (err.code === 2) {
+          alert('Location unavailable. Please check your device GPS.');
+        } else {
+          alert('Could not retrieve location. Please try again.');
+        }
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
+  // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = () => {
     if (!centerLat || !centerLng) {
       alert('Please select a location on the map first.');
@@ -280,6 +291,8 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       zip,
       lat: centerLat,
       lng: centerLng,
+      placeId:          placeId || null,
+      formattedAddress: formattedAddress || displayName || '',
     });
   };
 
@@ -310,32 +323,18 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           </button>
         </div>
 
-        {/* ── SEARCH BAR ── */}
-        <div className="px-5 pb-3 flex-shrink-0 relative">
+        {/* ── SEARCH BAR — Google Places ── */}
+        <div className="px-5 pb-3 flex-shrink-0">
           <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
-              <input
-                type="text"
-                value={query}
-                onChange={handleQueryChange}
-                placeholder="Search area, street, city..."
-                className="w-full bg-white/8 border border-white/12 rounded-xl pl-10 pr-10 py-2.5 text-[13px] text-white placeholder:text-white/30 outline-none focus:border-violet-500/60 transition-colors font-medium"
-                autoComplete="off"
-              />
-              {isSearching
-                ? <Loader className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-violet-400 animate-spin" />
-                : query && (
-                  <button
-                    type="button"
-                    onClick={() => { setQuery(''); setSuggestions([]); }}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )
-              }
-            </div>
+            {/* Places Autocomplete */}
+            <PlacesAutocomplete
+              onPlaceSelect={handlePlaceSelect}
+              placeholder="Search area, street, city..."
+              darkMode={true}
+              className="flex-1"
+            />
+
+            {/* GPS button */}
             <button
               type="button"
               onClick={handleGps}
@@ -350,23 +349,6 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
               <span>{isLocating ? '...' : 'GPS'}</span>
             </button>
           </div>
-
-          {/* Search Suggestions */}
-          {suggestions.length > 0 && (
-            <div className="absolute left-5 right-5 top-[calc(100%-4px)] bg-[#1e1e1e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 max-h-52 overflow-y-auto">
-              {suggestions.map((place, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => handleSelectSuggestion(place)}
-                  className="w-full text-left px-4 py-3 text-[12px] text-white/80 hover:bg-violet-600/20 transition-colors flex items-start gap-3 border-b border-white/5 last:border-b-0"
-                >
-                  <MapPin className="w-3.5 h-3.5 mt-0.5 text-violet-400 flex-shrink-0" />
-                  <span className="line-clamp-2 font-medium leading-relaxed">{place.display_name}</span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* ── MAP WITH FIXED CENTER PIN ── */}
@@ -403,10 +385,9 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           {/* ── FIXED CENTER PIN (map moves underneath) ── */}
           <div
             className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
-            style={{ paddingBottom: '24px' }} // offset for pin tip
+            style={{ paddingBottom: '24px' }}
           >
             <div className="flex flex-col items-center" style={{ filter: 'drop-shadow(0 4px 12px rgba(124,58,237,0.7))' }}>
-              {/* Pin body */}
               <div style={{
                 width: '36px',
                 height: '36px',
@@ -426,7 +407,6 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
                   transform: 'rotate(45deg)',
                 }} />
               </div>
-              {/* Pin shadow ellipse */}
               <div style={{
                 width: '14px',
                 height: '5px',
@@ -438,7 +418,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
             </div>
           </div>
 
-          {/* Geocoding spinner overlay */}
+          {/* Geocoding spinner */}
           {isGeocoding && (
             <div className="absolute inset-0 flex items-end justify-center pb-4 z-20 pointer-events-none">
               <div className="bg-black/75 backdrop-blur-sm text-white text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg">
@@ -464,7 +444,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
             </div>
           )}
 
-          {/* "Move map to select" hint */}
+          {/* "Drag map" hint */}
           <div className="absolute bottom-3 right-3 z-20">
             <div className="bg-black/70 backdrop-blur-sm text-white/60 text-[10px] px-2.5 py-1 rounded-lg font-medium">
               Drag map to adjust pin
@@ -474,7 +454,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
 
         {/* ── ADDRESS FIELDS (scrollable) ── */}
         <div className="overflow-y-auto flex-1 px-5 pt-4 pb-3" style={{ minHeight: 0 }}>
-          
+
           {/* Detected address banner */}
           {displayName && (
             <div className="bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 mb-4 flex items-start gap-2">
@@ -484,7 +464,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           )}
 
           <div className="flex flex-col gap-3">
-            {/* House No + Street — row */}
+            {/* House No + Street */}
             <div className="grid grid-cols-2 gap-3">
               <Field label="House / Flat No." value={houseNo} onChange={setHouseNo} placeholder="e.g. 4A, B-302" />
               <Field label="Street" value={street} onChange={setStreet} placeholder="e.g. MG Road" />
@@ -496,7 +476,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
             {/* Area */}
             <Field label="Area / Locality" value={area} onChange={setArea} placeholder="e.g. Andheri West" />
 
-            {/* City + State — row */}
+            {/* City + State */}
             <div className="grid grid-cols-2 gap-3">
               <Field label="City" value={city} onChange={setCity} placeholder="e.g. Mumbai" />
               <Field label="State" value={formState} onChange={setFormState} placeholder="e.g. Maharashtra" />
@@ -515,7 +495,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
             disabled={!centerLat || !centerLng || isGeocoding}
             className="w-full py-3.5 bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white text-[13px] font-extrabold rounded-2xl cursor-pointer shadow-lg shadow-violet-900/40 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
           >
-            <Check className="w-4.5 h-4.5" />
+            <Check className="w-4 h-4" />
             SAVE ADDRESS
           </button>
         </div>
@@ -525,7 +505,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
   );
 }
 
-// ── Reusable dark-theme input field ─────────────────────────────────────────
+// ── Reusable dark-theme input field ──────────────────────────────────────────
 function Field({ label, value, onChange, placeholder, type = 'text' }) {
   return (
     <div className="flex flex-col gap-1.5">
