@@ -305,71 +305,6 @@ Nandikotkur, AP
                 Explore 100+ top restaurants near you delivering piping hot, fresh meals within 25 minutes. Free delivery on orders over â‚¹200.
               </p>
             </div>
-
-            {/* Hero Search Bar with Suggestions */}
-            <div className="relative mt-6 md:mt-8 w-full max-w-lg pointer-events-auto">
-              <form onSubmit={handleSearchSubmit} className="w-full">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search for pizza, biryani, burgers or restaurants..."
-                    value={searchQuery}
-                    onChange={handleInputChange}
-                    onBlur={handleBlur}
-                    onFocus={() => setIsFocused(true)}
-                    ref={inputRef}
-                    className="w-full pl-10 pr-4 py-3 bg-surface border border-line rounded-2xl text-main text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted"
-                  />
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center">
-                    <Search className="w-5 h-5 text-muted" />
-                  </div>
-                  <button
-                    type="submit"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 bg-primary hover:bg-primary-hover text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md transition-colors cursor-pointer"
-                  >
-                    Search
-                  </button>
-                </div>
-                
-                {/* Suggestions Dropdown */}
-                {isFocused && suggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 mt-2 w-full bg-surface border border-line rounded-xl shadow-lg z-20 max-h-60 overflow-y-auto">
-                    {suggestions.map((suggestion, index) => {
-                      const text = typeof suggestion === 'object' && suggestion !== null ? (suggestion.text || suggestion.name || '') : String(suggestion || '');
-                      const subtitle = typeof suggestion === 'object' && suggestion !== null ? suggestion.subtitle : '';
-                      return (
-                        <div
-                          key={index}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            handleSelectSuggestion(suggestion);
-                          }}
-                          onMouseEnter={() => setActiveIndex(index)}
-                          className={`px-4 py-2.5 text-sm text-main cursor-pointer hover:bg-base transition-colors flex items-center justify-between ${activeIndex === index ? 'bg-primary/10' : ''}`}
-                        >
-                          <span className="font-semibold text-main truncate">{text}</span>
-                          {subtitle && (
-                            <span className="text-xs text-muted font-medium ml-2 flex-shrink-0">{subtitle}</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {!suggestionsLoading && (
-                      <div className="px-4 py-2 text-xs text-muted text-center">
-                        <span className="mr-2">Press Enter to search for "</span>
-                        <span className="font-medium">{searchQuery}</span>
-                        <span className="mr-2">"</span>
-                      </div>
-                    )}
-                    {suggestionsLoading && (
-                      <div className="px-4 py-2 text-center text-xs text-muted animate-spin">
-                        Loading...
-                      </div>
-                    )}
-                  </div>
-                )}
-              </form>
-            </div>
           </div>
         </section>
       ) : (
@@ -389,60 +324,7 @@ Nandikotkur, AP
             </p>
           </div>
 
-          {/* Hero Search Bar with Suggestions (fallback banner) */}
-          <div className="relative mt-6 md:mt-8 w-full max-w-lg pointer-events-auto">
-            <form onSubmit={handleSearchSubmit} className="w-full border border-violet-500/10">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search for pizza, biryani, burgers or restaurants..."
-                  value={searchQuery}
-                  onChange={handleInputChange}
-                  onBlur={handleBlur}
-                  onFocus={() => setIsFocused(true)}
-                  ref={inputRef}
-                  className="w-full pl-10 pr-4 py-3 bg-base border border-line-strong rounded-2xl text-main text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted"
-                />
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center">
-                  <Search className="w-5 h-5 text-muted" />
-                </div>
-                <button
-                  type="submit"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-primary hover:bg-primary-hover text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md transition-colors cursor-pointer"
-                >
-                  Search
-                </button>
-              </div>
-              
-              {/* Suggestions Dropdown */}
-              {isFocused && suggestions.length > 0 && (
-                <div className="absolute left-0 right-0 mt-2 w-full bg-base border border-line rounded-xl shadow-lg z-20 max-h-60 overflow-y-auto">
-                  {suggestions.map((suggestion, index) => (
-                    <div
-                      key={index}
-                      onClick={() => handleSelectSuggestion(suggestion)}
-                      onMouseEnter={() => setActiveIndex(index)}
-                      className={`px-4 py-2 text-sm text-main cursor-pointer hover:bg-base/50 transition-colors ${activeIndex === index ? 'bg-primary/10' : ''}`}
-                    >
-                      {suggestion}
-                    </div>
-                  ))}
-                  {!suggestionsLoading && (
-                    <div className="px-4 py-2 text-xs text-muted text-center">
-                      <span className="mr-2">Press Enter to search for "</span>
-                      <span className="font-medium">{searchQuery}</span>
-                      <span className="mr-2">"</span>
-                    </div>
-                  )}
-                  {suggestionsLoading && (
-                    <div className="px-4 py-2 text-center text-xs text-muted animate-spin">
-                      Loading...
-                    </div>
-                  )}
-                </div>
-              )}
-            </form>
-          </div>
+
         </section>
       )}
 

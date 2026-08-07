@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, User, Search, MapPin, LogOut, Bike, ShieldAlert, Store, Moon, Sun } from 'lucide-react';
+import { User, MapPin, LogOut, Bike, ShieldAlert, Store, Moon, Sun } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { useThemeStore } from '../store/themeStore';
@@ -79,13 +79,7 @@ export default function Navbar() {
 
 
 
-        <Link 
-          to="/restaurants" 
-          className="flex items-center gap-1.5 text-sm font-medium text-muted hover:text-primary transition-colors cursor-pointer"
-        >
-          <Search className="w-4.5 h-4.5" />
-          <span className="hidden md:inline">Search</span>
-        </Link>
+
 
         {/* Theme Toggle */}
         <button
@@ -97,20 +91,7 @@ export default function Navbar() {
         </button>
 
         {/* Cart Bag Icon with count badge */}
-        <Link 
-          to="/cart" 
-          className="relative flex items-center gap-1.5 text-sm font-medium text-muted hover:text-primary transition-colors cursor-pointer"
-        >
-          <div className="relative">
-            <ShoppingBag className="w-4.5 h-4.5" />
-            {totalQuantity > 0 && (
-              <span className="absolute -top-2.5 -right-2 bg-primary text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center animate-pulse">
-                {totalQuantity}
-              </span>
-            )}
-          </div>
-          <span className="hidden md:inline">Cart</span>
-        </Link>
+
 
         {/* Auth / Profile Link */}
         {user ? (
