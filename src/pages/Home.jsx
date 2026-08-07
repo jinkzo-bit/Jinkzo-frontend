@@ -328,35 +328,7 @@ Nandikotkur, AP
         </section>
       )}
 
-      {/* Cuisine Categories Scroll */}
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display font-extrabold text-xl text-main">
-            What's on your mind?
-          </h2>
-        </div>
-        <div className="flex items-center gap-4 md:gap-7 overflow-x-auto no-scrollbar py-2 px-1">
-          {cuisines.map((cuisine, idx) => (
-            <Link 
-              key={idx}
-              to={`/restaurants?cuisine=${encodeURIComponent(cuisine.tag)}`}
-              className="flex flex-col items-center gap-2 flex-shrink-0 group cursor-pointer"
-            >
-              <div className="w-18 h-18 md:w-20 md:h-20 rounded-full overflow-hidden border border-line shadow-sm bg-surface p-1 transition-transform group-hover:scale-105 duration-300">
-                <img 
-                  src={cuisine.image} 
-                  alt={cuisine.name} 
-                  className="w-full h-full object-cover rounded-full"
-                  loading="lazy"
-                />
-              </div>
-              <span className="text-xs font-bold text-main group-hover:text-primary transition-colors">
-                {cuisine.name}
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
+
 
       {/* Top Restaurants Grid */}
       <section className="flex flex-col gap-4">

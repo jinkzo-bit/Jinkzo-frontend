@@ -36,13 +36,7 @@ export default function Navbar() {
           </span>
         </Link>
 
-        {/* Location selector */}
-        <div className="hidden lg:flex items-center gap-1.5 text-xs text-muted max-w-[280px]">
-          <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-          <span className="font-medium line-clamp-1 border-b border-dashed border-gray-400 pb-0.5 hover:text-primary transition-colors cursor-pointer">
-            {getActiveAddress()}
-          </span>
-        </div>
+
       </div>
 
       {/* Navigation Options */}
