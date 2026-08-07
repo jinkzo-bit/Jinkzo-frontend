@@ -62,9 +62,12 @@ export default function App() {
             <div className="absolute bottom-[35%] right-[15%] w-6 h-6 rounded-full bg-purple-500 animate-float drop-shadow-sm"></div>
             <div className="absolute bottom-[15%] left-[25%] w-4 h-4 rounded-full bg-orange-500 animate-float-delayed drop-shadow-sm"></div>
             
-            {/* Soft background glows */}
-            <div className="absolute top-[20%] left-[10%] w-[300px] h-[300px] bg-orange-300/20 rounded-full blur-[80px]"></div>
-            <div className="absolute bottom-[20%] right-[10%] w-[400px] h-[400px] bg-pink-300/20 rounded-full blur-[100px]"></div>
+            {/* Multicolour Animated Background Glows */}
+            <div className="absolute top-[10%] left-[5%] w-[400px] h-[400px] bg-purple-400/30 rounded-full mix-blend-multiply blur-[120px] animate-blob"></div>
+            <div className="absolute top-[20%] right-[15%] w-[500px] h-[500px] bg-pink-400/30 rounded-full mix-blend-multiply blur-[120px] animate-blob" style={{ animationDelay: '2s' }}></div>
+            <div className="absolute bottom-[10%] left-[20%] w-[600px] h-[600px] bg-orange-300/30 rounded-full mix-blend-multiply blur-[120px] animate-blob" style={{ animationDelay: '4s' }}></div>
+            <div className="absolute bottom-[20%] right-[5%] w-[400px] h-[400px] bg-yellow-300/30 rounded-full mix-blend-multiply blur-[120px] animate-blob" style={{ animationDelay: '6s' }}></div>
+            <div className="absolute top-[40%] left-[40%] w-[350px] h-[350px] bg-cyan-300/20 rounded-full mix-blend-multiply blur-[120px] animate-blob" style={{ animationDelay: '8s' }}></div>
           </div>
 
           {/* Global Navigation Header */}
