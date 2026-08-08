@@ -40,8 +40,7 @@ const googleReverseGeocode = async (lat, lng) => {
  * Props:
  *   onAddressSelect  fn({ street, city, state, zip, lat, lng, placeId?, formattedAddress? })
  *
- * Drop-in replacement for the previous Nominatim-based component.
- * Keeps the exact same props interface — Checkout.jsx needs no changes.
+ * Uses Google Places API (via useJsApiLoader and Autocomplete component).
  */
 export default function AddressAutocomplete({ onAddressSelect }) {
   const [locating, setLocating] = useState(false);

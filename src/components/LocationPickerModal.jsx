@@ -2,35 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MapPin, Navigation, Loader, X, Check, Copy } from 'lucide-react';
 import { useJsApiLoader, GoogleMap } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
+import { googleReverseGeocode } from '../services/googleGeocodingService';
 import { parseAddressComponents } from '../utils/parseAddressComponents';
 import PlacesAutocomplete from './maps/PlacesAutocomplete';
-
-// ── Google Geocoding API — reverse geocode coords to address ──────────────────
-const googleReverseGeocode = async (lat, lng, apiKey) => {
-  try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
-    const res = await fetch(url, { credentials: 'omit' });
-    if (!res.ok) throw new Error('Network error');
-    const data = await res.json();
-    if (data.status === 'OK' && data.results?.[0]) {
-      const result = data.results[0];
-      const parsed = parseAddressComponents(result.address_components || []);
-      return {
-        ...parsed,
-        displayName: result.formatted_address || '',
-        formattedAddress: result.formatted_address || '',
-        lat,
-        lng,
-      };
-    }
-  } catch (_e) {
-    // Ignore — form fields will retain last known values
-  }
-  return {
-    houseNo: '', street: '', area: '', city: '', state: '', zip: '',
-    displayName: '', formattedAddress: '', lat, lng,
-  };
-};
 
 // ── Default location & zoom ───────────────────────────────────────────────────
 const DEFAULT_LAT  = 19.0760;

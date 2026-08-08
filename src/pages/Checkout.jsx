@@ -8,7 +8,8 @@ import RazorpaySim from '../components/RazorpaySim';
 import { playOrderPlacedSound } from '../utils/audio';
 import GoogleMapContainer from '../components/GoogleMapContainer';
 import AddressAutocomplete from '../components/AddressAutocomplete';
-import { getRoute, googleGeocode } from '../services/routingService';
+import { getRoute } from '../services/routingService';
+import { googleGeocode } from '../services/googleGeocodingService';
 
 export default function Checkout() {
   const { items, restaurant, getCalculations, clearCart, showToast, promoCode, cashbackAmount, fetchPlatformSettings, platformSettings } = useCartStore();
@@ -99,14 +100,14 @@ export default function Checkout() {
 
         if (restPos && custPos) {
           const route = await getRoute(restPos, custPos);
-          if (route) {
+          if (route && route.success === true) {
             setRouteInfo({ distanceKm: route.distanceKm, durationMinutes: route.durationMinutes });
           }
         }
       };
       fetchRouteInfo();
     }
-  }, [selectedAddressIndex, user?.addresses, restaurant]);
+  }, [restaurant?.lat, restaurant?.lng, user?.addresses?.[selectedAddressIndex]?.lat, user?.addresses?.[selectedAddressIndex]?.lng]); // eslint-disable-line
 
   const { subtotal, deliveryFee, platformFee, promoDiscount, total, restaurantFees } = getCalculations();
   

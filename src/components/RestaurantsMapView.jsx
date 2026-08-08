@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useJsApiLoader, GoogleMap, Marker, InfoWindow } from '@react-google-maps/api';
 import { Loader, MapPin } from 'lucide-react';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
+import { googleGeocode } from '../services/googleGeocodingService';
 
 const DEFAULT_CENTER = { lat: 15.8601, lng: 78.2618 };
 
@@ -21,21 +22,6 @@ const MAP_OPTIONS = {
   ],
 };
 
-const googleGeocode = async (address, apiKey) => {
-  if (!apiKey || apiKey === 'YOUR_GOOGLE_MAPS_API_KEY_HERE') return null;
-  try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
-    const res = await fetch(url, { credentials: 'omit' });
-    const data = await res.json();
-    if (data.status === 'OK' && data.results?.[0]) {
-      const loc = data.results[0].geometry.location;
-      return { lat: loc.lat, lng: loc.lng };
-    }
-  } catch (_) {
-    // ignore
-  }
-  return null;
-};
 
 export default function RestaurantsMapView({ restaurants = [], userLocation = null }) {
   const mapRef = useRef(null);

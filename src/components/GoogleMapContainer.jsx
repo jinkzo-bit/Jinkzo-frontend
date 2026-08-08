@@ -5,59 +5,7 @@ import { io } from 'socket.io-client';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
 import { getRoute } from '../services/routingService';
 
-// ── Google Geocode helper ──────────────────────────────────────────────────────
-const googleGeocode = async (address, apiKey) => {
-  if (!apiKey || apiKey === 'YOUR_GOOGLE_MAPS_API_KEY_HERE') return null;
-  try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
-    const res = await fetch(url, { credentials: 'omit' });
-    const data = await res.json();
-    if (data.status === 'OK' && data.results?.[0]) {
-      const loc = data.results[0].geometry.location;
-      return { lat: loc.lat, lng: loc.lng };
-    }
-  } catch (_) {
-    // ignore
-  }
-  return null;
-};
-
-// ── Google Reverse Geocode ─────────────────────────────────────────────────────
-const googleReverseGeocode = async (lat, lng, apiKey) => {
-  if (!apiKey || apiKey === 'YOUR_GOOGLE_MAPS_API_KEY_HERE') {
-    return { street: 'Selected Location', city: '', state: '', zip: '', lat, lng };
-  }
-  try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
-    const res = await fetch(url, { credentials: 'omit' });
-    const data = await res.json();
-    if (data.status === 'OK' && data.results?.[0]) {
-      const result = data.results[0];
-      const components = result.address_components || [];
-      const getCmp = (types) => {
-        const c = components.find(c => types.some(t => c.types.includes(t)));
-        return c ? c.long_name : '';
-      };
-      
-      const route = getCmp(['route', 'street_number']);
-      const neighborhood = getCmp(['neighborhood', 'sublocality_level_1', 'sublocality_level_2']);
-      
-      return {
-        street: route || neighborhood || 'Main Road',
-        city: getCmp(['locality', 'administrative_area_level_2']) || 'Nandikotkur',
-        state: getCmp(['administrative_area_level_1']) || 'Andhra Pradesh',
-        zip: getCmp(['postal_code']) || '518401',
-        lat,
-        lng,
-        placeId: result.place_id,
-        formattedAddress: result.formatted_address,
-      };
-    }
-  } catch (_) {
-    // ignore
-  }
-  return { street: 'Selected Location', city: 'Nandikotkur', state: 'Andhra Pradesh', zip: '518401', lat, lng };
-};
+import { googleGeocode, googleReverseGeocode } from '../services/googleGeocodingService';
 
 // ── Default fallback coords (Nandikotkur, AP) ───────────────────────────────────
 const DEFAULT_CENTER = { lat: 15.8562, lng: 78.2700 };
@@ -197,31 +145,22 @@ export default function GoogleMapContainer({
     // Clear picker state
     setPickerPos(null);
 
-    const restAddr = restaurantAddress || '15-22-32, Manoj Nagar, Nandikotkur, Andhra Pradesh 518401';
-    const custAddr = customerAddress || '4-12-8, Main Bazar, Nandikotkur, Andhra Pradesh 518401';
-
     const drawRoute = async () => {
       let restPos = (restaurantLat && restaurantLng) ? { lat: restaurantLat, lng: restaurantLng } : null;
       let custPos = (customerLat && customerLng) ? { lat: customerLat, lng: customerLng } : null;
 
-      if (!restPos && restAddr) {
-        restPos = await googleGeocode(restAddr, apiKey);
+      if (!restPos && restaurantAddress) {
+        restPos = await googleGeocode(restaurantAddress, apiKey);
       }
-      if (!custPos && custAddr) {
-        custPos = await googleGeocode(custAddr, apiKey);
+      if (!custPos && customerAddress) {
+        custPos = await googleGeocode(customerAddress, apiKey);
       }
 
+      // Safe fallback if totally unresolved
       let restLatLng = restPos ? { lat: restPos.lat, lng: restPos.lng } : { lat: 15.8600, lng: 78.2618 };
       let custLatLng = custPos ? { lat: custPos.lat, lng: custPos.lng } : { lat: 15.8520, lng: 78.2700 };
 
-      // Map Nandikotkur orders to actual streets so routing returns real road curves
-      if (restAddr.includes('Nandikotkur') || !restPos) {
-        restLatLng = { lat: 15.8600, lng: 78.2618 };
-      }
-      if (custAddr.includes('Nandikotkur') || !custPos) {
-        custLatLng = { lat: 15.8520, lng: 78.2700 };
-      }
-
+      // Avoid drawing extremely short routes (same location)
       const dist = Math.hypot(restLatLng.lat - custLatLng.lat, restLatLng.lng - custLatLng.lng);
       if (dist < 0.005) {
         restLatLng = { lat: 15.8600, lng: 78.2618 };
@@ -244,7 +183,7 @@ export default function GoogleMapContainer({
       routePointsRef.current = routePoints;
       setRoutePath(routePoints);
 
-      if (routeResult && onRouteInfo) {
+      if (routeResult && routeResult.success === true && onRouteInfo) {
         onRouteInfo({
           distanceKm: routeResult.distanceKm,
           durationMinutes: routeResult.durationMinutes
@@ -261,7 +200,7 @@ export default function GoogleMapContainer({
     };
 
     drawRoute();
-  }, [isLoaded, mode, restaurantAddress, customerAddress]); // eslint-disable-line
+  }, [isLoaded, mode, restaurantLat, restaurantLng, customerLat, customerLng, apiKey]); // eslint-disable-line
 
   // ── Socket.IO Live Driver GPS tracking listener ────────────────────────────
   useEffect(() => {
