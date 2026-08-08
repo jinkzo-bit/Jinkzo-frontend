@@ -19,7 +19,12 @@ const REFRESH_KEY = 'qb-refresh-token';
 const originalFetch = window.fetch;
 window.fetch = async function (resource, init = {}) {
   // Ensure credentials is set to 'include' so HttpOnly cookies are sent
-  init.credentials = 'include';
+  // UNLESS explicitly going to a Google API, which blocks credentialed requests
+  if (typeof resource === 'string' && resource.includes('googleapis.com')) {
+    init.credentials = 'omit';
+  } else if (init.credentials !== 'omit') {
+    init.credentials = 'include';
+  }
 
   let response = await originalFetch(resource, init);
 

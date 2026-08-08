@@ -21,12 +21,16 @@ export default function RideBooking() {
   const [pickupCity, setPickupCity] = useState('');
   const [pickupState, setPickupState] = useState('');
   const [pickupZip, setPickupZip] = useState('');
+  const [pickupLat, setPickupLat] = useState(null);
+  const [pickupLng, setPickupLng] = useState(null);
 
   // Destination Address
   const [destStreet, setDestStreet] = useState('');
   const [destCity, setDestCity] = useState('');
   const [destState, setDestState] = useState('');
   const [destZip, setDestZip] = useState('');
+  const [destLat, setDestLat] = useState(null);
+  const [destLng, setDestLng] = useState(null);
 
   // Active inputs
   const [activeAddressField, setActiveAddressField] = useState('pickup'); // 'pickup' or 'destination'
@@ -116,11 +120,15 @@ export default function RideBooking() {
       setPickupCity(addr.city);
       setPickupState(addr.state);
       setPickupZip(addr.zip);
+      setPickupLat(addr.lat ?? null);
+      setPickupLng(addr.lng ?? null);
     } else {
       setDestStreet(addr.street);
       setDestCity(addr.city);
       setDestState(addr.state);
       setDestZip(addr.zip);
+      setDestLat(addr.lat ?? null);
+      setDestLng(addr.lng ?? null);
     }
   };
 
@@ -160,13 +168,17 @@ export default function RideBooking() {
           street: pickupStreet,
           city: pickupCity,
           state: pickupState || 'Andhra Pradesh',
-          zip: pickupZip
+          zip: pickupZip,
+          lat: pickupLat,
+          lng: pickupLng,
         },
-        address: {
+        deliveryAddress: {
           street: destStreet,
           city: destCity,
           state: destState || 'Andhra Pradesh',
-          zip: destZip
+          zip: destZip,
+          lat: destLat,
+          lng: destLng,
         },
         deliveryFee: fare,
         total: fare,
@@ -422,11 +434,15 @@ export default function RideBooking() {
                       setPickupCity(addr.city);
                       setPickupState(addr.state);
                       setPickupZip(addr.zip);
+                      setPickupLat(addr.lat ?? null);
+                      setPickupLng(addr.lng ?? null);
                     } else {
                       setDestStreet(addr.street);
                       setDestCity(addr.city);
                       setDestState(addr.state);
                       setDestZip(addr.zip);
+                      setDestLat(addr.lat ?? null);
+                      setDestLng(addr.lng ?? null);
                     }
                   }}
                 />

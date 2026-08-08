@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useJsApiLoader, GoogleMap, Marker, InfoWindow } from '@react-google-maps/api';
 import { Loader, MapPin } from 'lucide-react';
+import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
 
 const DEFAULT_CENTER = { lat: 15.8601, lng: 78.2618 };
 
@@ -20,21 +21,18 @@ const MAP_OPTIONS = {
   ],
 };
 
-const geocodeAddress = async (address) => {
+const googleGeocode = async (address, apiKey) => {
+  if (!apiKey || apiKey === 'YOUR_GOOGLE_MAPS_API_KEY_HERE') return null;
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&countrycodes=in`;
-    const res = await fetch(url, { 
-      headers: { 
-        'Accept-Language': 'en', 
-        'User-Agent': 'Jinkzo-App/1.0 (support@Jinkzo.com)' 
-      } 
-    });
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
+    const res = await fetch(url, { credentials: 'omit' });
     const data = await res.json();
-    if (data && data[0]) {
-      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    if (data.status === 'OK' && data.results?.[0]) {
+      const loc = data.results[0].geometry.location;
+      return { lat: loc.lat, lng: loc.lng };
     }
   } catch (_) {
-    // Ignore geocoding errors
+    // ignore
   }
   return null;
 };
@@ -50,10 +48,7 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: apiKey || '',
-    id: 'google-map-script',
-  });
+  const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   // ── Map load callback ──────────────────────────────────────────────────────
   const onMapLoad = useCallback((map) => {
@@ -99,8 +94,8 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
           lat = newCache[restaurant.address].lat;
           lng = newCache[restaurant.address].lng;
         } else {
-          // Geocode
-          const coords = await geocodeAddress(restaurant.address);
+          // If address lacks lat/lng, attempt to geocode
+          const coords = await googleGeocode(restaurant.address, apiKey);
           if (coords) {
             lat = coords.lat;
             lng = coords.lng;

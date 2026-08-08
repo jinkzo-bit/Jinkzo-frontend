@@ -3,134 +3,60 @@ import { MapPin, Loader } from 'lucide-react';
 import { useJsApiLoader, GoogleMap, Marker, Polyline, InfoWindow } from '@react-google-maps/api';
 import { io } from 'socket.io-client';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
+import { getRoute } from '../services/routingService';
 
-// ── Geocode helper (Nominatim — free, no key) ───────────────────────────────
-const geocodeAddress = async (address) => {
+// ── Google Geocode helper ──────────────────────────────────────────────────────
+const googleGeocode = async (address, apiKey) => {
+  if (!apiKey || apiKey === 'YOUR_GOOGLE_MAPS_API_KEY_HERE') return null;
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&countrycodes=in`;
-    const res = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'Jinkzo-App/1.0 (support@Jinkzo.com)' } });
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
+    const res = await fetch(url, { credentials: 'omit' });
     const data = await res.json();
-    if (data && data[0]) {
-      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    if (data.status === 'OK' && data.results?.[0]) {
+      const loc = data.results[0].geometry.location;
+      return { lat: loc.lat, lng: loc.lng };
     }
   } catch (_) {
-    // Ignore geocoding errors
+    // ignore
   }
   return null;
 };
 
-// ── Reverse Geocode with ORS and Nominatim Fallback ────────────────────────────
-const reverseGeocode = async (lat, lng) => {
-  const apiKey = import.meta.env.VITE_OPENROUTE_SERVICE_API_KEY;
-  if (apiKey && apiKey !== 'YOUR_ORS_KEY_HERE') {
-    try {
-      const url = `https://api.openrouteservice.org/geocode/reverse?api_key=${apiKey}&point.lat=${lat}&point.lon=${lng}&size=1`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.features && data.features[0]) {
-          const props = data.features[0].properties;
-          return {
-            street: props.name || props.street || 'Main Road',
-            city: props.locality || props.county || 'Nandikotkur',
-            state: props.region || 'Andhra Pradesh',
-            zip: props.postalcode || '518401',
-            lat,
-            lng,
-          };
-        }
-      }
-    } catch (_) {
-      // Ignore ORS reverse geocoding errors
-    }
+// ── Google Reverse Geocode ─────────────────────────────────────────────────────
+const googleReverseGeocode = async (lat, lng, apiKey) => {
+  if (!apiKey || apiKey === 'YOUR_GOOGLE_MAPS_API_KEY_HERE') {
+    return { street: 'Selected Location', city: '', state: '', zip: '', lat, lng };
   }
-
-  // Fallback to Nominatim reverse geocode
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
-    const res = await fetch(url);
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
+    const res = await fetch(url, { credentials: 'omit' });
     const data = await res.json();
-    if (data && data.address) {
-      const a = data.address;
+    if (data.status === 'OK' && data.results?.[0]) {
+      const result = data.results[0];
+      const components = result.address_components || [];
+      const getCmp = (types) => {
+        const c = components.find(c => types.some(t => c.types.includes(t)));
+        return c ? c.long_name : '';
+      };
+      
+      const route = getCmp(['route', 'street_number']);
+      const neighborhood = getCmp(['neighborhood', 'sublocality_level_1', 'sublocality_level_2']);
+      
       return {
-        street: a.road || a.suburb || a.neighbourhood || a.quarter || 'Main Road',
-        city: a.city || a.town || a.village || 'Nandikotkur',
-        state: a.state || 'Andhra Pradesh',
-        zip: a.postcode || '518401',
+        street: route || neighborhood || 'Main Road',
+        city: getCmp(['locality', 'administrative_area_level_2']) || 'Nandikotkur',
+        state: getCmp(['administrative_area_level_1']) || 'Andhra Pradesh',
+        zip: getCmp(['postal_code']) || '518401',
         lat,
         lng,
+        placeId: result.place_id,
+        formattedAddress: result.formatted_address,
       };
     }
   } catch (_) {
-    // Ignore Nominatim fallback reverse geocoding errors
+    // ignore
   }
   return { street: 'Selected Location', city: 'Nandikotkur', state: 'Andhra Pradesh', zip: '518401', lat, lng };
-};
-
-// ── OpenRouteService Route Calculation ────────────────────────────────────────
-const calculateORSRoute = async (start, end, apiKey) => {
-  try {
-    // 1) Try simple GET request first WITHOUT custom headers to avoid CORS OPTIONS Preflight errors in browser
-    const getUrl = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${apiKey}&start=${start[1]},${start[0]}&end=${end[1]},${end[0]}`;
-    let res = await fetch(getUrl);
-
-    if (!res.ok) {
-      // 2) Fallback to POST with Bearer header if GET rejected
-      const body = {
-        coordinates: [[start[1], start[0]], [end[1], end[0]]],
-        format: 'geojson'
-      };
-      const isJwt = apiKey.startsWith('eyJ');
-      const headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json, application/geo+json',
-        'Authorization': isJwt ? `Bearer ${apiKey}` : apiKey
-      };
-      const postUrl = `https://api.openrouteservice.org/v2/directions/driving-car/geojson`;
-      res = await fetch(postUrl, { method: 'POST', headers, body: JSON.stringify(body) });
-    }
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.warn(`[Maps] ORS HTTP ${res.status}:`, errText.slice(0, 200));
-      throw new Error(`ORS request failed: ${res.status}`);
-    }
-
-    const data = await res.json();
-    const coordinates = data.features[0].geometry.coordinates;
-    // Google Maps uses { lat, lng } objects
-    const routePoints = coordinates.map(coord => ({ lat: coord[1], lng: coord[0] }));
-    console.log('[Maps] ✅ ORS route received:', routePoints.length, 'waypoints along real roads');
-    return routePoints;
-  } catch (err) {
-    console.warn('[Maps] ORS Route failed, falling back to OSRM...', err.message);
-    return null;
-  }
-};
-
-// ── OSRM Route Calculation (Fallback) ────────────────────────────────────────
-const calculateOSRMRoute = async (start, end) => {
-  try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('OSRM request failed');
-    const data = await res.json();
-    const coordinates = data.routes[0].geometry.coordinates;
-    return coordinates.map(coord => ({ lat: coord[1], lng: coord[0] }));
-  } catch (err) {
-    console.warn('Primary OSRM failed, trying backup OpenStreetMap server...', err);
-    try {
-      const backupUrl = `https://routing.openstreetmap.de/routed-car/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
-      const res2 = await fetch(backupUrl);
-      if (!res2.ok) throw new Error('Backup OSRM failed', { cause: err });
-      const data2 = await res2.json();
-      const coordinates2 = data2.routes[0].geometry.coordinates;
-      return coordinates2.map(coord => ({ lat: coord[1], lng: coord[0] }));
-    } catch (err2) {
-      console.warn('All OSRM routing servers failed:', err2);
-      return null;
-    }
-  }
 };
 
 // ── Default fallback coords (Nandikotkur, AP) ───────────────────────────────────
@@ -172,13 +98,18 @@ const makeMarkerIcon = (color, label) => ({
 export default function GoogleMapContainer({
   mode = 'tracking',        // 'tracking' | 'picker'
   restaurantAddress = '',
+  restaurantLat = null,
+  restaurantLng = null,
   customerAddress = '',
+  customerLat = null,
+  customerLng = null,
   status = '',
   progress = 0,
   onAddressSelect = null,
   initialAddress = null,
   deliveryMethod = 'Standard',
-  orderId = null
+  orderId = null,
+  onRouteInfo = null
 }) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
@@ -226,11 +157,15 @@ export default function GoogleMapContainer({
 
     // Geocode initial address or use default
     if (initialAddress) {
-      const addr = `${initialAddress.street}, ${initialAddress.city}, ${initialAddress.state} ${initialAddress.zip}`;
-      geocodeAddress(addr).then(pos => {
-        if (pos) placeOrMovePicker(pos.lat, pos.lng);
-        else placeOrMovePicker(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
-      });
+      if (initialAddress.lat && initialAddress.lng) {
+        placeOrMovePicker(initialAddress.lat, initialAddress.lng);
+      } else {
+        const addr = `${initialAddress.street}, ${initialAddress.city}, ${initialAddress.state} ${initialAddress.zip}`;
+        googleGeocode(addr, apiKey).then(pos => {
+          if (pos) placeOrMovePicker(pos.lat, pos.lng);
+          else placeOrMovePicker(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
+        });
+      }
     } else {
       placeOrMovePicker(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
     }
@@ -241,9 +176,9 @@ export default function GoogleMapContainer({
     const lat = e.latLng.lat();
     const lng = e.latLng.lng();
     setPickerPos({ lat, lng });
-    const result = await reverseGeocode(lat, lng);
+    const result = await googleReverseGeocode(lat, lng, apiKey);
     if (onAddressSelect) onAddressSelect(result);
-  }, [onAddressSelect]);
+  }, [onAddressSelect, apiKey]);
 
   // ── Picker — handle map click ──────────────────────────────────────────────
   const handlePickerMapClick = useCallback(async (e) => {
@@ -251,9 +186,9 @@ export default function GoogleMapContainer({
     const lat = e.latLng.lat();
     const lng = e.latLng.lng();
     setPickerPos({ lat, lng });
-    const result = await reverseGeocode(lat, lng);
+    const result = await googleReverseGeocode(lat, lng, apiKey);
     if (onAddressSelect) onAddressSelect(result);
-  }, [mode, onAddressSelect]);
+  }, [mode, onAddressSelect, apiKey]);
 
   // ── Tracking mode ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -266,10 +201,15 @@ export default function GoogleMapContainer({
     const custAddr = customerAddress || '4-12-8, Main Bazar, Nandikotkur, Andhra Pradesh 518401';
 
     const drawRoute = async () => {
-      const [restPos, custPos] = await Promise.all([
-        geocodeAddress(restAddr),
-        geocodeAddress(custAddr),
-      ]);
+      let restPos = (restaurantLat && restaurantLng) ? { lat: restaurantLat, lng: restaurantLng } : null;
+      let custPos = (customerLat && customerLng) ? { lat: customerLat, lng: customerLng } : null;
+
+      if (!restPos && restAddr) {
+        restPos = await googleGeocode(restAddr, apiKey);
+      }
+      if (!custPos && custAddr) {
+        custPos = await googleGeocode(custAddr, apiKey);
+      }
 
       let restLatLng = restPos ? { lat: restPos.lat, lng: restPos.lng } : { lat: 15.8600, lng: 78.2618 };
       let custLatLng = custPos ? { lat: custPos.lat, lng: custPos.lng } : { lat: 15.8520, lng: 78.2700 };
@@ -291,30 +231,25 @@ export default function GoogleMapContainer({
       setRestaurantPos(restLatLng);
       setCustomerPos(custLatLng);
 
-      // Route calculation — ORS primary / OSRM fallback
-      const orsApiKey = import.meta.env.VITE_OPENROUTE_SERVICE_API_KEY;
-      const restArr = [restLatLng.lat, restLatLng.lng];
-      const custArr = [custLatLng.lat, custLatLng.lng];
-
-      let routePoints = null;
-      if (orsApiKey && orsApiKey !== 'YOUR_ORS_KEY_HERE' && !orsApiKey.startsWith('YOUR_')) {
-        routePoints = await calculateORSRoute(restArr, custArr, orsApiKey);
-      }
-      if (!routePoints) {
-        routePoints = await calculateOSRMRoute(restArr, custArr);
-      }
-      if (!routePoints || routePoints.length === 0) {
-        // Orthogonal street corner grid fallback
-        routePoints = [
-          restLatLng,
-          { lat: restLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
-          { lat: custLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
-          custLatLng,
-        ];
-      }
+      // Route calculation via Google Routes API (or fallback)
+      const routeResult = await getRoute(restLatLng, custLatLng);
+      
+      let routePoints = routeResult?.polyline || [
+        restLatLng,
+        { lat: restLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
+        { lat: custLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
+        custLatLng,
+      ];
 
       routePointsRef.current = routePoints;
       setRoutePath(routePoints);
+
+      if (routeResult && onRouteInfo) {
+        onRouteInfo({
+          distanceKm: routeResult.distanceKm,
+          durationMinutes: routeResult.durationMinutes
+        });
+      }
 
       // Fit map to both markers
       if (mapRef.current && window.google) {

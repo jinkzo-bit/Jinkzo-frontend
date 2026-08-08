@@ -9,7 +9,7 @@ import PlacesAutocomplete from './maps/PlacesAutocomplete';
 const googleReverseGeocode = async (lat, lng, apiKey) => {
   try {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { credentials: 'omit' });
     if (!res.ok) throw new Error('Network error');
     const data = await res.json();
     if (data.status === 'OK' && data.results?.[0]) {
@@ -144,13 +144,15 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
         lat: initLat,
         lng: initLng,
       });
-      // Reverse geocode initial position
-      if (apiKey) {
+      // Reverse geocode only if we lack a formatted address or street
+      if (apiKey && !initialAddress.formattedAddress && !initialAddress.street) {
         setIsGeocoding(true);
         googleReverseGeocode(initLat, initLng, apiKey).then((addr) => {
-          fillForm(addr);
+          if (addr) fillForm(addr);
           setIsGeocoding(false);
         });
+      } else {
+        skipNextGeocodeRef.current = true;
       }
     }
   }, [isOpen]); // eslint-disable-line

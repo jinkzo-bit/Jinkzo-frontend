@@ -6,7 +6,8 @@ export default function InteractiveMap({
   restaurantAddress = '', 
   customerAddress = '',
   deliveryMethod = 'Standard',
-  orderId = null
+  orderId = null,
+  onRouteInfo = null
 }) {
   const [progress, setProgress] = useState(0);
 
@@ -52,6 +53,7 @@ export default function InteractiveMap({
         progress={progress}
         deliveryMethod={deliveryMethod}
         orderId={orderId}
+        onRouteInfo={onRouteInfo}
       />
       
       {/* Real-time Status Overlay Badge */}

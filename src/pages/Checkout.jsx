@@ -8,6 +8,7 @@ import RazorpaySim from '../components/RazorpaySim';
 import { playOrderPlacedSound } from '../utils/audio';
 import GoogleMapContainer from '../components/GoogleMapContainer';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import { getRoute, googleGeocode } from '../services/routingService';
 
 export default function Checkout() {
   const { items, restaurant, getCalculations, clearCart, showToast, promoCode, cashbackAmount, fetchPlatformSettings, platformSettings } = useCartStore();
@@ -38,6 +39,9 @@ export default function Checkout() {
   // Wallet State
   const [walletBalance, setWalletBalance] = useState(0);
   const [useWallet, setUseWallet] = useState(false);
+
+  // Route Info State
+  const [routeInfo, setRouteInfo] = useState(null);
 
   React.useEffect(() => {
     fetchPlatformSettings();
@@ -74,6 +78,35 @@ export default function Checkout() {
     };
     if (token) fetchWallet();
   }, [token]);
+
+  React.useEffect(() => {
+    const activeAddress = user?.addresses?.[selectedAddressIndex];
+    const restAddress = restaurant?.address || '';
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    
+    if (activeAddress && restAddress) {
+      const fetchRouteInfo = async () => {
+        let restPos = (restaurant?.lat && restaurant?.lng) ? { lat: restaurant.lat, lng: restaurant.lng } : null;
+        if (!restPos) {
+          restPos = await googleGeocode(restAddress, apiKey);
+        }
+
+        let custPos = (activeAddress?.lat && activeAddress?.lng) ? { lat: activeAddress.lat, lng: activeAddress.lng } : null;
+        if (!custPos) {
+          const fullCustAddress = `${activeAddress.street}, ${activeAddress.city}, ${activeAddress.state} ${activeAddress.zip}`;
+          custPos = await googleGeocode(fullCustAddress, apiKey);
+        }
+
+        if (restPos && custPos) {
+          const route = await getRoute(restPos, custPos);
+          if (route) {
+            setRouteInfo({ distanceKm: route.distanceKm, durationMinutes: route.durationMinutes });
+          }
+        }
+      };
+      fetchRouteInfo();
+    }
+  }, [selectedAddressIndex, user?.addresses, restaurant]);
 
   const { subtotal, deliveryFee, platformFee, promoDiscount, total, restaurantFees } = getCalculations();
   
@@ -507,6 +540,14 @@ export default function Checkout() {
 
             {/* Invoice Breakdown */}
             <div className="flex flex-col gap-2 text-xs text-muted font-medium border-b border-line pb-3.5">
+              {routeInfo && (
+                <div className="flex items-center justify-between text-blue-700 bg-blue-50 p-2 rounded-lg mb-1 border border-blue-100">
+                  <span className="font-bold flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5" /> Estimated Delivery Distance:
+                  </span>
+                  <span className="font-bold">{routeInfo.distanceKm} km ({routeInfo.durationMinutes} mins)</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span>Subtotal</span>
                 <span className="text-main font-bold">₹{subtotal}</span>
