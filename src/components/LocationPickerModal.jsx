@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MapPin, Navigation, Loader, X, Check, Copy } from 'lucide-react';
 import { useJsApiLoader, GoogleMap } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
-import { googleReverseGeocode } from '../services/googleGeocodingService';
 import { parseAddressComponents } from '../utils/parseAddressComponents';
+import { isValidCoordinates } from '../utils/coordinates';
+import { API_BASE } from '../config/api';
 import PlacesAutocomplete from './maps/PlacesAutocomplete';
 
 // ── Default location & zoom ───────────────────────────────────────────────────
@@ -14,16 +15,35 @@ const HIGH_ZOOM    = 17;
 const MAP_CONTAINER_STYLE = { height: '100%', width: '100%' };
 
 const MAP_OPTIONS = {
-  disableDefaultUI: false,
-  zoomControl: true,
+  disableDefaultUI: true,
+  zoomControl: false,
   mapTypeControl: false,
   streetViewControl: false,
   fullscreenControl: false,
   clickableIcons: false,
   gestureHandling: 'greedy',
   styles: [
+    { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
+    { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9e8f7' }] },
+    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e0e0e0' }] },
+    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dadada' }] },
+    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#c6c6c6' }] },
+    { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+    { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#e8f5e9' }] },
+    { featureType: 'park', elementType: 'geometry', stylers: [{ color: '#e5f2e5' }] },
+    { featureType: 'park', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
     { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e5f2e5' }] },
+    { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#f2f2f2' }] },
     { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },
+    { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
   ],
 };
 
@@ -46,8 +66,6 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
   // Prevents the idle listener from double-geocoding after a Places selection
   const skipNextGeocodeRef = useRef(false);
 
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   // ── Form fields ──────────────────────────────────────────────────────────
@@ -60,6 +78,8 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
   const [zip, setZip]             = useState('');
   const [centerLat, setCenterLat] = useState(null);
   const [centerLng, setCenterLng] = useState(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState(null);
+  const [locationType, setLocationType] = useState(null);
 
   // ── Map center state ─────────────────────────────────────────────────────
   const [mapCenter, setMapCenter] = useState({
@@ -74,8 +94,9 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
   const [displayName, setDisplayName] = useState('');
   const [placeId, setPlaceId]         = useState(null);
   const [formattedAddress, setFormattedAddress] = useState('');
+  const [locationSource, setLocationSource] = useState('MANUAL'); // 'GPS', 'SEARCH', 'MANUAL'
 
-  const fillForm = useCallback((addr) => {
+  const fillForm = useCallback((addr, sourceOverride = null) => {
     setHouseNo(addr.houseNo   || '');
     setStreet(addr.street     || '');
     setLandmark(addr.landmark || '');
@@ -87,6 +108,10 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     setCenterLng(addr.lng);
     setDisplayName(addr.displayName || addr.formattedAddress || '');
     if (addr.formattedAddress) setFormattedAddress(addr.formattedAddress);
+    if (sourceOverride) setLocationSource(sourceOverride);
+    // Store GPS accuracy and location type for display
+    if (addr.gpsAccuracy) setGpsAccuracy(addr.gpsAccuracy);
+    if (addr.locationType) setLocationType(addr.locationType);
   }, []);
 
   // ── When modal opens — initialise center & pre-fill form ─────────────────
@@ -119,12 +144,15 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
         lng: initLng,
       });
       // Reverse geocode only if we lack a formatted address or street
-      if (apiKey && !initialAddress.formattedAddress && !initialAddress.street) {
+      if (!initialAddress.formattedAddress && !initialAddress.street) {
         setIsGeocoding(true);
-        googleReverseGeocode(initLat, initLng, apiKey).then((addr) => {
-          if (addr) fillForm(addr);
-          setIsGeocoding(false);
-        });
+        fetch(`${API_BASE}/maps/geocode?lat=${initLat}&lng=${initLng}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.data) fillForm(data.data);
+            setIsGeocoding(false);
+          })
+          .catch(() => setIsGeocoding(false));
       } else {
         skipNextGeocodeRef.current = true;
       }
@@ -162,10 +190,14 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
 
       clearTimeout(geocodeDebounceRef.current);
       geocodeDebounceRef.current = setTimeout(async () => {
-        if (!apiKey) return;
         setIsGeocoding(true);
-        const addr = await googleReverseGeocode(lat, lng, apiKey);
-        fillForm(addr);
+        try {
+          const res = await fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`);
+          const data = await res.json();
+          if (data.success && data.data) fillForm(data.data, 'MANUAL');
+        } catch (_) {
+          // ignore
+        }
         // A map drag clears the saved placeId since the pin moved away
         setPlaceId(null);
         setIsGeocoding(false);
@@ -173,7 +205,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     });
 
     idleListenerRef.current = listener;
-  }, [fillForm, apiKey]);
+  }, [fillForm]);
 
   const onMapUnmount = useCallback(() => {
     if (idleListenerRef.current && window.google?.maps?.event) {
@@ -185,7 +217,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
 
   // ── Google Places selection handler ──────────────────────────────────────
   const handlePlaceSelect = useCallback((placeResult) => {
-    const { lat, lng, placeId: pid, formattedAddress: fa, addressComponents } = placeResult;
+    const { lat, lng, placeId: pid, formattedAddress: fa, addressComponents, locationType } = placeResult;
 
     // Parse components into form fields immediately
     const parsed = parseAddressComponents(addressComponents);
@@ -195,7 +227,8 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       formattedAddress: fa,
       lat,
       lng,
-    });
+      locationType: locationType || 'SEARCH',
+    }, 'SEARCH');
 
     setPlaceId(pid);
     setFormattedAddress(fa);
@@ -223,8 +256,8 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
-        setPlaceId(null); // GPS doesn't give a Place ID
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        setPlaceId(null);
         if (mapRef.current) {
           mapRef.current.panTo({ lat, lng });
           mapRef.current.setZoom(HIGH_ZOOM);
@@ -233,11 +266,23 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           setMapZoom(HIGH_ZOOM);
         }
         setIsLocating(false);
-        // idle listener will fire and reverse geocode automatically
+        setLocationSource('GPS');
+        // Store accuracy for display
+        setGpsAccuracy(accuracy);
+        // Force a quick reverse geocode via proxy for immediate feedback
+        fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.data) {
+              fillForm({ ...data.data, gpsAccuracy: accuracy }, 'GPS');
+            }
+          })
+          .catch(() => {});
       },
       (err) => {
         console.error('GPS error:', err.code, err.message);
         setIsLocating(false);
+        setGpsAccuracy(null);
         if (err.code === 1) {
           alert('Location permission denied. Please enable it in your browser settings.');
         } else if (err.code === 2) {
@@ -246,14 +291,14 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           alert('Could not retrieve location. Please try again.');
         }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = () => {
-    if (!centerLat || !centerLng) {
-      alert('Please select a location on the map first.');
+    if (!isValidCoordinates(centerLat, centerLng)) {
+      alert('Please select a valid location on the map first.');
       return;
     }
     const fullStreet = [houseNo, street].filter(Boolean).join(', ');
@@ -269,6 +314,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       lng: centerLng,
       placeId:          placeId || null,
       formattedAddress: formattedAddress || displayName || '',
+      locationSource:   locationSource,
     });
   };
 
@@ -358,35 +404,23 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
             />
           )}
 
-          {/* ── FIXED CENTER PIN (map moves underneath) ── */}
+          {/* ── FIXED CENTER PIN — Swiggy/Zomato orange teardrop ── */}
           <div
-            className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
+            className="absolute inset-0 flex items-end justify-center pointer-events-none z-10"
             style={{ paddingBottom: '24px' }}
           >
-            <div className="flex flex-col items-center" style={{ filter: 'drop-shadow(0 4px 12px rgba(124,58,237,0.7))' }}>
-              <div style={{
-                width: '36px',
-                height: '36px',
-                background: '#7c3aed',
-                borderRadius: '50% 50% 50% 0',
-                transform: 'rotate(-45deg)',
-                border: '3px solid white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <div style={{
-                  width: '10px',
-                  height: '10px',
-                  background: 'white',
-                  borderRadius: '50%',
-                  transform: 'rotate(45deg)',
-                }} />
-              </div>
+            <div className="flex flex-col items-center" style={{ filter: 'drop-shadow(0 4px 14px rgba(252,128,25,0.65))' }}>
+              {/* Orange teardrop pin body */}
+              <svg width="36" height="46" viewBox="0 0 36 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 1C9.163 1 2 8.163 2 17c0 10.5 16 28 16 28S34 27.5 34 17C34 8.163 26.837 1 18 1z" fill="#FC8019" stroke="white" strokeWidth="2.5"/>
+                <circle cx="18" cy="17" r="6" fill="white"/>
+                <circle cx="18" cy="17" r="3" fill="#FC8019"/>
+              </svg>
+              {/* Shadow dot */}
               <div style={{
                 width: '14px',
                 height: '5px',
-                background: 'rgba(124,58,237,0.35)',
+                background: 'rgba(252,128,25,0.3)',
                 borderRadius: '50%',
                 marginTop: '2px',
                 filter: 'blur(3px)',
@@ -420,8 +454,88 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
             </div>
           )}
 
+          {/* GPS Accuracy Circle & Location Type Badge */}
+          {gpsAccuracy && centerLat && centerLng && (
+            <>
+              {/* Accuracy circle overlay */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  transform: 'translate(-50%, -50%)',
+                  left: '50%',
+                  top: '50%',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.min(gpsAccuracy * 2, 800)}px`,
+                    height: `${Math.min(gpsAccuracy * 2, 800)}px`,
+                    borderRadius: '50%',
+                    border: '2px solid #7c3aed',
+                    background: 'rgba(124, 58, 237, 0.08)',
+                    transform: 'translate(-50%, -50%)',
+                    pointerEvents: 'none',
+                  }}
+                />
+              </div>
+              {/* Accuracy badge */}
+              <div className="absolute top-3 right-3 z-20 flex gap-1.5">
+                <div className="bg-violet-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg">
+                  <MapPin className="w-3 h-3" />
+                  ±{Math.round(gpsAccuracy)}m
+                </div>
+                {locationType && (
+                  <div className={`bg-white/90 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg ${
+                    locationType === 'ROOFTOP' ? 'text-green-700' :
+                    locationType === 'RANGE_INTERPOLATED' ? 'text-amber-700' :
+                    'text-gray-700'
+                  }`}>
+                    {locationType === 'ROOFTOP' && '🎯 Exact'}
+                    {locationType === 'RANGE_INTERPOLATED' && '📍 Approx'}
+                    {locationType === 'GEOMETRIC_CENTER' && '📍 Area Center'}
+                    {locationType === 'APPROXIMATE' && '📍 Rough'}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Zoom controls (Swiggy/Zomato style) */}
+          <div style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <button
+              type="button"
+              onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || HIGH_ZOOM) + 1)}
+              style={{
+                width: 30, height: 30,
+                background: 'white',
+                border: '1px solid #e5e7eb',
+                borderRadius: 6,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.13)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', fontSize: 17, color: '#374151', fontWeight: 700,
+                userSelect: 'none',
+              }}
+              title="Zoom in"
+            >+</button>
+            <button
+              type="button"
+              onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || HIGH_ZOOM) - 1)}
+              style={{
+                width: 30, height: 30,
+                background: 'white',
+                border: '1px solid #e5e7eb',
+                borderRadius: 6,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.13)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', fontSize: 17, color: '#374151', fontWeight: 700,
+                userSelect: 'none',
+              }}
+              title="Zoom out"
+            >−</button>
+          </div>
+
           {/* "Drag map" hint */}
-          <div className="absolute bottom-3 right-3 z-20">
+          <div className="absolute bottom-3 left-3 z-20">
             <div className="bg-black/70 backdrop-blur-sm text-white/60 text-[10px] px-2.5 py-1 rounded-lg font-medium">
               Drag map to adjust pin
             </div>

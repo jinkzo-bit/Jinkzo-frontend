@@ -406,6 +406,12 @@ export default function RestaurantDashboard() {
     e.preventDefault();
     setIsProfileSaving(true);
     
+    // Validate dummy coordinates
+    if (Number(profileLat) === 19.076 && Number(profileLng) === 72.8777) {
+      setIsProfileSaving(false);
+      return alert("Please update your exact location using the map before saving.");
+    }
+
     let finalProfileImageUrl = profileImage;
     if (profileImageFile) {
       try {
@@ -1346,6 +1352,12 @@ export default function RestaurantDashboard() {
                             <MapPin className="w-3 h-3" />
                             {Number(profileLat).toFixed(5)}°N, {Number(profileLng).toFixed(5)}°E
                           </p>
+                        )}
+                        {(Number(profileLat) === 19.076 && Number(profileLng) === 72.8777) && (
+                          <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-red-700 bg-red-50 p-2 rounded-lg border border-red-200">
+                            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span>Location unavailable. Please set exact location on map.</span>
+                          </div>
                         )}
                       </>
                     ) : (

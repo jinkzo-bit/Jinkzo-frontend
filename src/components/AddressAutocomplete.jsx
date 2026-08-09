@@ -1,37 +1,33 @@
 import React, { useState } from 'react';
-import { Navigation, Loader } from 'lucide-react';
+import { Navigation, Loader, MapPin } from 'lucide-react';
 import { parseAddressComponents } from '../utils/parseAddressComponents';
 import PlacesAutocomplete from './maps/PlacesAutocomplete';
+import { API_BASE } from '../config/api';
 
-// ── Google Geocoding API — reverse geocode GPS coords to address ──────────────
-const googleReverseGeocode = async (lat, lng) => {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    return { street: 'Current Location', city: '', state: '', zip: '', lat, lng };
-  }
+// ── Reverse geocode GPS coords to address via backend proxy ──────────────
+const reverseGeocode = async (lat, lng) => {
   try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Network error');
+    const res = await fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`);
     const data = await res.json();
-    if (data.status === 'OK' && data.results?.[0]) {
-      const result = data.results[0];
-      const parsed = parseAddressComponents(result.address_components || []);
+    if (data.success && data.data) {
+      const d = data.data;
       return {
-        street: [parsed.houseNo, parsed.street].filter(Boolean).join(', ') || result.formatted_address?.split(',')[0] || 'Current Location',
-        city: parsed.city || '',
-        state: parsed.state || '',
-        zip: parsed.zip || '',
+        street: [d.addressComponents?.houseNo, d.addressComponents?.street].filter(Boolean).join(', ') || d.formattedAddress?.split(',')[0] || 'Current Location',
+        city: d.addressComponents?.city || '',
+        state: d.addressComponents?.state || '',
+        zip: d.addressComponents?.zip || '',
         lat,
         lng,
-        placeId: null,
-        formattedAddress: result.formatted_address || '',
+        placeId: d.placeId || null,
+        formattedAddress: d.formattedAddress || '',
+        locationType: d.locationType,
+        gpsAccuracy: null, // Will be set by caller
       };
     }
   } catch (_e) {
     // fall through to default
   }
-  return { street: 'Current Location', city: '', state: '', zip: '', lat, lng, placeId: null, formattedAddress: '' };
+  return { street: 'Current Location', city: '', state: '', zip: '', lat, lng, placeId: null, formattedAddress: '', locationType: null, gpsAccuracy: null };
 };
 
 /**
@@ -45,6 +41,8 @@ const googleReverseGeocode = async (lat, lng) => {
 export default function AddressAutocomplete({ onAddressSelect }) {
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState(null);
+  const [locationType, setLocationType] = useState(null);
 
   // ── Handle Places autocomplete selection ──────────────────────────────────
   const handlePlaceSelect = (placeResult) => {
@@ -61,6 +59,7 @@ export default function AddressAutocomplete({ onAddressSelect }) {
       // Non-breaking additions
       placeId: placeId || null,
       formattedAddress: formattedAddress || '',
+      locationSource: 'SEARCH',
     };
 
     if (onAddressSelect) onAddressSelect(result);
@@ -70,6 +69,8 @@ export default function AddressAutocomplete({ onAddressSelect }) {
   const handleGetCurrentLocation = (e) => {
     e.preventDefault();
     setLocationError(null);
+    setGpsAccuracy(null);
+    setLocationType(null);
 
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by your browser.');
@@ -79,8 +80,12 @@ export default function AddressAutocomplete({ onAddressSelect }) {
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
-        const result = await googleReverseGeocode(lat, lng);
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        const result = await reverseGeocode(lat, lng);
+        result.locationSource = 'GPS';
+        result.gpsAccuracy = accuracy;
+        setGpsAccuracy(accuracy);
+        setLocationType(result.locationType);
         setLocating(false);
         if (onAddressSelect) onAddressSelect(result);
       },
@@ -94,7 +99,7 @@ export default function AddressAutocomplete({ onAddressSelect }) {
           setLocationError('Could not get location. Please try again.');
         }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 
@@ -112,6 +117,26 @@ export default function AddressAutocomplete({ onAddressSelect }) {
         <p className="text-[11px] font-medium text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
           {locationError}
         </p>
+      )}
+
+      {/* ── GPS Accuracy & Location Type Indicator ── */}
+      {gpsAccuracy && (
+        <div className="flex items-center gap-2 text-[11px] font-medium px-3 py-2 bg-blue-50 border border-blue-100 rounded-xl">
+          <MapPin className="w-4 h-4 text-blue-600" />
+          <span className="text-blue-700">GPS Accuracy: ±{Math.round(gpsAccuracy)}m</span>
+          {locationType && (
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-[9px] font-bold ${
+              locationType === 'ROOFTOP' ? 'bg-green-100 text-green-700' :
+              locationType === 'RANGE_INTERPOLATED' ? 'bg-amber-100 text-amber-700' :
+              'bg-gray-100 text-gray-700'
+            }`}>
+              {locationType === 'ROOFTOP' && '🎯 Exact Building'}
+              {locationType === 'RANGE_INTERPOLATED' && '📍 Approximate'}
+              {locationType === 'GEOMETRIC_CENTER' && '📍 Area Center'}
+              {locationType === 'APPROXIMATE' && '📍 Rough'}
+            </span>
+          )}
+        </div>
       )}
 
       {/* ── Current location button ── */}

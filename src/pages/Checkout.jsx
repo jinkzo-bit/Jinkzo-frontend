@@ -9,7 +9,6 @@ import { playOrderPlacedSound } from '../utils/audio';
 import GoogleMapContainer from '../components/GoogleMapContainer';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { getRoute } from '../services/routingService';
-import { googleGeocode } from '../services/googleGeocodingService';
 
 export default function Checkout() {
   const { items, restaurant, getCalculations, clearCart, showToast, promoCode, cashbackAmount, fetchPlatformSettings, platformSettings } = useCartStore();
@@ -83,19 +82,26 @@ export default function Checkout() {
   React.useEffect(() => {
     const activeAddress = user?.addresses?.[selectedAddressIndex];
     const restAddress = restaurant?.address || '';
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     
     if (activeAddress && restAddress) {
       const fetchRouteInfo = async () => {
         let restPos = (restaurant?.lat && restaurant?.lng) ? { lat: restaurant.lat, lng: restaurant.lng } : null;
         if (!restPos) {
-          restPos = await googleGeocode(restAddress, apiKey);
+          try {
+            const res = await fetch(`${API_BASE}/maps/geocode?address=${encodeURIComponent(restAddress)}`);
+            const data = await res.json();
+            if (data.success && data.data) restPos = { lat: data.data.lat, lng: data.data.lng };
+          } catch (_) {}
         }
 
         let custPos = (activeAddress?.lat && activeAddress?.lng) ? { lat: activeAddress.lat, lng: activeAddress.lng } : null;
         if (!custPos) {
           const fullCustAddress = `${activeAddress.street}, ${activeAddress.city}, ${activeAddress.state} ${activeAddress.zip}`;
-          custPos = await googleGeocode(fullCustAddress, apiKey);
+          try {
+            const res = await fetch(`${API_BASE}/maps/geocode?address=${encodeURIComponent(fullCustAddress)}`);
+            const data = await res.json();
+            if (data.success && data.data) custPos = { lat: data.data.lat, lng: data.data.lng };
+          } catch (_) {}
         }
 
         if (restPos && custPos) {

@@ -9,19 +9,57 @@ const DEFAULT_LNG = 78.2656;
 
 const DEFAULT_CENTER = { lat: DEFAULT_LAT, lng: DEFAULT_LNG };
 
-// ── Google Maps base options ─────────────────────────────────────────────────
+// ── Swiggy/Zomato style clean map — minimal, light, food-delivery feel ────────
 const MAP_OPTIONS = {
-  disableDefaultUI: false,
-  zoomControl: true,
+  disableDefaultUI: true,
+  zoomControl: false,
   mapTypeControl: false,
   streetViewControl: false,
   fullscreenControl: false,
   clickableIcons: false,
   gestureHandling: 'greedy',
   styles: [
+    { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
+    { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9e8f7' }] },
+    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e0e0e0' }] },
+    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dadada' }] },
+    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#c6c6c6' }] },
+    { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+    { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#e8f5e9' }] },
+    { featureType: 'park', elementType: 'geometry', stylers: [{ color: '#e5f2e5' }] },
+    { featureType: 'park', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
     { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e5f2e5' }] },
+    { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#f2f2f2' }] },
     { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },
+    { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
   ],
+};
+
+// ── Picker SVG icon (Swiggy/Zomato orange pin) ────────────────────────────────
+const PICKER_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52">
+  <filter id="pshadow" x="-30%" y="-10%" width="160%" height="140%">
+    <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="rgba(0,0,0,0.3)" />
+  </filter>
+  <g filter="url(#pshadow)">
+    <path d="M20 2C11.163 2 4 9.163 4 18c0 11.25 16 32 16 32s16-20.75 16-32C36 9.163 28.837 2 20 2z" fill="#FC8019"/>
+    <circle cx="20" cy="18" r="8" fill="white"/>
+    <circle cx="20" cy="18" r="4" fill="#FC8019"/>
+  </g>
+</svg>`;
+
+const PICKER_ICON = {
+  url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(PICKER_SVG)}`,
+  scaledSize: { width: 40, height: 52 },
+  anchor: { x: 20, y: 50 },
 };
 
 // Container style — fills parent; parent must have explicit height
@@ -199,10 +237,42 @@ export default function GoogleMap({
             position={markerPos}
             draggable={draggable}
             onDragEnd={handleMarkerDragEnd}
-            animation={window.google?.maps?.Animation?.DROP}
+            icon={PICKER_ICON}
           />
         )}
       </GoogleMapComponent>
+
+      {/* Custom Zoom Controls (Swiggy/Zomato style) */}
+      <div style={{ position: 'absolute', bottom: 16, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <button
+          onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || zoom) + 1)}
+          style={{
+            width: 32, height: 32,
+            background: 'white',
+            border: '1px solid #e5e7eb',
+            borderRadius: 7,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.13)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', fontSize: 18, color: '#374151', fontWeight: 700,
+            userSelect: 'none',
+          }}
+          title="Zoom in"
+        >+</button>
+        <button
+          onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || zoom) - 1)}
+          style={{
+            width: 32, height: 32,
+            background: 'white',
+            border: '1px solid #e5e7eb',
+            borderRadius: 7,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.13)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', fontSize: 18, color: '#374151', fontWeight: 700,
+            userSelect: 'none',
+          }}
+          title="Zoom out"
+        >−</button>
+      </div>
     </div>
   );
 }

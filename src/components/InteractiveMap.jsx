@@ -4,12 +4,17 @@ import GoogleMapContainer from './GoogleMapContainer';
 export default function InteractiveMap({ 
   status, 
   restaurantAddress = '', 
+  restaurantLat = null,
+  restaurantLng = null,
   customerAddress = '',
+  customerLat = null,
+  customerLng = null,
   deliveryMethod = 'Standard',
   orderId = null,
   onRouteInfo = null
 }) {
   const [progress, setProgress] = useState(0);
+  const [showTraffic, setShowTraffic] = useState(false);
 
   useEffect(() => {
     // Map order status to progress percentage
@@ -48,12 +53,17 @@ export default function InteractiveMap({
       <GoogleMapContainer 
         mode="tracking"
         restaurantAddress={restaurantAddress}
+        restaurantLat={restaurantLat}
+        restaurantLng={restaurantLng}
         customerAddress={customerAddress}
+        customerLat={customerLat}
+        customerLng={customerLng}
         status={status}
         progress={progress}
         deliveryMethod={deliveryMethod}
         orderId={orderId}
         onRouteInfo={onRouteInfo}
+        showTraffic={showTraffic}
       />
       
       {/* Real-time Status Overlay Badge */}
@@ -61,6 +71,16 @@ export default function InteractiveMap({
         <span className={`w-2.5 h-2.5 rounded-full ${status === 'Delivered' ? 'bg-green-500' : 'bg-primary animate-ping'}`} />
         <span className="text-main">Rider Position: {Math.round(progress * 100)}%</span>
       </div>
+      
+      {/* Traffic Toggle */}
+      <button
+        onClick={() => setShowTraffic(prev => !prev)}
+        className="absolute bottom-4 right-4 bg-surface/95 backdrop-blur-sm border border-line px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-md hover:bg-surface transition-colors cursor-pointer"
+        title="Toggle traffic layer"
+      >
+        <span className={`w-2.5 h-2.5 rounded-full ${showTraffic ? 'bg-green-500' : 'bg-gray-400'}`} />
+        <span className="text-main">Traffic</span>
+      </button>
     </div>
   );
 }

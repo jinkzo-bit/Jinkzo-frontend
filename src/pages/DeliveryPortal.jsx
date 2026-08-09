@@ -321,11 +321,11 @@ export default function DeliveryPortal() {
                     <div className="flex flex-col gap-1 text-xs">
                       <div className="flex items-center gap-1.5 text-main">
                         <Store className="w-3.5 h-3.5 text-muted flex-shrink-0" />
-                        <span className="font-bold line-clamp-1">Burger Point</span>
+                        <span className="font-bold line-clamp-1">{order.restaurant?.name || 'Restaurant'}</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-muted">
                         <MapPin className="w-3.5 h-3.5 text-muted flex-shrink-0" />
-                        <span className="font-semibold line-clamp-1">{order.address.street}, {order.address.city}</span>
+                        <span className="font-semibold line-clamp-1">{order.customerLocation?.formattedAddress || order.address?.street || 'Customer Address'}</span>
                       </div>
                     </div>
 
@@ -420,13 +420,24 @@ export default function DeliveryPortal() {
 
               {/* Delivery Addresses info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border border-line p-4 rounded-2xl">
+                <div className="border border-line p-4 rounded-2xl flex flex-col">
                   <div className="flex items-center gap-1.5 text-xs text-muted font-bold mb-1">
                     <Store className="w-4 h-4 text-primary" />
                     <span>PICKUP RESTAURANT</span>
                   </div>
-                  <h5 className="text-xs font-bold text-main">Burger Point</h5>
-                  <p className="text-[11px] text-muted mt-0.5 leading-relaxed font-semibold">Shop 4, Linking Road, Mumbai</p>
+                  <h5 className="text-xs font-bold text-main">{selectedOrder.restaurant?.name || 'Restaurant'}</h5>
+                  <p className="text-[11px] text-muted mt-0.5 leading-relaxed font-semibold flex-grow">
+                    {selectedOrder.restaurantLocation?.formattedAddress || selectedOrder.pickupAddress?.street || 'Address not available'}
+                  </p>
+                  {selectedOrder.restaurantLocation?.lat && (
+                    <a 
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${selectedOrder.restaurantLocation.lat},${selectedOrder.restaurantLocation.lng}`} 
+                      target="_blank" rel="noreferrer"
+                      className="mt-3 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Navigation className="w-3.5 h-3.5" /> Navigate to Restaurant
+                    </a>
+                  )}
                 </div>
                 <div className="border border-line p-4 rounded-2xl flex flex-col justify-between">
                   <div>
@@ -434,11 +445,20 @@ export default function DeliveryPortal() {
                       <MapPin className="w-4 h-4 text-green-700" />
                       <span>DROP CUSTOMER</span>
                     </div>
-                    <h5 className="text-xs font-bold text-main">{selectedOrder.user?.name || 'Customer Address'}</h5>
+                    <h5 className="text-xs font-bold text-main">{selectedOrder.user?.name || 'Customer'}</h5>
                     <p className="text-[11px] text-muted mt-0.5 leading-relaxed font-semibold">
-                      {selectedOrder.address.street}, {selectedOrder.address.city}, {selectedOrder.address.state} - {selectedOrder.address.zip}
+                      {selectedOrder.customerLocation?.formattedAddress || (selectedOrder.address ? `${selectedOrder.address.street}, ${selectedOrder.address.city}` : 'Customer Address')}
                     </p>
                   </div>
+                  {selectedOrder.customerLocation?.lat && (
+                    <a 
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${selectedOrder.customerLocation.lat},${selectedOrder.customerLocation.lng}`} 
+                      target="_blank" rel="noreferrer"
+                      className="mt-2 bg-green-50 hover:bg-green-100 text-green-700 text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Navigation className="w-3.5 h-3.5" /> Navigate to Customer
+                    </a>
+                  )}
                   <a 
                     href={`tel:${selectedOrder.user?.phone || selectedOrder.customerPhone || '+919876543210'}`}
                     className="mt-3 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"

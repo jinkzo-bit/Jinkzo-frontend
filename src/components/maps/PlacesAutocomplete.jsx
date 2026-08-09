@@ -1,12 +1,13 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
 import { MapPin, Loader, Search, X, AlertCircle } from 'lucide-react';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMapsLoader';
-
+import { API_BASE } from '../../config/api';
 
 /**
- * Reusable Google Places Autocomplete input.
- *
+ * Reusable Google Places Autocomplete input using server proxy.
+ * Includes session tokens for cost optimization (billed per session, not per keystroke).
+ * 
  * Props:
  *   onPlaceSelect   fn({ formattedAddress, lat, lng, placeId, addressComponents })
  *   placeholder     string
@@ -30,18 +31,23 @@ export default function PlacesAutocomplete({
   const [error, setError] = useState(null);
 
   const debounceRef = useRef(null);
-  const autocompleteServiceRef = useRef(null);
-  const detailsDivRef = useRef(null);
+  const sessionTokenRef = useRef(null);
 
-  // ── Lazy-init AutocompleteService ──────────────────────────────────────────
-  const getAutocompleteService = () => {
-    if (!autocompleteServiceRef.current && window.google?.maps?.places) {
-      autocompleteServiceRef.current = new window.google.maps.places.AutocompleteService();
+  // Initialize session token for cost optimization
+  useEffect(() => {
+    if (isLoaded && window.google?.maps?.places) {
+      sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
     }
-    return autocompleteServiceRef.current;
-  };
+  }, [isLoaded]);
 
-  // ── Handle text input change ───────────────────────────────────────────────
+  // Reset session token when query clears
+  const resetSessionToken = useCallback(() => {
+    if (window.google?.maps?.places) {
+      sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+    }
+  }, []);
+
+  // ── Handle text input change — calls backend proxy ────────────────────────────
   const handleChange = (e) => {
     const val = e.target.value;
     setQuery(val);
@@ -49,89 +55,95 @@ export default function PlacesAutocomplete({
     setNoResults(false);
     clearTimeout(debounceRef.current);
 
-    if (val.length < 3) {
+    if (val.length < 2) {
       setPredictions([]);
+      resetSessionToken();
       return;
     }
 
-    debounceRef.current = setTimeout(() => {
-      const svc = getAutocompleteService();
-      if (!svc) {
-        setError('Maps not loaded yet. Please wait a moment.');
-        return;
-      }
-
+    debounceRef.current = setTimeout(async () => {
       setIsSearching(true);
+      try {
+        const params = new URLSearchParams({
+          input: val,
+          types: 'geocode',
+          country,
+        });
+        if (sessionTokenRef.current) {
+          params.set('sessionToken', sessionTokenRef.current.toString());
+        }
 
-      svc.getPlacePredictions(
-        { input: val, componentRestrictions: { country } },
-        (results, status) => {
-          setIsSearching(false);
-          const S = window.google.maps.places.PlacesServiceStatus;
+        const res = await fetch(`${API_BASE}/maps/autocomplete?${params.toString()}`);
+        const data = await res.json();
+        setIsSearching(false);
 
-          if (status === S.OK && results?.length) {
+        if (data.success) {
+          const results = data.data.predictions || [];
+          if (results.length > 0) {
             setPredictions(results);
             setNoResults(false);
-          } else if (status === S.ZERO_RESULTS) {
-            setPredictions([]);
-            setNoResults(true);
-          } else if (status === S.OVER_QUERY_LIMIT) {
-            setPredictions([]);
-            setError('Search quota exceeded. Please try again shortly.');
-          } else if (status === S.REQUEST_DENIED) {
-            setPredictions([]);
-            setError('Places API not enabled. Check your Google Cloud Console.');
-          } else if (status === S.NOT_FOUND) {
-            setPredictions([]);
-            setNoResults(true);
           } else {
             setPredictions([]);
+            setNoResults(true);
           }
+        } else if (data.message === 'OVER_QUERY_LIMIT') {
+          setPredictions([]);
+          setError('Search quota exceeded. Please try again shortly.');
+        } else if (data.message === 'REQUEST_DENIED') {
+          setPredictions([]);
+          setError('Places API not enabled. Check your Google Cloud Console.');
+        } else {
+          setPredictions([]);
+          setNoResults(true);
         }
-      );
-    }, 400);
+      } catch (err) {
+        setIsSearching(false);
+        setError('Search failed. Please check your connection.');
+      }
+    }, 300);
   };
 
-  // ── Handle suggestion click — fetch full place details ────────────────────
+  // ── Handle suggestion click — fetch full place details via proxy ────────────
   const handleSelect = useCallback(
-    (prediction) => {
+    async (prediction) => {
       setPredictions([]);
       setNoResults(false);
       setQuery(prediction.description);
 
-      if (!detailsDivRef.current) {
-        detailsDivRef.current = document.createElement('div');
-      }
-
-      const placesService = new window.google.maps.places.PlacesService(detailsDivRef.current);
-
-      placesService.getDetails(
-        {
-          placeId: prediction.place_id,
-          fields: ['geometry', 'address_components', 'formatted_address', 'place_id'],
-        },
-        (place, status) => {
-          if (
-            status === window.google.maps.places.PlacesServiceStatus.OK &&
-            place?.geometry?.location
-          ) {
-            const lat = place.geometry.location.lat();
-            const lng = place.geometry.location.lng();
-
-            if (onPlaceSelect) {
-              onPlaceSelect({
-                formattedAddress: place.formatted_address || prediction.description,
-                lat,
-                lng,
-                placeId: place.place_id,
-                addressComponents: place.address_components || [],
-              });
-            }
-          } else {
-            setError('Could not load place details. Please try another result.');
-          }
+      try {
+        const params = new URLSearchParams({ placeId: prediction.place_id });
+        if (sessionTokenRef.current) {
+          params.set('sessionToken', sessionTokenRef.current.toString());
         }
-      );
+
+        const res = await fetch(`${API_BASE}/maps/place-details?${params.toString()}`);
+        const data = await res.json();
+
+        if (data.success && data.data) {
+          const place = data.data;
+          if (onPlaceSelect) {
+            onPlaceSelect({
+              formattedAddress: place.formattedAddress || prediction.description,
+              lat: place.lat,
+              lng: place.lng,
+              placeId: place.placeId,
+              addressComponents: [
+                ...(place.addressComponents.houseNo ? [{ types: ['street_number'], long_name: place.addressComponents.houseNo }] : []),
+                ...(place.addressComponents.street ? [{ types: ['route'], long_name: place.addressComponents.street }] : []),
+                ...(place.addressComponents.area ? [{ types: ['sublocality_level_1'], long_name: place.addressComponents.area }] : []),
+                ...(place.addressComponents.city ? [{ types: ['locality'], long_name: place.addressComponents.city }] : []),
+                ...(place.addressComponents.state ? [{ types: ['administrative_area_level_1'], long_name: place.addressComponents.state }] : []),
+                ...(place.addressComponents.zip ? [{ types: ['postal_code'], long_name: place.addressComponents.zip }] : []),
+              ],
+            });
+          }
+          resetSessionToken();
+        } else {
+          setError('Could not load place details. Please try another result.');
+        }
+      } catch (err) {
+        setError('Failed to load place details.');
+      }
     },
     [onPlaceSelect]
   );
@@ -143,6 +155,7 @@ export default function PlacesAutocomplete({
     setNoResults(false);
     setError(null);
     clearTimeout(debounceRef.current);
+    resetSessionToken();
   };
 
   // ── Not loaded yet ─────────────────────────────────────────────────────────
@@ -200,7 +213,7 @@ export default function PlacesAutocomplete({
 
   const errorCls = darkMode ? 'text-red-400' : 'text-red-500';
 
-  const showDropdown = predictions.length > 0 || (noResults && query.length >= 3 && !isSearching);
+  const showDropdown = predictions.length > 0 || (noResults && query.length >= 2 && !isSearching);
 
   return (
     <div className={`relative w-full ${className}`}>

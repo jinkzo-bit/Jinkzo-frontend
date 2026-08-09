@@ -3,10 +3,11 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   Lock, Mail, User, Phone, AlertCircle, Bike, Store,
   ShieldAlert, FileText, MapPin, Camera, MessageSquare,
-  KeyRound, RefreshCw, CheckCircle2, ArrowLeft, Eye, EyeOff
+  KeyRound, RefreshCw, CheckCircle2, ArrowLeft, Eye, EyeOff, Navigation
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadPublicFileToBackend } from '../utils/uploadUtil';
+import LocationPickerModal from '../components/LocationPickerModal';
 
 
 
@@ -87,16 +88,18 @@ export default function LoginSignup() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [otp, setOtp] = useState('');
+  const [addressObj, setAddressObj] = useState(null);
 
   // Partner fields
   const [restaurantName, setRestaurantName] = useState('');
-  const [restaurantAddress, setRestaurantAddress] = useState('');
+  const [restaurantLocation, setRestaurantLocation] = useState(null); // replaces restaurantAddress string
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [locationModalTarget, setLocationModalTarget] = useState('customer'); // 'customer' | 'restaurant'
   const [gstin, setGstin] = useState('');
   const [restaurantImageFile, setRestaurantImageFile] = useState(null);
   const [vehicleType, setVehicleType] = useState('Motorcycle');
@@ -129,9 +132,9 @@ export default function LoginSignup() {
   }, [token, user]);
 
   const resetAll = () => {
-    setName(''); setEmail(''); setPhone(''); setAddress('');
+    setName(''); setEmail(''); setPhone(''); setAddressObj(null);
     setPassword(''); setConfirmPassword(''); setShowPassword(false); setShowConfirmPassword(false); setOtp('');
-    setRestaurantName(''); setRestaurantAddress(''); setGstin('');
+    setRestaurantName(''); setRestaurantLocation(null); setGstin('');
     setRestaurantImageFile(null); setVehicleNumber(''); setDrivingLicense(''); setRiderImageFile(null);
     setPhoneStep(1); setFormError('');
     setSignupStep(1); setSignupOtp(''); setSavedRegisterData(null);
@@ -199,9 +202,9 @@ export default function LoginSignup() {
 
     let partnerDetails = {};
     if (role === 'customer') {
-      partnerDetails = { address: address.trim() };
+      partnerDetails = { addressObj };
     } else if (role === 'restaurant') {
-      if (!restaurantName || !restaurantAddress) return setFormError('Please complete all restaurant partner details.');
+      if (!restaurantName || !restaurantLocation) return setFormError('Please complete all restaurant partner details including exact location.');
       let restaurantImage = '';
       if (restaurantImageFile) {
         setIsUploading(true);
@@ -209,7 +212,7 @@ export default function LoginSignup() {
         catch (err) { setFormError(err.message || 'Image upload failed.'); setIsUploading(false); return; }
         setIsUploading(false);
       }
-      partnerDetails = { restaurantName, restaurantAddress, documentType: 'GSTIN', documentNumber: gstin, restaurantImage };
+      partnerDetails = { restaurantName, restaurantLocation, documentType: 'GSTIN', documentNumber: gstin, restaurantImage };
     } else if (role === 'delivery') {
       if (!vehicleNumber) return setFormError('Please complete vehicle details.');
       let profileImage = '';
@@ -407,12 +410,15 @@ export default function LoginSignup() {
             {/* Address (Customer signup only) */}
             {!isLogin && role === 'customer' && (
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Address</label>
-                <div className="flex items-center bg-base border border-line-strong focus-within:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all">
-                  <MapPin className="w-4 h-4 text-muted shrink-0"/>
-                  <input type="text" required placeholder="e.g. Flat 102, MG Road, Bengaluru" value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    className="bg-transparent border-none outline-none text-xs text-main w-full placeholder:text-muted"/>
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Delivery Location (Optional)</label>
+                <div 
+                  onClick={() => { setLocationModalTarget('customer'); setIsLocationModalOpen(true); }}
+                  className="flex items-center bg-base border border-line-strong hover:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all cursor-pointer"
+                >
+                  <MapPin className={`w-4 h-4 shrink-0 ${addressObj ? 'text-primary' : 'text-muted'}`}/>
+                  <span className={`text-xs w-full truncate ${addressObj ? 'text-main font-semibold' : 'text-muted'}`}>
+                    {addressObj ? addressObj.formattedAddress : 'Set location on map...'}
+                  </span>
                 </div>
               </div>
             )}
@@ -423,7 +429,6 @@ export default function LoginSignup() {
                 <span className="text-[10px] uppercase font-extrabold tracking-wider text-primary px-1">Restaurant Specifications</span>
                 {[
                   { label: 'Restaurant Name', icon: <Store className="w-4 h-4 text-muted"/>, val: restaurantName, set: setRestaurantName, ph: 'e.g. Spice Junction' },
-                  { label: 'Restaurant Address', icon: <MapPin className="w-4 h-4 text-muted"/>, val: restaurantAddress, set: setRestaurantAddress, ph: 'e.g. Shop 12, Indiranagar' },
                   { label: 'KYC - GSTIN ID (Optional)', icon: <FileText className="w-4 h-4 text-muted"/>, val: gstin, set: setGstin, ph: 'e.g. 29AAAAA1111A1Z1', cls: 'uppercase', req: false },
                 ].map(({ label, icon, val, set, ph, cls, req }) => (
                   <div key={label} className="flex flex-col gap-1">
@@ -435,6 +440,19 @@ export default function LoginSignup() {
                     </div>
                   </div>
                 ))}
+                
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-primary px-1">Exact Restaurant Location</label>
+                  <div 
+                    onClick={() => { setLocationModalTarget('restaurant'); setIsLocationModalOpen(true); }}
+                    className="flex items-center bg-base border-2 border-primary/30 hover:border-primary rounded-xl px-3 py-2.5 gap-2 transition-all cursor-pointer"
+                  >
+                    <Navigation className={`w-4 h-4 shrink-0 ${restaurantLocation ? 'text-primary' : 'text-muted'}`}/>
+                    <span className={`text-xs w-full truncate ${restaurantLocation ? 'text-main font-semibold' : 'text-muted'}`}>
+                      {restaurantLocation ? restaurantLocation.formattedAddress : 'Search & Map Pin (Required)'}
+                    </span>
+                  </div>
+                </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Restaurant Cover Image</label>
                   <div className="flex items-center bg-base border border-line-strong rounded-xl px-3 py-2.5 gap-2 cursor-pointer relative">
@@ -592,6 +610,21 @@ export default function LoginSignup() {
           </div>
         )}
       </div>
+
+      <LocationPickerModal
+        isOpen={isLocationModalOpen}
+        onClose={() => setIsLocationModalOpen(false)}
+        title={locationModalTarget === 'restaurant' ? 'Set Restaurant Location' : 'Set Delivery Location'}
+        initialAddress={locationModalTarget === 'restaurant' ? restaurantLocation : addressObj}
+        onConfirm={(addr) => {
+          if (locationModalTarget === 'restaurant') {
+            setRestaurantLocation(addr);
+          } else {
+            setAddressObj(addr);
+          }
+          setIsLocationModalOpen(false);
+        }}
+      />
     </div>
   );
 }

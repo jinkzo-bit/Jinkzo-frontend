@@ -377,10 +377,14 @@ export default function OrderTracking() {
       <InteractiveMap 
         status={order.status} 
         restaurantAddress={order.orderType === 'ride' 
-          ? `${order.pickupAddress.street}, ${order.pickupAddress.city}, ${order.pickupAddress.state} - ${order.pickupAddress.zip}` 
-          : restaurantAddress
+          ? order.restaurantLocation?.formattedAddress || `${order.pickupAddress?.street}, ${order.pickupAddress?.city}` 
+          : order.restaurantLocation?.formattedAddress || restaurantAddress
         }
-        customerAddress={`${order.address.street}, ${order.address.city}, ${order.address.state} - ${order.address.zip}`}
+        restaurantLat={order.restaurantLocation?.lat}
+        restaurantLng={order.restaurantLocation?.lng}
+        customerAddress={order.customerLocation?.formattedAddress || `${order.address?.street}, ${order.address?.city}`}
+        customerLat={order.customerLocation?.lat}
+        customerLng={order.customerLocation?.lng}
         deliveryMethod={order.orderType === 'ride' ? 'Ride' : 'Standard'}
         orderId={order._id}
       />
