@@ -1,7 +1,7 @@
 import { API_BASE } from '../config/api';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, CreditCard, ChevronRight, Check, AlertCircle, Sparkles, User, ShoppingBag, FileText } from 'lucide-react';
+import { MapPin, CreditCard, ChevronRight, Check, AlertCircle, Sparkles, User, ShoppingBag, FileText, Trash2, AlertTriangle } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { playOrderPlacedSound } from '../utils/audio';
@@ -11,7 +11,7 @@ import { getRoute } from '../services/routingService';
 
 export default function Checkout() {
   const { items, restaurant, getCalculations, clearCart, showToast, promoCode, fetchPlatformSettings, platformSettings } = useCartStore();
-  const { user, token, addAddress } = useAuthStore();
+  const { user, token, addAddress, deleteAddress } = useAuthStore();
   const navigate = useNavigate();
 
   // Address State
@@ -140,6 +140,10 @@ export default function Checkout() {
     setErrorMsg('');
     if (!activeAddresses[selectedAddressIndex]) {
       return setErrorMsg('Please select or add a delivery address.');
+    }
+    const selectedAddress = activeAddresses[selectedAddressIndex];
+    if (typeof selectedAddress.lat !== 'number' || typeof selectedAddress.lng !== 'number' || isNaN(selectedAddress.lat) || isNaN(selectedAddress.lng)) {
+      return setErrorMsg('Selected address lacks a precise location. Please delete it and add a new one with GPS.');
     }
     
     setIsSubmitting(true);
@@ -287,8 +291,27 @@ export default function Checkout() {
                         <p className="text-xs text-muted mt-0.5 leading-relaxed font-medium">
                           {addr.street}, {addr.city}, {addr.state} - {addr.zip}
                         </p>
+                        {(typeof addr.lat !== 'number' || typeof addr.lng !== 'number' || isNaN(addr.lat) || isNaN(addr.lng)) && (
+                          <div className="flex items-center gap-1 mt-1 text-red-500 bg-red-50 px-2 py-0.5 rounded w-max text-[10px] font-bold">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>Missing exact location coordinates</span>
+                          </div>
+                        )}
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if(window.confirm('Delete this address?')) {
+                           deleteAddress(addr._id);
+                           if(selectedAddressIndex === idx) setSelectedAddressIndex(0);
+                        }
+                      }}
+                      className="p-2 text-muted hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 ))}
               </div>
