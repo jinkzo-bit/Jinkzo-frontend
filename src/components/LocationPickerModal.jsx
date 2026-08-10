@@ -85,31 +85,31 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     setCity(addr.city         || '');
     setFormState(addr.state   || '');
     setZip(addr.zip           || '');
-    setCenterLat(addr.lat);
-    setCenterLng(addr.lng);
-    setDisplayName(addr.displayName || addr.selectedLocation.formattedAddress || '');
-    if (addr.selectedLocation.formattedAddress) setFormattedAddress(addr.selectedLocation.formattedAddress);
+    setSelectedLocation(prev => ({
+      ...prev,
+      lat: addr.lat !== undefined ? addr.lat : prev.lat,
+      lng: addr.lng !== undefined ? addr.lng : prev.lng,
+      displayName: addr.displayName || addr.selectedLocation?.formattedAddress || addr.formattedAddress || prev.displayName,
+      formattedAddress: addr.selectedLocation?.formattedAddress || addr.formattedAddress || prev.formattedAddress,
+      accuracy: addr.gpsAccuracy !== undefined ? addr.gpsAccuracy : prev.accuracy,
+      locationType: addr.locationType !== undefined ? addr.locationType : prev.locationType
+    }));
     if (sourceOverride) setLocationSource(sourceOverride);
-    // Store GPS accuracy and location type for display
-    if (addr.gpsAccuracy) setGpsAccuracy(addr.gpsAccuracy);
-    if (addr.locationType) setLocationType(addr.locationType);
   }, []);
 
   // ── When modal opens — initialise center & pre-fill form ─────────────────
   useEffect(() => {
     if (!isOpen) return;
 
-    if (initialAddress?.lat && initialAddress?.lng) {
-      const initLat = initialAddress.lat;
-      const initLng = initialAddress.lng;
+    const initLat = Number(initialAddress?.lat);
+    const initLng = Number(initialAddress?.lng);
+    const isValidInitCoord = Number.isFinite(initLat) && Number.isFinite(initLng) && initLat >= -90 && initLat <= 90 && initLng >= -180 && initLng <= 180;
 
+    if (isValidInitCoord) {
       setMapCenter({ lat: initLat, lng: initLng });
       setMapZoom(HIGH_ZOOM);
-      setCenterLat(initLat);
-      setCenterLng(initLng);
+      setSelectedLocation(prev => ({ ...prev, lat: initLat, lng: initLng, placeId: null, formattedAddress: '' }));
       setHasValidLocation(true);
-      setPlaceId(null);
-      setFormattedAddress('');
 
       fillForm({
         houseNo: '',
@@ -142,11 +142,8 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       // New address: no initial coords. Try GPS automatically.
       setMapCenter({ lat: INDIA_CENTER_LAT, lng: INDIA_CENTER_LNG });
       setMapZoom(4);
-      setCenterLat(null);
-      setCenterLng(null);
+      setSelectedLocation(prev => ({ ...prev, lat: null, lng: null, placeId: null, formattedAddress: '' }));
       setHasValidLocation(false);
-      setPlaceId(null);
-      setFormattedAddress('');
       
       if (navigator.geolocation) {
         setIsLocating(true);
@@ -160,11 +157,9 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
               setMapCenter({ lat, lng });
               setMapZoom(HIGH_ZOOM);
             }
-            setCenterLat(lat);
-            setCenterLng(lng);
+            setSelectedLocation(prev => ({ ...prev, lat, lng, accuracy, placeId: null }));
             setHasValidLocation(true);
             setLocationSource('GPS');
-            setGpsAccuracy(accuracy);
             
             fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`)
               .then(res => res.json())
@@ -180,7 +175,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
             console.warn('Auto-GPS failed on mount:', err.message);
             setIsLocating(false);
           },
-          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
       }
     }
@@ -206,8 +201,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       if (!center) return;
       const lat = center.lat();
       const lng = center.lng();
-      setCenterLat(lat);
-      setCenterLng(lng);
+      setSelectedLocation(prev => ({ ...prev, lat, lng }));
       setHasValidLocation(true);
       console.log(`[LOCATION] MAP CENTER\nlat: ${lat}\nlng: ${lng}`);
 
@@ -262,8 +256,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       locationType: locationType || 'SEARCH',
     }, 'SEARCH');
 
-    setPlaceId(pid);
-    setFormattedAddress(fa);
+    setSelectedLocation(prev => ({ ...prev, placeId: pid, formattedAddress: fa }));
     setHasValidLocation(true);
 
     // Prevent idle listener from running a second reverse geocode pass
@@ -299,12 +292,9 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           setMapZoom(HIGH_ZOOM);
         }
         setIsLocating(false);
-            setCenterLat(lat);
-            setCenterLng(lng);
-            setHasValidLocation(true);
-            setLocationSource('GPS');
-        // Store accuracy for display
-        setGpsAccuracy(accuracy);
+        setSelectedLocation(prev => ({ ...prev, lat, lng, accuracy, placeId: null }));
+        setHasValidLocation(true);
+        setLocationSource('GPS');
         console.log(`[LOCATION] GPS SUCCESS\nlat: ${lat}\nlng: ${lng}`);
         // Force a quick reverse geocode via proxy for immediate feedback
         fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`)
@@ -320,13 +310,10 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       (err) => {
         console.error('GPS error:', err.code, err.message);
         setIsLocating(false);
-        setGpsAccuracy(null);
         if (err.code === 1) {
           alert('Location permission denied. Please enable it in your browser settings.');
-        } else if (err.code === 2) {
-          alert('Location unavailable. Please check your device GPS.');
         } else {
-          alert('Could not retrieve location. Please try again.');
+          alert('Unable to get your current location. Search for your area or move the map manually.');
         }
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
@@ -348,8 +335,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       return;
     }
     const fullStreet = [houseNo, street].filter(Boolean).join(', ');
-    
-    console.log(`[LOCATION] SAVE\nlat: ${selectedLocation.lat}\nlng: ${selectedLocation.lng}\nformattedAddress: ${selectedLocation.formattedAddress || displayName || ''}\nplaceId: ${selectedLocation.placeId || ''}`);
+    console.log(`[LOCATION] SAVE\nlat: ${selectedLocation.lat}\nlng: ${selectedLocation.lng}\nformattedAddress: ${selectedLocation.formattedAddress || selectedLocation.displayName || ''}\nplaceId: ${selectedLocation.placeId || ''}`);
     
     onConfirm({
       houseNo,
@@ -362,7 +348,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       lat: selectedLocation.lat,
       lng: selectedLocation.lng,
       placeId: selectedLocation.placeId || null,
-      formattedAddress: selectedLocation.formattedAddress || displayName || '',
+      formattedAddress: selectedLocation.formattedAddress || selectedLocation.displayName || '',
       locationSource:   locationSource,
     });
   };
