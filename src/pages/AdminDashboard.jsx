@@ -1996,15 +1996,94 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Base Delivery Fee (₹)</label>
-                    <input
-                      type="number"
-                      required
-                      value={platformSettings.deliveryBaseFee}
-                      onChange={(e) => setPlatformSettings({ ...platformSettings, deliveryBaseFee: parseFloat(e.target.value) })}
-                      className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full"
-                    />
+                  <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3 mt-2">
+                    <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-primary" />Food Delivery Pricing</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-muted">Tier 1 Max Distance (km)</label>
+                        <input type="number" step="0.1"
+                          value={platformSettings?.foodDeliveryPricing?.tier1?.maxDistanceKm || 2}
+                          onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, tier1: { ...platformSettings.foodDeliveryPricing?.tier1, maxDistanceKm: parseFloat(e.target.value) } } })}
+                          className="bg-base border border-line-strong rounded-lg px-3 py-2 text-xs font-bold w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-muted">Tier 1 Fee (₹)</label>
+                        <input type="number" 
+                          value={platformSettings?.foodDeliveryPricing?.tier1?.fee || 20}
+                          onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, tier1: { ...platformSettings.foodDeliveryPricing?.tier1, fee: parseFloat(e.target.value) } } })}
+                          className="bg-base border border-line-strong rounded-lg px-3 py-2 text-xs font-bold w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-muted">Tier 2 Max Distance (km)</label>
+                        <input type="number" step="0.1"
+                          value={platformSettings?.foodDeliveryPricing?.tier2?.maxDistanceKm || 3}
+                          onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, tier2: { ...platformSettings.foodDeliveryPricing?.tier2, maxDistanceKm: parseFloat(e.target.value) } } })}
+                          className="bg-base border border-line-strong rounded-lg px-3 py-2 text-xs font-bold w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-muted">Tier 2 Fee (₹)</label>
+                        <input type="number" 
+                          value={platformSettings?.foodDeliveryPricing?.tier2?.fee || 25}
+                          onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, tier2: { ...platformSettings.foodDeliveryPricing?.tier2, fee: parseFloat(e.target.value) } } })}
+                          className="bg-base border border-line-strong rounded-lg px-3 py-2 text-xs font-bold w-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3">
+                    <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-orange-500" />Ride Bike Pricing</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                      {['tier1', 'tier2', 'tier3'].map((tier, idx) => (
+                        <React.Fragment key={tier}>
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Max (km)</label>
+                            <input type="number" step="0.1"
+                              value={platformSettings?.rideBikePricing?.[tier]?.maxDistanceKm || (idx===0?1.5:idx===1?2.5:9999)}
+                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
+                              className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Fee (₹)</label>
+                            <input type="number" 
+                              value={platformSettings?.rideBikePricing?.[tier]?.fee || (idx===0?20:idx===1?30:40)}
+                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], fee: parseFloat(e.target.value) } } })}
+                              className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                            />
+                          </div>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3">
+                    <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-green-500" />Ride Auto Pricing</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                      {['tier1', 'tier2', 'tier3'].map((tier, idx) => (
+                        <React.Fragment key={tier}>
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Max (km)</label>
+                            <input type="number" step="0.1"
+                              value={platformSettings?.rideAutoPricing?.[tier]?.maxDistanceKm || (idx===0?1.5:idx===1?2.5:9999)}
+                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
+                              className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Fee (₹)</label>
+                            <input type="number" 
+                              value={platformSettings?.rideAutoPricing?.[tier]?.fee || (idx===0?35:idx===1?50:65)}
+                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], fee: parseFloat(e.target.value) } } })}
+                              className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                            />
+                          </div>
+                        </React.Fragment>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="flex flex-col gap-1">

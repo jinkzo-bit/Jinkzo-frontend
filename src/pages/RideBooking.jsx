@@ -9,7 +9,7 @@ import LocationPickerModal from '../components/LocationPickerModal';
 
 export default function RideBooking() {
   const { user, token } = useAuthStore();
-  const { showToast } = useCartStore();
+  const { showToast, platformSettings } = useCartStore();
   const navigate = useNavigate();
 
   // Booking Type: 'ride' or 'parcel'
@@ -24,6 +24,7 @@ export default function RideBooking() {
   const [pickupZip, setPickupZip] = useState('');
   const [pickupLat, setPickupLat] = useState(null);
   const [pickupLng, setPickupLng] = useState(null);
+  const [pickupFormattedAddress, setPickupFormattedAddress] = useState('');
 
   // Destination Address
   const [destStreet, setDestStreet] = useState('');
@@ -32,6 +33,7 @@ export default function RideBooking() {
   const [destZip, setDestZip] = useState('');
   const [destLat, setDestLat] = useState(null);
   const [destLng, setDestLng] = useState(null);
+  const [destFormattedAddress, setDestFormattedAddress] = useState('');
 
   // Active inputs
   // Modal states for Location Pickers
@@ -93,13 +95,19 @@ export default function RideBooking() {
             // Fare preview calculation (matches backend logic)
             let computedFare;
             if (vehicleType === 'bike') {
-              if (calculatedDistance <= 1.5) computedFare = 20;
-              else if (calculatedDistance > 1.5 && calculatedDistance <= 2.5) computedFare = 30;
-              else computedFare = 40;
+              const p = platformSettings?.rideBikePricing || {
+                tier1: { maxDistanceKm: 1.5, fee: 20 }, tier2: { maxDistanceKm: 2.5, fee: 30 }, tier3: { maxDistanceKm: 9999, fee: 40 }
+              };
+              if (calculatedDistance <= p.tier1.maxDistanceKm) computedFare = p.tier1.fee;
+              else if (calculatedDistance > p.tier1.maxDistanceKm && calculatedDistance <= p.tier2.maxDistanceKm) computedFare = p.tier2.fee;
+              else computedFare = p.tier3.fee;
             } else {
-              if (calculatedDistance <= 1.5) computedFare = 35;
-              else if (calculatedDistance > 1.5 && calculatedDistance <= 2.5) computedFare = 50;
-              else computedFare = 65;
+              const p = platformSettings?.rideAutoPricing || {
+                tier1: { maxDistanceKm: 1.5, fee: 35 }, tier2: { maxDistanceKm: 2.5, fee: 50 }, tier3: { maxDistanceKm: 9999, fee: 65 }
+              };
+              if (calculatedDistance <= p.tier1.maxDistanceKm) computedFare = p.tier1.fee;
+              else if (calculatedDistance > p.tier1.maxDistanceKm && calculatedDistance <= p.tier2.maxDistanceKm) computedFare = p.tier2.fee;
+              else computedFare = p.tier3.fee;
             }
             setFare(computedFare);
           }
@@ -303,7 +311,7 @@ export default function RideBooking() {
                     {pickupLat && pickupLng ? (
                       <div className="flex flex-col">
                         <span className="font-bold truncate">{pickupStreet || 'Location selected'}</span>
-                        <span className="text-[10px] text-muted truncate">{pickupCity} {pickupZip}</span>
+                        <span className="text-[10px] text-muted truncate">{pickupFormattedAddress || `${pickupCity} ${pickupZip}`}</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 text-muted font-semibold">
@@ -351,7 +359,7 @@ export default function RideBooking() {
                     {destLat && destLng ? (
                       <div className="flex flex-col">
                         <span className="font-bold truncate">{destStreet || 'Location selected'}</span>
-                        <span className="text-[10px] text-muted truncate">{destCity} {destZip}</span>
+                        <span className="text-[10px] text-muted truncate">{destFormattedAddress || `${destCity} ${destZip}`}</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 text-muted font-semibold">
@@ -395,6 +403,7 @@ export default function RideBooking() {
                 setPickupZip(addr.zip);
                 setPickupLat(addr.lat);
                 setPickupLng(addr.lng);
+                setPickupFormattedAddress(addr.formattedAddress);
                 setIsPickupPickerOpen(false);
               }}
             />
@@ -411,6 +420,7 @@ export default function RideBooking() {
                 setDestZip(addr.zip);
                 setDestLat(addr.lat);
                 setDestLng(addr.lng);
+                setDestFormattedAddress(addr.formattedAddress);
                 setIsDestPickerOpen(false);
               }}
             />

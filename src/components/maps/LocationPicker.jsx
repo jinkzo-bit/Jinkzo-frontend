@@ -55,11 +55,11 @@ export default function LocationPicker({
   });
 
   const [mapCenter, setMapCenter] = useState({
-    lat: initialAddress?.lat || INDIA_CENTER_LAT,
-    lng: initialAddress?.lng || INDIA_CENTER_LNG,
+    lat: (initialAddress?.lat != null && initialAddress?.lat !== '') ? Number(initialAddress.lat) : INDIA_CENTER_LAT,
+    lng: (initialAddress?.lng != null && initialAddress?.lng !== '') ? Number(initialAddress.lng) : INDIA_CENTER_LNG,
   });
-  const [mapZoom, setMapZoom] = useState(initialAddress?.lat ? HIGH_ZOOM : 4);
-  const [hasValidLocation, setHasValidLocation] = useState(!!initialAddress?.lat);
+  const [mapZoom, setMapZoom] = useState((initialAddress?.lat != null && initialAddress?.lat !== '') ? HIGH_ZOOM : 4);
+  const [hasValidLocation, setHasValidLocation] = useState((initialAddress?.lat != null && initialAddress?.lat !== ''));
 
   const [isLocating, setIsLocating]   = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -91,9 +91,9 @@ export default function LocationPicker({
 
   // Initial load
   useEffect(() => {
-    const initLat = Number(initialAddress?.lat);
-    const initLng = Number(initialAddress?.lng);
-    const isValidInitCoord = Number.isFinite(initLat) && Number.isFinite(initLng) && initLat >= -90 && initLat <= 90 && initLng >= -180 && initLng <= 180;
+    const initLat = initialAddress?.lat != null && initialAddress?.lat !== '' ? Number(initialAddress.lat) : null;
+    const initLng = initialAddress?.lng != null && initialAddress?.lng !== '' ? Number(initialAddress.lng) : null;
+    const isValidInitCoord = initLat !== null && initLng !== null && Number.isFinite(initLat) && Number.isFinite(initLng) && initLat >= -90 && initLat <= 90 && initLng >= -180 && initLng <= 180;
 
     if (isValidInitCoord) {
       setMapCenter({ lat: initLat, lng: initLng });

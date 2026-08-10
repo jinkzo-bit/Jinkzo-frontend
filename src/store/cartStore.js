@@ -234,8 +234,9 @@ export const useCartStore = create(
     }
   },
 
-  getCalculationsWithoutPromo: () => {
+  getCalculationsWithoutPromo: (distanceKm = null) => {
     const { items, platformSettings } = get();
+    
     const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     
     // Group unique restaurants
@@ -253,11 +254,21 @@ export const useCartStore = create(
     let deliveryFee = 0;
     const restaurantFees = {};
     
-    const baseFee = platformSettings ? platformSettings.deliveryBaseFee : 40;
-    
+    // Use configured tiers, or default if distance unknown
+    const fdp = platformSettings?.foodDeliveryPricing || {
+      tier1: { maxDistanceKm: 2, fee: 20 },
+      tier2: { maxDistanceKm: 3, fee: 25 }
+    };
+
     Object.keys(uniqueRestaurants).forEach(rId => {
-      const rest = uniqueRestaurants[rId];
-      const fee = baseFee + Math.floor(rest.deliveryTime / 10) * 5;
+      let fee = fdp.tier1.fee; // Default preview
+      if (distanceKm !== undefined && distanceKm !== null) {
+        if (distanceKm <= fdp.tier1.maxDistanceKm) {
+          fee = fdp.tier1.fee;
+        } else {
+          fee = fdp.tier2.fee;
+        }
+      }
       restaurantFees[rId] = fee;
       deliveryFee += fee;
     });
@@ -268,8 +279,8 @@ export const useCartStore = create(
     return { subtotal, deliveryFee, platformFee, taxes: 0, restaurantFees };
   },
 
-  getCalculations: () => {
-    const { subtotal, deliveryFee, platformFee, restaurantFees } = get().getCalculationsWithoutPromo();
+  getCalculations: (distanceKm = null) => {
+    const { subtotal, deliveryFee, platformFee, restaurantFees } = get().getCalculationsWithoutPromo(distanceKm);
     const { promoDiscount } = get();
 
     const total = Math.max(0, subtotal + deliveryFee + platformFee - promoDiscount);

@@ -93,7 +93,7 @@ export default function Checkout() {
     }
   }, [restaurant?.lat, restaurant?.lng, user?.addresses?.[selectedAddressIndex]?.lat, user?.addresses?.[selectedAddressIndex]?.lng]); // eslint-disable-line
 
-  const { subtotal, deliveryFee, platformFee, promoDiscount, total, restaurantFees } = getCalculations();
+  const { subtotal, deliveryFee, platformFee, promoDiscount, total, restaurantFees } = getCalculations(routeInfo?.distanceKm);
 
   // Group items by restaurant
   const groupedItems = items.reduce((acc, item) => {
@@ -457,7 +457,7 @@ export default function Checkout() {
               <div className="flex flex-col gap-1 border-t border-b border-line py-1.5 my-0.5">
                 <div className="flex items-center justify-between font-semibold">
                   <span>Total Delivery Fee</span>
-                  <span className="text-main font-bold">₹{deliveryFee}</span>
+                  <span className="text-main font-bold">{routeInfo ? `₹${deliveryFee}` : 'Calculating...'}</span>
                 </div>
                 {groupedList.map(group => {
                   const fee = restaurantFees?.[group.restaurantId] || 0;
@@ -481,13 +481,17 @@ export default function Checkout() {
                   <span>-₹{promoDiscount}</span>
                 </div>
               )}
+              <div className="flex justify-between items-center text-lg text-primary font-bold mt-1.5">
+                <span>Total to Pay</span>
+                <span>{routeInfo ? `₹${total}` : 'Calculating...'}</span>
+              </div>
 
 
             </div>
 
             <div className="flex items-center justify-between text-sm font-bold text-main">
               <span>Total Payable</span>
-              <span className="text-primary text-base">₹{total.toFixed(2)}</span>
+              <span className="text-primary text-base">{routeInfo ? `₹${total.toFixed(2)}` : 'Calculating...'}</span>
             </div>
 
             {errorMsg && (
