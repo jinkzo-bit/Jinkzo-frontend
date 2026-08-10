@@ -753,11 +753,13 @@ export default function DeliveryDashboard() {
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${getStatusBadge(selectedOrder.status)}`}>{selectedOrder.status}</span>
                     </div>
 
-                    {/* Real Google Maps tracking map */}
+                    {/* Real Google Maps tracking map using exact order location snapshots */}
                     <InteractiveMap 
                       status={selectedOrder.status} 
-                      restaurantAddress={selectedOrderRestaurantAddress}
-                      customerAddress={`${selectedOrder.address?.street || ''}, ${selectedOrder.address?.city || ''}, ${selectedOrder.address?.state || ''} - ${selectedOrder.address?.zip || ''}`}
+                      restaurantLat={selectedOrder.restaurantLocation?.lat}
+                      restaurantLng={selectedOrder.restaurantLocation?.lng}
+                      customerLat={selectedOrder.customerLocation?.lat}
+                      customerLng={selectedOrder.customerLocation?.lng}
                       orderId={selectedOrder._id}
                     />
 

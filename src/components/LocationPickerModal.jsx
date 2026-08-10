@@ -7,9 +7,8 @@ import { isValidCoordinates } from '../utils/coordinates';
 import { API_BASE } from '../config/api';
 import PlacesAutocomplete from './maps/PlacesAutocomplete';
 
-// ── Default location & zoom ───────────────────────────────────────────────────
-const DEFAULT_LAT  = 19.0760;
-const DEFAULT_LNG  = 72.8777;
+const INDIA_CENTER_LAT = 20.5937;
+const INDIA_CENTER_LNG = 78.9629;
 const HIGH_ZOOM    = 17;
 
 const MAP_CONTAINER_STYLE = { height: '100%', width: '100%' };
@@ -83,10 +82,11 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
 
   // ── Map center state ─────────────────────────────────────────────────────
   const [mapCenter, setMapCenter] = useState({
-    lat: initialAddress?.lat || DEFAULT_LAT,
-    lng: initialAddress?.lng || DEFAULT_LNG,
+    lat: initialAddress?.lat || INDIA_CENTER_LAT,
+    lng: initialAddress?.lng || INDIA_CENTER_LNG,
   });
-  const [mapZoom, setMapZoom] = useState(initialAddress?.lat ? HIGH_ZOOM : 13);
+  const [mapZoom, setMapZoom] = useState(initialAddress?.lat ? HIGH_ZOOM : 4);
+  const [hasValidLocation, setHasValidLocation] = useState(!!initialAddress?.lat);
 
   // ── UI state ─────────────────────────────────────────────────────────────
   const [isLocating, setIsLocating]   = useState(false);
@@ -118,18 +118,18 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
   useEffect(() => {
     if (!isOpen) return;
 
-    const initLat = initialAddress?.lat || DEFAULT_LAT;
-    const initLng = initialAddress?.lng || DEFAULT_LNG;
-    const initZoom = initialAddress?.lat ? HIGH_ZOOM : 13;
+    if (initialAddress?.lat && initialAddress?.lng) {
+      const initLat = initialAddress.lat;
+      const initLng = initialAddress.lng;
 
-    setMapCenter({ lat: initLat, lng: initLng });
-    setMapZoom(initZoom);
-    setCenterLat(initLat);
-    setCenterLng(initLng);
-    setPlaceId(null);
-    setFormattedAddress('');
+      setMapCenter({ lat: initLat, lng: initLng });
+      setMapZoom(HIGH_ZOOM);
+      setCenterLat(initLat);
+      setCenterLng(initLng);
+      setHasValidLocation(true);
+      setPlaceId(null);
+      setFormattedAddress('');
 
-    if (initialAddress) {
       fillForm({
         houseNo: '',
         street: initialAddress.street || '',
@@ -143,6 +143,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
         lat: initLat,
         lng: initLng,
       });
+
       // Reverse geocode only if we lack a formatted address or street
       if (!initialAddress.formattedAddress && !initialAddress.street) {
         setIsGeocoding(true);
@@ -155,6 +156,51 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           .catch(() => setIsGeocoding(false));
       } else {
         skipNextGeocodeRef.current = true;
+      }
+    } else {
+      // New address: no initial coords. Try GPS automatically.
+      setMapCenter({ lat: INDIA_CENTER_LAT, lng: INDIA_CENTER_LNG });
+      setMapZoom(4);
+      setCenterLat(null);
+      setCenterLng(null);
+      setHasValidLocation(false);
+      setPlaceId(null);
+      setFormattedAddress('');
+      
+      if (navigator.geolocation) {
+        setIsLocating(true);
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+            if (mapRef.current) {
+              mapRef.current.panTo({ lat, lng });
+              mapRef.current.setZoom(HIGH_ZOOM);
+            } else {
+              setMapCenter({ lat, lng });
+              setMapZoom(HIGH_ZOOM);
+            }
+            setCenterLat(lat);
+            setCenterLng(lng);
+            setHasValidLocation(true);
+            setLocationSource('GPS');
+            setGpsAccuracy(accuracy);
+            
+            fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`)
+              .then(res => res.json())
+              .then(data => {
+                if (data.success && data.data) {
+                  fillForm({ ...data.data, gpsAccuracy: accuracy }, 'GPS');
+                }
+                setIsLocating(false);
+              })
+              .catch(() => setIsLocating(false));
+          },
+          (err) => {
+            console.warn('Auto-GPS failed on mount:', err.message);
+            setIsLocating(false);
+          },
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        );
       }
     }
   }, [isOpen]); // eslint-disable-line
@@ -181,6 +227,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       const lng = center.lng();
       setCenterLat(lat);
       setCenterLng(lng);
+      setHasValidLocation(true);
 
       // Skip geocoding if a Places selection just happened
       if (skipNextGeocodeRef.current) {
@@ -232,6 +279,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
 
     setPlaceId(pid);
     setFormattedAddress(fa);
+    setHasValidLocation(true);
 
     // Prevent idle listener from running a second reverse geocode pass
     skipNextGeocodeRef.current = true;
@@ -266,7 +314,10 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           setMapZoom(HIGH_ZOOM);
         }
         setIsLocating(false);
-        setLocationSource('GPS');
+            setCenterLat(lat);
+            setCenterLng(lng);
+            setHasValidLocation(true);
+            setLocationSource('GPS');
         // Store accuracy for display
         setGpsAccuracy(accuracy);
         // Force a quick reverse geocode via proxy for immediate feedback
@@ -297,7 +348,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = () => {
-    if (!isValidCoordinates(centerLat, centerLng)) {
+    if (!hasValidLocation || !isValidCoordinates(centerLat, centerLng)) {
       alert('Please select a valid location on the map first.');
       return;
     }
@@ -582,7 +633,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           <button
             type="button"
             onClick={handleSave}
-            disabled={!centerLat || !centerLng || isGeocoding}
+            disabled={!hasValidLocation || !centerLat || !centerLng || isGeocoding}
             className="w-full py-3.5 bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white text-[13px] font-extrabold rounded-2xl cursor-pointer shadow-lg shadow-violet-900/40 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
           >
             <Check className="w-4 h-4" />

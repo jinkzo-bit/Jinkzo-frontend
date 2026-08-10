@@ -182,20 +182,10 @@ export default function Checkout() {
           isVeg: i.isVeg,
           restaurantId: i.restaurantId
         })),
-        address: {
-          street: activeAddress.street,
-          city: activeAddress.city,
-          state: activeAddress.state,
-          zip: activeAddress.zip
-        },
         addressId: activeAddress._id,
         restaurantId: items[0]?.restaurantId || restaurant?._id,
         paymentMethod,
-        subtotal,
-        deliveryFee,
         promoCode: promoCode || '',
-        promoDiscount,
-        total,
         instruction: deliveryInstructions
       };
 

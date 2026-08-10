@@ -267,30 +267,19 @@ export default function GoogleMapContainer({
       let restPos = (restaurantLat && restaurantLng) ? { lat: restaurantLat, lng: restaurantLng } : null;
       let custPos = (customerLat && customerLng) ? { lat: customerLat, lng: customerLng } : null;
 
-      if (!restPos && restaurantAddress) {
-        try {
-          const res = await fetch(`${API_BASE}/maps/geocode?address=${encodeURIComponent(restaurantAddress)}`);
-          const data = await res.json();
-          if (data.success && data.data) restPos = { lat: data.data.lat, lng: data.data.lng };
-        } catch (_) { /* ignore */ }
-      }
-      if (!custPos && customerAddress) {
-        try {
-          const res = await fetch(`${API_BASE}/maps/geocode?address=${encodeURIComponent(customerAddress)}`);
-          const data = await res.json();
-          if (data.success && data.data) custPos = { lat: data.data.lat, lng: data.data.lng };
-        } catch (_) { /* ignore */ }
+      if (!restPos || !custPos) {
+        console.warn('[GoogleMapContainer] Missing required coordinates for tracking map.');
+        return;
       }
 
       // Safe fallback if totally unresolved
-      let restLatLng = restPos ? { lat: restPos.lat, lng: restPos.lng } : { lat: 15.8600, lng: 78.2618 };
-      let custLatLng = custPos ? { lat: custPos.lat, lng: custPos.lng } : { lat: 15.8520, lng: 78.2700 };
+      let restLatLng = { lat: restPos.lat, lng: restPos.lng };
+      let custLatLng = { lat: custPos.lat, lng: custPos.lng };
 
       // Avoid drawing extremely short routes (same location)
       const dist = Math.hypot(restLatLng.lat - custLatLng.lat, restLatLng.lng - custLatLng.lng);
       if (dist < 0.005) {
-        restLatLng = { lat: 15.8600, lng: 78.2618 };
-        custLatLng = { lat: 15.8520, lng: 78.2700 };
+         console.warn('[GoogleMapContainer] Locations are identical, not drawing route.');
       }
 
       setRestaurantPos(restLatLng);

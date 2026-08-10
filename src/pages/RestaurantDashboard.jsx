@@ -406,8 +406,8 @@ export default function RestaurantDashboard() {
     e.preventDefault();
     setIsProfileSaving(true);
     
-    // Validate dummy coordinates
-    if (Number(profileLat) === 19.076 && Number(profileLng) === 72.8777) {
+    // Validate missing or dummy coordinates
+    if (!profileLat || !profileLng || (Number(profileLat) === 19.076 && Number(profileLng) === 72.8777)) {
       setIsProfileSaving(false);
       return alert("Please update your exact location using the map before saving.");
     }
@@ -1343,7 +1343,7 @@ export default function RestaurantDashboard() {
                   <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Kitchen Address & Location</label>
                   
                   {/* Current address display */}
-                  <div className="bg-base border border-line-strong rounded-xl p-3 flex flex-col gap-2">
+                  <div className="bg-base border border-line-strong rounded-xl p-3 flex flex-col gap-2 relative">
                     {profileAddress ? (
                       <>
                         <p className="text-xs font-semibold text-main leading-relaxed">{profileAddress}</p>
@@ -1353,7 +1353,7 @@ export default function RestaurantDashboard() {
                             {Number(profileLat).toFixed(5)}°N, {Number(profileLng).toFixed(5)}°E
                           </p>
                         )}
-                        {(Number(profileLat) === 19.076 && Number(profileLng) === 72.8777) && (
+                        {(!profileLat || !profileLng || (Number(profileLat) === 19.076 && Number(profileLng) === 72.8777)) && (
                           <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-red-700 bg-red-50 p-2 rounded-lg border border-red-200">
                             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                             <span>Location unavailable. Please set exact location on map.</span>

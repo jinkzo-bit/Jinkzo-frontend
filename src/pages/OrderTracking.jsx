@@ -166,18 +166,7 @@ export default function OrderTracking() {
             setSiblingOrders([]);
           }
           
-          // Fetch Restaurant details for address geocoding
-          if (data.restaurantId && !restaurantAddress) {
-            try {
-              const restRes = await fetch(`${API_BASE}/restaurants/${data.restaurantId}`);
-              if (restRes.ok) {
-                const restData = await restRes.json();
-                setRestaurantAddress(restData.address);
-              }
-            } catch (err) {
-              console.error('Error fetching restaurant details for map:', err);
-            }
-          }
+          // No longer fetching restaurant details for map geocoding — relying solely on exact coordinates from snapshot
           
           // Adjust countdown based on status
           const isRide = data.orderType === 'ride';
@@ -376,13 +365,8 @@ export default function OrderTracking() {
       {/* Real Google Maps tracking map */}
       <InteractiveMap 
         status={order.status} 
-        restaurantAddress={order.orderType === 'ride' 
-          ? order.restaurantLocation?.formattedAddress || `${order.pickupAddress?.street}, ${order.pickupAddress?.city}` 
-          : order.restaurantLocation?.formattedAddress || restaurantAddress
-        }
         restaurantLat={order.restaurantLocation?.lat}
         restaurantLng={order.restaurantLocation?.lng}
-        customerAddress={order.customerLocation?.formattedAddress || `${order.address?.street}, ${order.address?.city}`}
         customerLat={order.customerLocation?.lat}
         customerLng={order.customerLocation?.lng}
         deliveryMethod={order.orderType === 'ride' ? 'Ride' : 'Standard'}
