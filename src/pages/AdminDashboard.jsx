@@ -2128,6 +2128,17 @@ export default function AdminDashboard() {
                         </label>
                       </div>
 
+                      <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox"
+                            checked={platformSettings?.rideServices?.parcelEnabled ?? true}
+                            onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, parcelEnabled: e.target.checked } })}
+                            className="w-4 h-4 text-primary"
+                          />
+                          <span className="text-[11px] font-bold uppercase">Parcel Delivery ON</span>
+                        </label>
+                      </div>
+
                       <div className="flex flex-col gap-2 bg-base border border-line-strong rounded-lg p-3">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox"

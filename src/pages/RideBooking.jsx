@@ -9,13 +9,20 @@ import LocationPickerModal from '../components/LocationPickerModal';
 
 export default function RideBooking() {
   const { user, token } = useAuthStore();
-  const { showToast, platformSettings } = useCartStore();
+  const { showToast, platformSettings, fetchPlatformSettings } = useCartStore();
   const navigate = useNavigate();
 
   // Booking Type: 'ride' or 'parcel'
   const [serviceType, setServiceType] = useState('ride');
-  // Vehicle Type: 'bike' or 'auto'
   const [vehicleType, setVehicleType] = useState('bike');
+
+  const isParcelEnabled = platformSettings?.rideServices?.parcelEnabled !== false;
+
+  useEffect(() => {
+    if (serviceType === 'parcel' && !isParcelEnabled) {
+      setServiceType('ride');
+    }
+  }, [serviceType, isParcelEnabled]);
 
   // Pickup Address
   const [pickupStreet, setPickupStreet] = useState('');
@@ -82,17 +89,22 @@ export default function RideBooking() {
     }
   }, [token, navigate]);
 
-  // Real distance calculation for preview only
-  useEffect(() => {
+  React.useEffect(() => {
+    fetchPlatformSettings();
+  }, []);
+
+  React.useEffect(() => {
     const fetchRoute = async () => {
       if (pickupLat && pickupLng && destLat && destLng) {
+        setDistance(null); // indicating 'Calculating...'
         try {
-          const route = await getRoute({ lat: pickupLat, lng: pickupLng }, { lat: destLat, lng: destLng });
-          if (route && route.success) {
-            const calculatedDistance = route.distanceKm;
+          const res = await getRoute({ lat: pickupLat, lng: pickupLng }, { lat: destLat, lng: destLng });
+          if (res && res.success && res.distanceKm != null) {
+            const calculatedDistance = res.distanceKm;
             setDistance(calculatedDistance);
-
+            
             // Fare preview calculation (matches backend logic)
+
             let computedFare;
             if (vehicleType === 'bike') {
               const p = platformSettings?.rideBikePricing || {
@@ -138,17 +150,17 @@ export default function RideBooking() {
 
   const selectSavedAddress = (addr, type) => {
     if (type === 'pickup') {
-      setPickupStreet(addr.street);
-      setPickupCity(addr.city);
-      setPickupState(addr.state);
-      setPickupZip(addr.zip);
+      setPickupStreet(addr.street || '');
+      setPickupCity(addr.city || '');
+      setPickupState(addr.state || '');
+      setPickupZip(addr.zip || '');
       setPickupLat(addr.lat ?? null);
       setPickupLng(addr.lng ?? null);
     } else {
-      setDestStreet(addr.street);
-      setDestCity(addr.city);
-      setDestState(addr.state);
-      setDestZip(addr.zip);
+      setDestStreet(addr.street || '');
+      setDestCity(addr.city || '');
+      setDestState(addr.state || '');
+      setDestZip(addr.zip || '');
       setDestLat(addr.lat ?? null);
       setDestLng(addr.lng ?? null);
     }
@@ -158,12 +170,12 @@ export default function RideBooking() {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!pickupStreet || !pickupCity || !pickupZip) {
-      setErrorMsg('Please complete your Pickup Location details.');
+    if (!pickupLat || !pickupLng) {
+      setErrorMsg('Please select your Pickup Location on the map.');
       return;
     }
-    if (!destStreet || !destCity || !destZip) {
-      setErrorMsg('Please complete your Destination Location details.');
+    if (!destLat || !destLng) {
+      setErrorMsg('Please select your Destination Location on the map.');
       return;
     }
 
@@ -185,7 +197,7 @@ export default function RideBooking() {
 
     try {
       const payload = {
-        orderType: 'ride',
+        orderType: serviceType, // Send actual service type ('ride' or 'parcel')
         vehicleType: vehicleType,
         pickupAddress: {
           street: pickupStreet,
@@ -274,7 +286,7 @@ export default function RideBooking() {
           )}
           
           {/* Service toggle selection */}
-          <div className="grid grid-cols-2 gap-4 bg-surface p-2 rounded-2xl border border-line shadow-2xs">
+          <div className={`grid ${isParcelEnabled ? 'grid-cols-2' : 'grid-cols-1'} gap-4 bg-surface p-2 rounded-2xl border border-line shadow-2xs`}>
             <button
               onClick={() => setServiceType('ride')}
               className={`p-4 rounded-xl flex items-center justify-center gap-3 font-bold text-xs cursor-pointer transition-all ${
@@ -286,17 +298,19 @@ export default function RideBooking() {
               <Bike className="w-5 h-5" />
               <span>Book a Bike Taxi</span>
             </button>
-            <button
-              onClick={() => setServiceType('parcel')}
-              className={`p-4 rounded-xl flex items-center justify-center gap-3 font-bold text-xs cursor-pointer transition-all ${
-                serviceType === 'parcel' 
-                  ? 'bg-yellow-400 text-black shadow-xs' 
-                  : 'text-muted hover:bg-base'
-              }`}
-            >
-              <Package className="w-5 h-5" />
-              <span>Send a Local Parcel</span>
-            </button>
+            {isParcelEnabled && (
+              <button
+                onClick={() => setServiceType('parcel')}
+                className={`p-4 rounded-xl flex items-center justify-center gap-3 font-bold text-xs cursor-pointer transition-all ${
+                  serviceType === 'parcel' 
+                    ? 'bg-yellow-400 text-black shadow-xs' 
+                    : 'text-muted hover:bg-base'
+                }`}
+              >
+                <Package className="w-5 h-5" />
+                <span>Send a Local Parcel</span>
+              </button>
+            )}
           </div>
 
           {/* Form parameters */}
@@ -562,15 +576,19 @@ export default function RideBooking() {
             <div className="flex flex-col gap-2.5 border-t border-b border-line py-3.5 text-xs text-gray-650 font-semibold">
               <div className="flex justify-between">
                 <span>Service Requested</span>
-                <span className="text-main font-bold capitalize">Ride {serviceType}</span>
+                <span className="text-main font-bold capitalize">{serviceType === 'ride' ? 'Ride Taxi' : 'Local Parcel'}</span>
               </div>
               <div className="flex justify-between">
                 <span>Calculated Distance</span>
-                <span className="text-main font-bold">{distance > 0 ? `${distance} km` : 'Enter locations...'}</span>
+                <span className="text-main font-bold">
+                  {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : `${distance} km`)}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>Distance Pricing Fee</span>
-                <span className="text-main font-bold">{fare > 0 ? `₹${fare}` : 'Enter locations...'}</span>
+                <span className="text-main font-bold">
+                  {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : `₹${fare}`)}
+                </span>
               </div>
             </div>
 
