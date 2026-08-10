@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Bike, Package, MapPin, ArrowRight, CreditCard, Sparkles, AlertCircle, Check, HelpCircle, FileText } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
-import GoogleMapContainer from '../components/GoogleMapContainer';
+import { getRoute } from '../services/routingService';
+import LocationPickerModal from '../components/LocationPickerModal';
 
 export default function RideBooking() {
   const { user, token } = useAuthStore();
@@ -33,7 +34,9 @@ export default function RideBooking() {
   const [destLng, setDestLng] = useState(null);
 
   // Active inputs
-  const [activeAddressField, setActiveAddressField] = useState('pickup'); // 'pickup' or 'destination'
+  // Modal states for Location Pickers
+  const [isPickupPickerOpen, setIsPickupPickerOpen] = useState(false);
+  const [isDestPickerOpen, setIsDestPickerOpen] = useState(false);
 
   // Calculations
   const [distance, setDistance] = useState(0);
@@ -77,42 +80,39 @@ export default function RideBooking() {
     }
   }, [token, navigate]);
 
-  // Deterministic distance calculation
+  // Real distance calculation for preview only
   useEffect(() => {
-    const pickupString = `${pickupStreet} ${pickupCity} ${pickupZip}`.trim();
-    const destString = `${destStreet} ${destCity} ${destZip}`.trim();
+    const fetchRoute = async () => {
+      if (pickupLat && pickupLng && destLat && destLng) {
+        try {
+          const route = await getRoute({ lat: pickupLat, lng: pickupLng }, { lat: destLat, lng: destLng });
+          if (route && route.success) {
+            const calculatedDistance = route.distanceKm;
+            setDistance(calculatedDistance);
 
-    if (pickupString.length > 5 && destString.length > 5) {
-      const combined = pickupString + destString;
-      let hash = 0;
-      for (let i = 0; i < combined.length; i++) {
-        hash = combined.charCodeAt(i) + ((hash << 5) - hash);
-      }
-      const seed = Math.abs(hash % 26);
-      const computedDistance = 1.0 + (seed / 10); // 1.0 to 3.5 km
-      const roundedDistance = Math.round(computedDistance * 10) / 10;
-      setDistance(roundedDistance);
-
-      // Fare rule calculation
-      // Bike: 1km = 20, 2km = 30, 3km+ = 40
-      // Auto: 1km = 35, 2km = 50, 3km+ = 65
-      let computedFare;
-      if (vehicleType === 'bike') {
-        if (roundedDistance <= 1.5) computedFare = 20;
-        else if (roundedDistance > 1.5 && roundedDistance <= 2.5) computedFare = 30;
-        else computedFare = 40;
+            // Fare preview calculation (matches backend logic)
+            let computedFare;
+            if (vehicleType === 'bike') {
+              if (calculatedDistance <= 1.5) computedFare = 20;
+              else if (calculatedDistance > 1.5 && calculatedDistance <= 2.5) computedFare = 30;
+              else computedFare = 40;
+            } else {
+              if (calculatedDistance <= 1.5) computedFare = 35;
+              else if (calculatedDistance > 1.5 && calculatedDistance <= 2.5) computedFare = 50;
+              else computedFare = 65;
+            }
+            setFare(computedFare);
+          }
+        } catch (err) {
+          console.error("Failed to preview route distance", err);
+        }
       } else {
-        if (roundedDistance <= 1.5) computedFare = 35;
-        else if (roundedDistance > 1.5 && roundedDistance <= 2.5) computedFare = 50;
-        else computedFare = 65;
+        setDistance(0);
+        setFare(0);
       }
-      setFare(computedFare);
-
-    } else {
-      setDistance(0);
-      setFare(0);
-    }
-  }, [pickupStreet, pickupCity, pickupZip, destStreet, destCity, destZip, vehicleType]);
+    };
+    fetchRoute();
+  }, [pickupLat, pickupLng, destLat, destLng, vehicleType]);
 
   const selectSavedAddress = (addr, type) => {
     if (type === 'pickup') {
@@ -164,6 +164,7 @@ export default function RideBooking() {
     try {
       const payload = {
         orderType: 'ride',
+        vehicleType: vehicleType,
         pickupAddress: {
           street: pickupStreet,
           city: pickupCity,
@@ -172,7 +173,7 @@ export default function RideBooking() {
           lat: pickupLat,
           lng: pickupLng,
         },
-        deliveryAddress: {
+        address: {
           street: destStreet,
           city: destCity,
           state: destState || 'Andhra Pradesh',
@@ -180,10 +181,7 @@ export default function RideBooking() {
           lat: destLat,
           lng: destLng,
         },
-        deliveryFee: fare,
-        total: fare,
         paymentMethod,
-        distance,
         instruction: rideInstructions
       };
 
@@ -287,49 +285,32 @@ export default function RideBooking() {
             </h3>
 
             {/* Address fields inputs */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Pickup column */}
               <div className="flex flex-col gap-3">
                 <div className="flex justify-between items-center">
                   <h4 className="text-xs font-bold text-main flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                    <span>Pickup Location (Customer)</span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                    <span>Pickup Location</span>
                   </h4>
-                  <button
-                    type="button"
-                    onClick={() => setActiveAddressField('pickup')}
-                    className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-md ${
-                      activeAddressField === 'pickup' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-base text-muted'
-                    }`}
-                  >
-                    Select on Map
-                  </button>
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <input
-                    type="text"
-                    placeholder="Street Address (e.g. 123 Main St)"
-                    value={pickupStreet}
-                    onChange={(e) => setPickupStreet(e.target.value)}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main outline-none"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      placeholder="City"
-                      value={pickupCity}
-                      onChange={(e) => setPickupCity(e.target.value)}
-                      className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main outline-none"
-                    />
-                    <input
-                      type="text"
-                      placeholder="ZIP Code"
-                      value={pickupZip}
-                      onChange={(e) => setPickupZip(e.target.value)}
-                      className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main outline-none font-bold"
-                    />
+                  <div
+                    onClick={() => setIsPickupPickerOpen(true)}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-3 text-xs text-main cursor-pointer hover:border-violet-400 transition-colors"
+                  >
+                    {pickupLat && pickupLng ? (
+                      <div className="flex flex-col">
+                        <span className="font-bold truncate">{pickupStreet || 'Location selected'}</span>
+                        <span className="text-[10px] text-muted truncate">{pickupCity} {pickupZip}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-muted font-semibold">
+                        <MapPin className="w-4 h-4 text-primary" />
+                        Set Pickup Location on Map
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -360,40 +341,24 @@ export default function RideBooking() {
                     <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
                     <span>Destination (Achieving)</span>
                   </h4>
-                  <button
-                    type="button"
-                    onClick={() => setActiveAddressField('destination')}
-                    className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-md ${
-                      activeAddressField === 'destination' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' : 'bg-base text-muted'
-                    }`}
-                  >
-                    Select on Map
-                  </button>
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <input
-                    type="text"
-                    placeholder="Street Address (e.g. 456 Tech Park)"
-                    value={destStreet}
-                    onChange={(e) => setDestStreet(e.target.value)}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main outline-none"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      placeholder="City"
-                      value={destCity}
-                      onChange={(e) => setDestCity(e.target.value)}
-                      className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main outline-none"
-                    />
-                    <input
-                      type="text"
-                      placeholder="ZIP Code"
-                      value={destZip}
-                      onChange={(e) => setDestZip(e.target.value)}
-                      className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main outline-none font-bold"
-                    />
+                  <div
+                    onClick={() => setIsDestPickerOpen(true)}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-3 text-xs text-main cursor-pointer hover:border-violet-400 transition-colors"
+                  >
+                    {destLat && destLng ? (
+                      <div className="flex flex-col">
+                        <span className="font-bold truncate">{destStreet || 'Location selected'}</span>
+                        <span className="text-[10px] text-muted truncate">{destCity} {destZip}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-muted font-semibold">
+                        <MapPin className="w-4 h-4 text-red-500" />
+                        Set Destination on Map
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -416,39 +381,39 @@ export default function RideBooking() {
                   </div>
                 )}
               </div>
-
             </div>
 
-            {/* Google Map Picker Overlay */}
-            <div className="flex flex-col gap-1 mt-2">
-              <span className="text-[9px] text-muted font-extrabold uppercase flex justify-between">
-                <span>Select on map ({activeAddressField === 'pickup' ? 'Pickup Location' : 'Destination Location'})</span>
-                <span className="text-primary font-bold">✨ drag pin to locate</span>
-              </span>
-              <div className="w-full h-[220px] rounded-2xl overflow-hidden border border-gray-150 shadow-inner">
-                <GoogleMapContainer
-                  mode="picker"
-                  onAddressSelect={(addr) => {
-                    if (activeAddressField === 'pickup') {
-                      setPickupStreet(addr.street);
-                      setPickupCity(addr.city);
-                      setPickupState(addr.state);
-                      setPickupZip(addr.zip);
-                      setPickupLat(addr.lat ?? null);
-                      setPickupLng(addr.lng ?? null);
-                    } else {
-                      setDestStreet(addr.street);
-                      setDestCity(addr.city);
-                      setDestState(addr.state);
-                      setDestZip(addr.zip);
-                      setDestLat(addr.lat ?? null);
-                      setDestLng(addr.lng ?? null);
-                    }
-                  }}
-                />
-              </div>
-            </div>
+            <LocationPickerModal
+              isOpen={isPickupPickerOpen}
+              onClose={() => setIsPickupPickerOpen(false)}
+              title="Set Pickup Location"
+              initialAddress={{ lat: pickupLat, lng: pickupLng, street: pickupStreet, city: pickupCity, zip: pickupZip, state: pickupState }}
+              onConfirm={(addr) => {
+                setPickupStreet(addr.street);
+                setPickupCity(addr.city);
+                setPickupState(addr.state);
+                setPickupZip(addr.zip);
+                setPickupLat(addr.lat);
+                setPickupLng(addr.lng);
+                setIsPickupPickerOpen(false);
+              }}
+            />
 
+            <LocationPickerModal
+              isOpen={isDestPickerOpen}
+              onClose={() => setIsDestPickerOpen(false)}
+              title="Set Destination Location"
+              initialAddress={{ lat: destLat, lng: destLng, street: destStreet, city: destCity, zip: destZip, state: destState }}
+              onConfirm={(addr) => {
+                setDestStreet(addr.street);
+                setDestCity(addr.city);
+                setDestState(addr.state);
+                setDestZip(addr.zip);
+                setDestLat(addr.lat);
+                setDestLng(addr.lng);
+                setIsDestPickerOpen(false);
+              }}
+            />
           </div>
 
           {/* Payment selection */}
