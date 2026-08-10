@@ -5,8 +5,7 @@ import { MapPin, CreditCard, ChevronRight, Check, AlertCircle, Sparkles, User, S
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { playOrderPlacedSound } from '../utils/audio';
-import GoogleMapContainer from '../components/GoogleMapContainer';
-import AddressAutocomplete from '../components/AddressAutocomplete';
+import LocationPickerModal from '../components/LocationPickerModal';
 import { getRoute } from '../services/routingService';
 
 export default function Checkout() {
@@ -17,14 +16,12 @@ export default function Checkout() {
   // Address State
   const [selectedAddressIndex, setSelectedAddressIndex] = useState(0);
   const [showAddressForm, setShowAddressForm] = useState(false);
-  const [newStreet, setNewStreet] = useState('');
-  const [newCity, setNewCity] = useState('');
-  const [newState, setNewState] = useState('');
-  const [newZip, setNewZip] = useState('');
-  const [newLat, setNewLat] = useState(null);
-  const [newLng, setNewLng] = useState(null);
   const [isAddressSaving, setIsAddressSaving] = useState(false);
-  const [addressSelectMode, setAddressSelectMode] = useState('autocomplete'); // 'autocomplete' or 'map'
+
+  // Location Picker Modal State
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState(null);
+  const [editingAddressInitial, setEditingAddressInitial] = useState(null);
 
   // Payment State
   const [paymentMethod] = useState('COD');
@@ -122,17 +119,56 @@ export default function Checkout() {
 
   const activeAddresses = user?.addresses || [];
 
-  const handleAddAddress = async (e) => {
-    e.preventDefault();
-    if (!newStreet || !newCity || !newState || !newZip) return;
+  const handleOpenAddAddress = () => {
+    setEditingAddressId(null);
+    setEditingAddressInitial(null);
+    setShowLocationPicker(true);
+  };
+
+  const handleOpenEditAddress = (addr) => {
+    setEditingAddressId(addr._id);
+    setEditingAddressInitial(addr);
+    setShowLocationPicker(true);
+  };
+
+  const handleLocationPickerConfirm = async (addrDetails) => {
     setIsAddressSaving(true);
-    const res = await addAddress({ street: newStreet, city: newCity, state: newState, zip: newZip, isDefault: true, lat: newLat ?? null, lng: newLng ?? null });
-    setIsAddressSaving(false);
-    if (res.success) {
-      setShowAddressForm(false);
-      setSelectedAddressIndex(user?.addresses ? user.addresses.length : 0);
-      setNewStreet(''); setNewCity(''); setNewState(''); setNewZip('');
-      setNewLat(null); setNewLng(null);
+    
+    const normalizedAddr = {
+      houseNo: addrDetails.houseNo || '',
+      street: addrDetails.street || '',
+      area: addrDetails.area || '',
+      city: addrDetails.city || '',
+      state: addrDetails.state || '',
+      zip: addrDetails.zip || '',
+      lat: addrDetails.lat,
+      lng: addrDetails.lng,
+      formattedAddress: addrDetails.formattedAddress || '',
+      placeId: addrDetails.placeId || ''
+    };
+
+    try {
+      if (editingAddressId) {
+        if (useAuthStore.getState().editAddress) {
+          await useAuthStore.getState().editAddress(editingAddressId, normalizedAddr);
+        } else {
+          await useAuthStore.getState().deleteAddress(editingAddressId);
+          await useAuthStore.getState().addAddress({ ...normalizedAddr, isDefault: true });
+        }
+        showToast('Address updated successfully', 'success');
+      } else {
+        const res = await useAuthStore.getState().addAddress({ ...normalizedAddr, isDefault: true });
+        if (res.success) {
+          showToast('Address added successfully', 'success');
+        } else {
+          showToast(res.message || 'Failed to add address', 'error');
+        }
+      }
+      setShowLocationPicker(false);
+    } catch (err) {
+      showToast(err.message || 'Error saving address', 'error');
+    } finally {
+      setIsAddressSaving(false);
     }
   };
 
@@ -163,7 +199,6 @@ export default function Checkout() {
     }
     setIsSubmitting(false);
 
-    // Direct placement via Cash on Delivery
     await completeOrderPlacement(null);
   };
 
@@ -205,7 +240,6 @@ export default function Checkout() {
 
       showToast('Order placed successfully!', 'success');
       
-      // Update local user usedPromos in authStore
       if (promoCode) {
         const currentUser = useAuthStore.getState().user;
         if (currentUser) {
@@ -219,9 +253,9 @@ export default function Checkout() {
         }
       }
 
-      clearCart(); // Reset cart state
+      clearCart();
       playOrderPlacedSound();
-      navigate(`/order-tracking/${data._id}`); // Route to tracking with active timeline
+      navigate(`/order-tracking/${data._id}`);
 
     } catch (err) {
       setErrorMsg(err.message || 'Server error occurred during checkout');
@@ -239,7 +273,6 @@ export default function Checkout() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        {/* Address and payment section */}
         <div className="lg:col-span-2 flex flex-col gap-6">
 
           {!isRiderAvailable && !isCheckingRiders && (
@@ -252,14 +285,12 @@ export default function Checkout() {
             </div>
           )}
           
-          {/* Section 1: Address */}
           <section className="bg-surface rounded-2xl p-5 border border-line shadow-2xs flex flex-col gap-4">
             <h3 className="font-display font-semibold text-sm md:text-base text-main flex items-center gap-2">
               <MapPin className="w-5 h-5 text-primary" />
               <span>1. Delivery Address</span>
             </h3>
 
-            {/* Saved Addresses list */}
             {activeAddresses.length > 0 ? (
               <div className="flex flex-col gap-3">
                 {activeAddresses.map((addr, idx) => (
@@ -281,10 +312,21 @@ export default function Checkout() {
                         <p className="text-xs text-muted mt-0.5 leading-relaxed font-medium">
                           {addr.street}, {addr.city}, {addr.state} - {addr.zip}
                         </p>
-                        {(typeof addr.lat !== 'number' || typeof addr.lng !== 'number' || isNaN(addr.lat) || isNaN(addr.lng)) && (
-                          <div className="flex items-center gap-1 mt-1 text-red-500 bg-red-50 px-2 py-0.5 rounded w-max text-[10px] font-bold">
-                            <AlertTriangle className="w-3 h-3" />
-                            <span>Missing exact location coordinates</span>
+                        {(!addr.lat || !addr.lng) && (
+                          <div className="mt-2.5 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg flex items-center justify-between text-[11px] font-bold">
+                            <div className="flex items-center gap-1.5">
+                              <AlertCircle className="w-4 h-4" />
+                              <span>Missing exact location coordinates</span>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEditAddress(addr);
+                              }}
+                              className="bg-white text-red-700 px-2.5 py-1 rounded-md border border-red-200 hover:bg-red-100 transition-colors"
+                            >
+                              Edit Location
+                            </button>
                           </div>
                         )}
                       </div>
@@ -313,132 +355,22 @@ export default function Checkout() {
             )}
 
             {/* Address Toggle Form */}
-            {!showAddressForm ? (
-              <button
-                onClick={() => setShowAddressForm(true)}
-                className="text-xs font-bold text-primary hover:text-primary-hover flex items-center justify-start gap-1 cursor-pointer w-max px-1"
-              >
-                + Add New Address
-              </button>
-            ) : (
-              <form onSubmit={handleAddAddress} className="border-t border-line pt-4 flex flex-col gap-3">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-                  <h4 className="text-xs font-bold text-main">Add New Shipping Address</h4>
-                  <span className="text-[10px] text-primary font-bold">
-                    {addressSelectMode === 'autocomplete'
-                      ? '✨ Search location or use GPS'
-                      : '✨ Drag map pin to select location'}
-                  </span>
-                </div>
-
-                {/* Switcher */}
-                <div className="flex bg-base p-1 rounded-xl border border-line w-full md:w-max mb-1">
-                  <button
-                    type="button"
-                    onClick={() => setAddressSelectMode('autocomplete')}
-                    className={`flex-1 md:flex-initial text-center px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      addressSelectMode === 'autocomplete'
-                        ? 'bg-surface text-primary shadow-xs border border-line'
-                        : 'text-muted hover:text-main'
-                    }`}
-                  >
-                    ⌨️ Type Address
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAddressSelectMode('map')}
-                    className={`flex-1 md:flex-initial text-center px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      addressSelectMode === 'map'
-                        ? 'bg-surface text-primary shadow-xs border border-line'
-                        : 'text-muted hover:text-main'
-                    }`}
-                  >
-                    🗺️ Drop Pin
-                  </button>
-                </div>
-
-                {addressSelectMode === 'autocomplete' ? (
-                  <div className="w-full mb-1">
-                    <AddressAutocomplete
-                      onAddressSelect={(addr) => {
-                        setNewStreet(addr.street);
-                        setNewCity(addr.city);
-                        setNewState(addr.state);
-                        setNewZip(addr.zip);
-                        setNewLat(addr.lat ?? null);
-                        setNewLng(addr.lng ?? null);
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div className="w-full h-[200px] rounded-2xl overflow-hidden border border-line shadow-inner mb-1">
-                    <GoogleMapContainer
-                      mode="picker"
-                      onAddressSelect={(addr) => {
-                        setNewStreet(addr.street);
-                        setNewCity(addr.city);
-                        setNewState(addr.state);
-                        setNewZip(addr.zip);
-                        setNewLat(addr.lat ?? null);
-                        setNewLng(addr.lng ?? null);
-                      }}
-                    />
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Street Address (e.g. 123 Main St)"
-                    value={newStreet}
-                    onChange={(e) => setNewStreet(e.target.value)}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main placeholder:text-muted outline-none"
-                  />
-                  <input
-                    type="text"
-                    required
-                    placeholder="City (e.g. Bengaluru)"
-                    value={newCity}
-                    onChange={(e) => setNewCity(e.target.value)}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main placeholder:text-muted outline-none"
-                  />
-                  <input
-                    type="text"
-                    required
-                    placeholder="State (e.g. Karnataka)"
-                    value={newState}
-                    onChange={(e) => setNewState(e.target.value)}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main placeholder:text-muted outline-none"
-                  />
-                  <input
-                    type="text"
-                    required
-                    placeholder="ZIP Code (e.g. 560001)"
-                    value={newZip}
-                    onChange={(e) => setNewZip(e.target.value)}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main placeholder:text-muted outline-none"
-                  />
-                </div>
-                <div className="flex gap-2 justify-end mt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddressForm(false)}
-                    className="bg-gray-100 hover:skeleton text-main text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isAddressSaving}
-                    className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-4.5 py-2 rounded-xl shadow-md cursor-pointer disabled:opacity-50"
-                  >
-                    {isAddressSaving ? 'Saving...' : 'Save & Select'}
-                  </button>
-                </div>
-              </form>
-            )}
+            <button
+              onClick={handleOpenAddAddress}
+              className="text-[13px] font-extrabold text-violet-600 hover:text-violet-700 flex items-center justify-start gap-1 cursor-pointer w-max px-1 bg-violet-50 hover:bg-violet-100 py-2.5 px-4 rounded-xl transition-colors"
+            >
+              + Add New Delivery Location
+            </button>
           </section>
+
+          {/* Location Picker Modal */}
+          <LocationPickerModal
+            isOpen={showLocationPicker}
+            onClose={() => setShowLocationPicker(false)}
+            onConfirm={handleLocationPickerConfirm}
+            initialAddress={editingAddressInitial}
+            title={editingAddressId ? 'Update Delivery Location' : 'Set Delivery Location'}
+          />
 
           {/* Section 1.5: Delivery Instructions */}
           <section className="bg-surface rounded-2xl p-5 border border-line shadow-2xs flex flex-col gap-4">

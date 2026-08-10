@@ -21,29 +21,7 @@ const MAP_OPTIONS = {
   fullscreenControl: false,
   clickableIcons: false,
   gestureHandling: 'greedy',
-  styles: [
-    { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
-    { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
-    { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9e8f7' }] },
-    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
-    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e0e0e0' }] },
-    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dadada' }] },
-    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#c6c6c6' }] },
-    { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-    { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#e8f5e9' }] },
-    { featureType: 'park', elementType: 'geometry', stylers: [{ color: '#e5f2e5' }] },
-    { featureType: 'park', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
-    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
-    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e5f2e5' }] },
-    { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#f2f2f2' }] },
-    { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-    { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },
-    { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
-  ],
+  mapTypeId: 'roadmap',
 };
 
 // ── LocationPickerModal ───────────────────────────────────────────────────────
@@ -228,6 +206,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       setCenterLat(lat);
       setCenterLng(lng);
       setHasValidLocation(true);
+      console.log(`[LOCATION] MAP CENTER\nlat: ${lat}\nlng: ${lng}`);
 
       // Skip geocoding if a Places selection just happened
       if (skipNextGeocodeRef.current) {
@@ -241,7 +220,10 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
         try {
           const res = await fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`);
           const data = await res.json();
-          if (data.success && data.data) fillForm(data.data, 'MANUAL');
+          if (data.success && data.data) {
+            fillForm(data.data, 'MANUAL');
+            console.log(`[LOCATION] GEOCODE SUCCESS\nformattedAddress: ${data.data.formattedAddress}\nlat: ${data.data.lat}\nlng: ${data.data.lng}`);
+          }
         } catch (_) {
           // ignore
         }
@@ -320,12 +302,14 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
             setLocationSource('GPS');
         // Store accuracy for display
         setGpsAccuracy(accuracy);
+        console.log(`[LOCATION] GPS SUCCESS\nlat: ${lat}\nlng: ${lng}`);
         // Force a quick reverse geocode via proxy for immediate feedback
         fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`)
           .then(res => res.json())
           .then(data => {
             if (data.success && data.data) {
               fillForm({ ...data.data, gpsAccuracy: accuracy }, 'GPS');
+              console.log(`[LOCATION] GEOCODE SUCCESS\nformattedAddress: ${data.data.formattedAddress}\nlat: ${data.data.lat}\nlng: ${data.data.lng}`);
             }
           })
           .catch(() => {});
@@ -348,11 +332,22 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = () => {
-    if (!hasValidLocation || !isValidCoordinates(centerLat, centerLng)) {
-      alert('Please select a valid location on the map first.');
+    if (
+      !hasValidLocation || 
+      !isValidCoordinates(centerLat, centerLng) || 
+      typeof centerLat !== 'number' || 
+      typeof centerLng !== 'number' ||
+      centerLat < -90 || centerLat > 90 ||
+      centerLng < -180 || centerLng > 180 ||
+      (centerLat === 19.0760 && centerLng === 72.8777)
+    ) {
+      alert('Please select your exact location on the map.');
       return;
     }
     const fullStreet = [houseNo, street].filter(Boolean).join(', ');
+    
+    console.log(`[LOCATION] SAVE\nlat: ${centerLat}\nlng: ${centerLng}\nformattedAddress: ${formattedAddress || displayName || ''}\nplaceId: ${placeId || ''}`);
+    
     onConfirm({
       houseNo,
       street: fullStreet || street,
