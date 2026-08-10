@@ -93,7 +93,7 @@ export default function Checkout() {
     }
   }, [restaurant?.lat, restaurant?.lng, user?.addresses?.[selectedAddressIndex]?.lat, user?.addresses?.[selectedAddressIndex]?.lng]); // eslint-disable-line
 
-  const { subtotal, deliveryFee, platformFee, promoDiscount, total, restaurantFees } = getCalculations(routeInfo?.distanceKm);
+  const { subtotal, deliveryFee, platformFee, promoDiscount, total, restaurantFees, activeSurcharges } = getCalculations(routeInfo?.distanceKm);
 
   // Group items by restaurant
   const groupedItems = items.reduce((acc, item) => {
@@ -177,6 +177,11 @@ export default function Checkout() {
     if (!activeAddresses[selectedAddressIndex]) {
       return setErrorMsg('Please select or add a delivery address.');
     }
+    
+    if (routeInfo?.distanceKm > 20) {
+      return setErrorMsg('Delivery is currently available only within 20 km.');
+    }
+
     const selectedAddress = activeAddresses[selectedAddressIndex];
     if (typeof selectedAddress.lat !== 'number' || typeof selectedAddress.lng !== 'number' || isNaN(selectedAddress.lat) || isNaN(selectedAddress.lng)) {
       return setErrorMsg('Selected address lacks a precise location. Please delete it and add a new one with GPS.');
@@ -468,6 +473,12 @@ export default function Checkout() {
                     </div>
                   );
                 })}
+                {activeSurcharges && activeSurcharges.map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between font-semibold mt-1">
+                    <span>{sc.name}</span>
+                    <span className="text-main font-bold">₹{sc.fee}</span>
+                  </div>
+                ))}
               </div>
               {platformFee > 0 && (
                 <div className="flex items-center justify-between font-medium">

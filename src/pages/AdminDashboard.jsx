@@ -1998,39 +1998,36 @@ export default function AdminDashboard() {
 
                   <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3 mt-2">
                     <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-primary" />Food Delivery Pricing</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="text-[10px] uppercase font-bold text-muted">Tier 1 Max Distance (km)</label>
-                        <input type="number" step="0.1"
-                          value={platformSettings?.foodDeliveryPricing?.tier1?.maxDistanceKm || 2}
-                          onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, tier1: { ...platformSettings.foodDeliveryPricing?.tier1, maxDistanceKm: parseFloat(e.target.value) } } })}
-                          className="bg-base border border-line-strong rounded-lg px-3 py-2 text-xs font-bold w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase font-bold text-muted">Tier 1 Fee (₹)</label>
-                        <input type="number" 
-                          value={platformSettings?.foodDeliveryPricing?.tier1?.fee || 20}
-                          onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, tier1: { ...platformSettings.foodDeliveryPricing?.tier1, fee: parseFloat(e.target.value) } } })}
-                          className="bg-base border border-line-strong rounded-lg px-3 py-2 text-xs font-bold w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase font-bold text-muted">Tier 2 Max Distance (km)</label>
-                        <input type="number" step="0.1"
-                          value={platformSettings?.foodDeliveryPricing?.tier2?.maxDistanceKm || 3}
-                          onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, tier2: { ...platformSettings.foodDeliveryPricing?.tier2, maxDistanceKm: parseFloat(e.target.value) } } })}
-                          className="bg-base border border-line-strong rounded-lg px-3 py-2 text-xs font-bold w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase font-bold text-muted">Tier 2 Fee (₹)</label>
-                        <input type="number" 
-                          value={platformSettings?.foodDeliveryPricing?.tier2?.fee || 25}
-                          onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, tier2: { ...platformSettings.foodDeliveryPricing?.tier2, fee: parseFloat(e.target.value) } } })}
-                          className="bg-base border border-line-strong rounded-lg px-3 py-2 text-xs font-bold w-full"
-                        />
-                      </div>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      {['tier1', 'tier2', 'tier3', 'tier4', 'tier5'].map((tier, idx) => {
+                        const defaults = [
+                          { max: 2, fee: 20 },
+                          { max: 3.5, fee: 25 },
+                          { max: 6, fee: 40 },
+                          { max: 12, fee: 80 },
+                          { max: 20, fee: 120 }
+                        ];
+                        return (
+                          <div key={tier} className="col-span-1 flex flex-col gap-2">
+                            <div>
+                              <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Max (km)</label>
+                              <input type="number" step="0.1"
+                                value={platformSettings?.foodDeliveryPricing?.[tier]?.maxDistanceKm || defaults[idx].max}
+                                onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, [tier]: { ...platformSettings.foodDeliveryPricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
+                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Fee (₹)</label>
+                              <input type="number" 
+                                value={platformSettings?.foodDeliveryPricing?.[tier]?.fee || defaults[idx].fee}
+                                onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, [tier]: { ...platformSettings.foodDeliveryPricing?.[tier], fee: parseFloat(e.target.value) } } })}
+                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -2083,6 +2080,37 @@ export default function AdminDashboard() {
                           </div>
                         </React.Fragment>
                       ))}
+                    </div>
+                  </div>
+
+                  <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3">
+                    <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500" />Optional Surcharges</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {['rain', 'lateNight', 'festival'].map((sc, idx) => {
+                        const labels = { rain: 'Rain Charge', lateNight: 'Late Night Charge', festival: 'Festival Charge' };
+                        const defaultFees = { rain: 10, lateNight: 20, festival: 15 };
+                        const cur = platformSettings?.surcharges?.[sc] || { enabled: false, fee: defaultFees[sc] };
+                        return (
+                          <div key={sc} className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="checkbox"
+                                checked={cur.enabled}
+                                onChange={(e) => setPlatformSettings({ ...platformSettings, surcharges: { ...platformSettings.surcharges, [sc]: { ...cur, enabled: e.target.checked } } })}
+                                className="w-4 h-4 text-primary"
+                              />
+                              <span className="text-[11px] font-bold uppercase">{labels[sc]}</span>
+                            </label>
+                            <div className="ml-auto flex items-center gap-2">
+                              <span className="text-xs font-bold">₹</span>
+                              <input type="number"
+                                value={cur.fee}
+                                onChange={(e) => setPlatformSettings({ ...platformSettings, surcharges: { ...platformSettings.surcharges, [sc]: { ...cur, fee: parseFloat(e.target.value) } } })}
+                                className="bg-white border border-line-strong rounded-md px-2 py-1 text-xs font-bold w-16"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 

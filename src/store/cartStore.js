@@ -257,7 +257,10 @@ export const useCartStore = create(
     // Use configured tiers, or default if distance unknown
     const fdp = platformSettings?.foodDeliveryPricing || {
       tier1: { maxDistanceKm: 2, fee: 20 },
-      tier2: { maxDistanceKm: 3, fee: 25 }
+      tier2: { maxDistanceKm: 3.5, fee: 25 },
+      tier3: { maxDistanceKm: 6, fee: 40 },
+      tier4: { maxDistanceKm: 12, fee: 80 },
+      tier5: { maxDistanceKm: 20, fee: 120 }
     };
 
     Object.keys(uniqueRestaurants).forEach(rId => {
@@ -265,8 +268,14 @@ export const useCartStore = create(
       if (distanceKm !== undefined && distanceKm !== null) {
         if (distanceKm <= fdp.tier1.maxDistanceKm) {
           fee = fdp.tier1.fee;
-        } else {
+        } else if (distanceKm <= fdp.tier2.maxDistanceKm) {
           fee = fdp.tier2.fee;
+        } else if (distanceKm <= fdp.tier3.maxDistanceKm) {
+          fee = fdp.tier3.fee;
+        } else if (distanceKm <= fdp.tier4.maxDistanceKm) {
+          fee = fdp.tier4.fee;
+        } else {
+          fee = fdp.tier5.fee;
         }
       }
       restaurantFees[rId] = fee;
@@ -275,15 +284,24 @@ export const useCartStore = create(
 
     const platformFee = platformSettings ? (platformSettings.platformFee ?? 5) : 5;
     const taxes = 0; // Taxes (5% GST) removed as requested
+    
+    const activeSurcharges = [];
+    let totalSurchargeFee = 0;
+    if (platformSettings && platformSettings.surcharges) {
+      const s = platformSettings.surcharges;
+      if (s.rain?.enabled) { activeSurcharges.push({ name: 'Rain Charge', fee: s.rain.fee || 10 }); totalSurchargeFee += s.rain.fee || 10; }
+      if (s.lateNight?.enabled) { activeSurcharges.push({ name: 'Late Night Charge', fee: s.lateNight.fee || 20 }); totalSurchargeFee += s.lateNight.fee || 20; }
+      if (s.festival?.enabled) { activeSurcharges.push({ name: 'Festival Charge', fee: s.festival.fee || 15 }); totalSurchargeFee += s.festival.fee || 15; }
+    }
 
-    return { subtotal, deliveryFee, platformFee, taxes: 0, restaurantFees };
+    return { subtotal, deliveryFee, platformFee, taxes: 0, restaurantFees, activeSurcharges, totalSurchargeFee };
   },
 
   getCalculations: (distanceKm = null) => {
-    const { subtotal, deliveryFee, platformFee, restaurantFees } = get().getCalculationsWithoutPromo(distanceKm);
+    const { subtotal, deliveryFee, platformFee, restaurantFees, activeSurcharges, totalSurchargeFee } = get().getCalculationsWithoutPromo(distanceKm);
     const { promoDiscount } = get();
 
-    const total = Math.max(0, subtotal + deliveryFee + platformFee - promoDiscount);
+    const total = Math.max(0, subtotal + deliveryFee + platformFee + totalSurchargeFee - promoDiscount);
 
     return {
       subtotal,
@@ -292,7 +310,9 @@ export const useCartStore = create(
       taxes: 0,
       promoDiscount,
       total,
-      restaurantFees
+      restaurantFees,
+      activeSurcharges,
+      totalSurchargeFee
     };
   }
 }),
