@@ -136,7 +136,7 @@ export default function RideBooking() {
               else computedFare = p.tier6.fee;
             }
             setFare(computedFare);
-            setFare(computedFare);
+            setErrorMsg('');
           } else {
             setDistance('error');
             setFare(0);
