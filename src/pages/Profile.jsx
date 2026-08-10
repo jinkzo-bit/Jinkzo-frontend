@@ -14,7 +14,7 @@ export default function Profile() {
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState([]);
-  const [wallet, setWallet] = useState({ balance: 0, transactions: [] });
+
   const [isLoading, setIsLoading] = useState(true);
 
   // Rider review modal states
@@ -183,22 +183,7 @@ export default function Profile() {
       }
     };
 
-    const fetchWallet = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/auth/wallet`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setWallet(data);
-        }
-      } catch (err) {
-        console.error('Fetch wallet error:', err);
-      }
-    };
-
     fetchOrderHistory();
-    fetchWallet();
   }, [token, navigate]);
 
   // Safeguard: Wait for redirect with beautiful loading state
@@ -412,36 +397,7 @@ export default function Profile() {
               Delete My Account
             </button>
           </div>
-          <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-line pb-2">
-              <h3 className="font-display font-extrabold text-sm text-main flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-yellow-500" />
-                <span>Digital Wallet</span>
-              </h3>
-              <span className="text-primary font-black text-lg">₹{(wallet?.balance || 0).toFixed(2)}</span>
-            </div>
 
-            <div className="flex flex-col gap-2">
-              <h4 className="text-[10px] uppercase font-extrabold text-muted tracking-wider">Recent Transactions</h4>
-              {wallet?.transactions && wallet.transactions.length > 0 ? (
-                <div className="flex flex-col gap-2 mt-1 max-h-[300px] overflow-y-auto pr-1">
-                  {wallet.transactions.map((tx, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2.5 bg-base rounded-xl border border-line/50">
-                      <div className="flex flex-col">
-                        <span className="text-[11px] font-bold text-main">{tx.description}</span>
-                        <span className="text-[9px] text-muted font-semibold">{new Date(tx.date).toLocaleDateString()}</span>
-                      </div>
-                      <span className={`text-xs font-black ${tx.type === 'credit' ? 'text-green-600' : 'text-main'}`}>
-                        {tx.type === 'credit' ? '+' : '-'}₹{tx.amount}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted italic mt-1">No transactions yet. Apply cashback promos during checkout!</p>
-              )}
-            </div>
-          </div>
 
         </div>
 

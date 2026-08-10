@@ -4,14 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import { MapPin, CreditCard, ChevronRight, Check, AlertCircle, Sparkles, User, ShoppingBag, FileText } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
-import RazorpaySim from '../components/RazorpaySim';
 import { playOrderPlacedSound } from '../utils/audio';
 import GoogleMapContainer from '../components/GoogleMapContainer';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { getRoute } from '../services/routingService';
 
 export default function Checkout() {
-  const { items, restaurant, getCalculations, clearCart, showToast, promoCode, cashbackAmount, fetchPlatformSettings, platformSettings } = useCartStore();
+  const { items, restaurant, getCalculations, clearCart, showToast, promoCode, fetchPlatformSettings, platformSettings } = useCartStore();
   const { user, token, addAddress } = useAuthStore();
   const navigate = useNavigate();
 
@@ -29,16 +28,13 @@ export default function Checkout() {
 
   // Payment State
   const [paymentMethod] = useState('COD');
-  const [isRazorpayOpen, setIsRazorpayOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [isRiderAvailable, setIsRiderAvailable] = useState(true);
   const [isCheckingRiders, setIsCheckingRiders] = useState(true);
   
-  // Wallet State
-  const [walletBalance, setWalletBalance] = useState(0);
-  const [useWallet, setUseWallet] = useState(false);
+
 
   // Route Info State
   const [routeInfo, setRouteInfo] = useState(null);
@@ -62,21 +58,6 @@ export default function Checkout() {
       }
     };
     checkRiderAvailability();
-    
-    const fetchWallet = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/auth/wallet`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setWalletBalance(data.balance || 0);
-        }
-      } catch (err) {
-        console.error('Wallet fetch error:', err);
-      }
-    };
-    if (token) fetchWallet();
   }, [token]);
 
   React.useEffect(() => {
@@ -116,9 +97,6 @@ export default function Checkout() {
   }, [restaurant?.lat, restaurant?.lng, user?.addresses?.[selectedAddressIndex]?.lat, user?.addresses?.[selectedAddressIndex]?.lng]); // eslint-disable-line
 
   const { subtotal, deliveryFee, platformFee, promoDiscount, total, restaurantFees } = getCalculations();
-  
-  const walletAmountUsed = useWallet ? Math.min(walletBalance, total) : 0;
-  const finalPayable = Math.max(0, total - walletAmountUsed);
 
   // Group items by restaurant
   const groupedItems = items.reduce((acc, item) => {
@@ -206,9 +184,7 @@ export default function Checkout() {
           state: activeAddress.state,
           zip: activeAddress.zip
         },
-        ...(activeAddress?.lat != null && activeAddress?.lng != null
-          ? { deliveryLocation: { lat: activeAddress.lat, lng: activeAddress.lng } }
-          : {}),
+        addressId: activeAddress._id,
         restaurantId: items[0]?.restaurantId || restaurant?._id,
         paymentMethod,
         subtotal,
@@ -216,8 +192,7 @@ export default function Checkout() {
         promoCode: promoCode || '',
         promoDiscount,
         total,
-        instruction: deliveryInstructions,
-        walletAmountUsed
+        instruction: deliveryInstructions
       };
 
       const res = await fetch(`${API_BASE}/orders`, {
@@ -256,9 +231,7 @@ export default function Checkout() {
 
     } catch (err) {
       setErrorMsg(err.message || 'Server error occurred during checkout');
-    } finally {
       setIsSubmitting(false);
-      setIsRazorpayOpen(false);
     }
   };
 
@@ -491,33 +464,7 @@ export default function Checkout() {
             </div>
           </section>
 
-          {/* Section 3: Digital Wallet */}
-          {walletBalance > 0 && (
-            <section className="bg-surface rounded-2xl p-5 border border-line shadow-2xs flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display font-semibold text-sm md:text-base text-main flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-yellow-500" />
-                  <span>Digital Wallet</span>
-                </h3>
-                <div className="text-xs font-bold text-muted bg-base px-3 py-1 rounded-full border border-line">
-                  Balance: <span className="text-primary">₹{walletBalance}</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3 mt-1">
-                <input
-                  type="checkbox"
-                  id="useWallet"
-                  checked={useWallet}
-                  onChange={(e) => setUseWallet(e.target.checked)}
-                  className="w-4.5 h-4.5 border-line-strong rounded text-primary focus:ring-primary cursor-pointer"
-                />
-                <label htmlFor="useWallet" className="text-xs text-main font-bold cursor-pointer select-none">
-                  Use wallet balance to pay for this order
-                </label>
-              </div>
-            </section>
-          )}
+
 
         </div>
 
@@ -589,23 +536,13 @@ export default function Checkout() {
                   <span>-₹{promoDiscount}</span>
                 </div>
               )}
-              {cashbackAmount > 0 && (
-                <div className="flex items-center justify-between text-yellow-700 font-bold bg-yellow-50 p-1.5 rounded-lg mt-1 border border-yellow-200">
-                  <span className="flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> Promo Cashback</span>
-                  <span>+₹{cashbackAmount} to Wallet</span>
-                </div>
-              )}
-              {walletAmountUsed > 0 && (
-                <div className="flex items-center justify-between text-blue-700 font-bold bg-blue-50 p-1.5 rounded-lg mt-1">
-                  <span>Paid from Wallet</span>
-                  <span>-₹{walletAmountUsed}</span>
-                </div>
-              )}
+
+
             </div>
 
             <div className="flex items-center justify-between text-sm font-bold text-main">
               <span>Total Payable</span>
-              <span className="text-primary text-base">₹{finalPayable.toFixed(2)}</span>
+              <span className="text-primary text-base">₹{total.toFixed(2)}</span>
             </div>
 
             {errorMsg && (
@@ -638,14 +575,6 @@ export default function Checkout() {
           </div>
         </div>
       </div>
-
-      {/* Razorpay Simulation Dialog Overlay */}
-      <RazorpaySim
-        amount={finalPayable}
-        isOpen={isRazorpayOpen}
-        onClose={() => setIsRazorpayOpen(false)}
-        onSuccess={completeOrderPlacement}
-      />
     </div>
   );
 }

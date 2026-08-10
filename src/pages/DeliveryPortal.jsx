@@ -371,7 +371,17 @@ export default function DeliveryPortal() {
               </div>
 
               {/* Vector Map Preview (Active visual progression) */}
-              <InteractiveMap status={selectedOrder.status} orderId={selectedOrder._id} />
+              <InteractiveMap 
+                status={selectedOrder.status} 
+                orderId={selectedOrder._id} 
+                restaurantAddress={selectedOrder.restaurantLocation?.formattedAddress || selectedOrder.pickupAddress?.street || ''}
+                restaurantLat={selectedOrder.restaurantLocation?.lat}
+                restaurantLng={selectedOrder.restaurantLocation?.lng}
+                customerAddress={selectedOrder.customerLocation?.formattedAddress || selectedOrder.address?.street || ''}
+                customerLat={selectedOrder.customerLocation?.lat}
+                customerLng={selectedOrder.customerLocation?.lng}
+                deliveryMethod={selectedOrder.orderType === 'ride' ? 'Ride' : 'Standard'}
+              />
 
               {/* Driver Instructions */}
               {selectedOrder.instruction && (
