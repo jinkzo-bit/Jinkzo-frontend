@@ -34,7 +34,7 @@ const MAP_OPTIONS = {
  *   title           string
  *
  * onConfirm receives:
- *   { houseNo, street, landmark, area, city, state, zip, lat, lng, placeId, formattedAddress }
+ *   { houseNo, street, landmark, area, city, state, zip, lat, lng, selectedLocation.placeId: selectedLocation.selectedLocation.placeId, selectedLocation.formattedAddress }
  */
 export default function LocationPickerModal({ isOpen, onClose, onConfirm, initialAddress, title = 'Set Delivery Location' }) {
   const mapRef = useRef(null);
@@ -53,10 +53,15 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
   const [city, setCity]           = useState('');
   const [formState, setFormState] = useState('');
   const [zip, setZip]             = useState('');
-  const [centerLat, setCenterLat] = useState(null);
-  const [centerLng, setCenterLng] = useState(null);
-  const [gpsAccuracy, setGpsAccuracy] = useState(null);
-  const [locationType, setLocationType] = useState(null);
+  const [selectedLocation, setSelectedLocation] = useState({
+    lat: null,
+    lng: null,
+    accuracy: null,
+    formattedAddress: '',
+    placeId: null,
+    locationType: null,
+    displayName: ''
+  });
 
   // ── Map center state ─────────────────────────────────────────────────────
   const [mapCenter, setMapCenter] = useState({
@@ -69,9 +74,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
   // ── UI state ─────────────────────────────────────────────────────────────
   const [isLocating, setIsLocating]   = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
-  const [displayName, setDisplayName] = useState('');
-  const [placeId, setPlaceId]         = useState(null);
-  const [formattedAddress, setFormattedAddress] = useState('');
+
   const [locationSource, setLocationSource] = useState('MANUAL'); // 'GPS', 'SEARCH', 'MANUAL'
 
   const fillForm = useCallback((addr, sourceOverride = null) => {
@@ -84,8 +87,8 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     setZip(addr.zip           || '');
     setCenterLat(addr.lat);
     setCenterLng(addr.lng);
-    setDisplayName(addr.displayName || addr.formattedAddress || '');
-    if (addr.formattedAddress) setFormattedAddress(addr.formattedAddress);
+    setDisplayName(addr.displayName || addr.selectedLocation.formattedAddress || '');
+    if (addr.selectedLocation.formattedAddress) setFormattedAddress(addr.selectedLocation.formattedAddress);
     if (sourceOverride) setLocationSource(sourceOverride);
     // Store GPS accuracy and location type for display
     if (addr.gpsAccuracy) setGpsAccuracy(addr.gpsAccuracy);
@@ -222,13 +225,13 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           const data = await res.json();
           if (data.success && data.data) {
             fillForm(data.data, 'MANUAL');
-            console.log(`[LOCATION] GEOCODE SUCCESS\nformattedAddress: ${data.data.formattedAddress}\nlat: ${data.data.lat}\nlng: ${data.data.lng}`);
+            console.log(`[LOCATION] GEOCODE SUCCESS\nformattedAddress: ${data.data.selectedLocation.formattedAddress}\nlat: ${data.data.lat}\nlng: ${data.data.lng}`);
           }
         } catch (_) {
           // ignore
         }
-        // A map drag clears the saved placeId since the pin moved away
-        setPlaceId(null);
+        // A map drag clears the saved selectedLocation.placeId since the pin moved away
+        setSelectedLocation(prev => ({ ...prev, placeId: null }));
         setIsGeocoding(false);
       }, 700);
     });
@@ -287,7 +290,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-        setPlaceId(null);
+        setSelectedLocation(prev => ({ ...prev, placeId: null }));
         if (mapRef.current) {
           mapRef.current.panTo({ lat, lng });
           mapRef.current.setZoom(HIGH_ZOOM);
@@ -309,7 +312,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           .then(data => {
             if (data.success && data.data) {
               fillForm({ ...data.data, gpsAccuracy: accuracy }, 'GPS');
-              console.log(`[LOCATION] GEOCODE SUCCESS\nformattedAddress: ${data.data.formattedAddress}\nlat: ${data.data.lat}\nlng: ${data.data.lng}`);
+              console.log(`[LOCATION] GEOCODE SUCCESS\nformattedAddress: ${data.data.selectedLocation.formattedAddress}\nlat: ${data.data.lat}\nlng: ${data.data.lng}`);
             }
           })
           .catch(() => {});
@@ -334,19 +337,19 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
   const handleSave = () => {
     if (
       !hasValidLocation || 
-      !isValidCoordinates(centerLat, centerLng) || 
-      typeof centerLat !== 'number' || 
-      typeof centerLng !== 'number' ||
-      centerLat < -90 || centerLat > 90 ||
-      centerLng < -180 || centerLng > 180 ||
-      (centerLat === 19.0760 && centerLng === 72.8777)
+      !isValidCoordinates(selectedLocation.lat, selectedLocation.lng) || 
+      typeof selectedLocation.lat !== 'number' || 
+      typeof selectedLocation.lng !== 'number' ||
+      selectedLocation.lat < -90 || selectedLocation.lat > 90 ||
+      selectedLocation.lng < -180 || selectedLocation.lng > 180 ||
+      (selectedLocation.lat === 19.0760 && selectedLocation.lng === 72.8777)
     ) {
       alert('Please select your exact location on the map.');
       return;
     }
     const fullStreet = [houseNo, street].filter(Boolean).join(', ');
     
-    console.log(`[LOCATION] SAVE\nlat: ${centerLat}\nlng: ${centerLng}\nformattedAddress: ${formattedAddress || displayName || ''}\nplaceId: ${placeId || ''}`);
+    console.log(`[LOCATION] SAVE\nlat: ${selectedLocation.lat}\nlng: ${selectedLocation.lng}\nformattedAddress: ${selectedLocation.formattedAddress || displayName || ''}\nplaceId: ${selectedLocation.placeId || ''}`);
     
     onConfirm({
       houseNo,
@@ -356,17 +359,17 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
       city,
       state: formState,
       zip,
-      lat: centerLat,
-      lng: centerLng,
-      placeId:          placeId || null,
-      formattedAddress: formattedAddress || displayName || '',
+      lat: selectedLocation.lat,
+      lng: selectedLocation.lng,
+      placeId: selectedLocation.placeId || null,
+      formattedAddress: selectedLocation.formattedAddress || displayName || '',
       locationSource:   locationSource,
     });
   };
 
   const handleCopyCoords = () => {
-    if (centerLat && centerLng) {
-      navigator.clipboard.writeText(`${centerLat.toFixed(6)}, ${centerLng.toFixed(6)}`);
+    if (selectedLocation.lat && selectedLocation.lng) {
+      navigator.clipboard.writeText(`${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lng.toFixed(6)}`);
     }
   };
 
@@ -485,7 +488,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           )}
 
           {/* Lat/Lng badge + copy */}
-          {centerLat && centerLng && (
+          {selectedLocation.lat && selectedLocation.lng && (
             <div className="absolute top-3 left-3 z-20">
               <button
                 type="button"
@@ -494,14 +497,14 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
                 className="bg-black/70 backdrop-blur-sm text-white/80 text-[10px] font-mono px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-black/90 transition-colors cursor-pointer"
               >
                 <MapPin className="w-3 h-3 text-violet-400" />
-                {centerLat.toFixed(5)}°N {centerLng.toFixed(5)}°E
+                {selectedLocation.lat.toFixed(5)}°N {selectedLocation.lng.toFixed(5)}°E
                 <Copy className="w-2.5 h-2.5 text-white/40" />
               </button>
             </div>
           )}
 
           {/* GPS Accuracy Circle & Location Type Badge */}
-          {gpsAccuracy && centerLat && centerLng && (
+          {selectedLocation.accuracy && selectedLocation.lat && selectedLocation.lng && (
             <>
               {/* Accuracy circle overlay */}
               <div
@@ -514,8 +517,8 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
               >
                 <div
                   style={{
-                    width: `${Math.min(gpsAccuracy * 2, 800)}px`,
-                    height: `${Math.min(gpsAccuracy * 2, 800)}px`,
+                    width: `${Math.min(selectedLocation.accuracy * 2, 800)}px`,
+                    height: `${Math.min(selectedLocation.accuracy * 2, 800)}px`,
                     borderRadius: '50%',
                     border: '2px solid #7c3aed',
                     background: 'rgba(124, 58, 237, 0.08)',
@@ -528,18 +531,18 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
               <div className="absolute top-3 right-3 z-20 flex gap-1.5">
                 <div className="bg-violet-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg">
                   <MapPin className="w-3 h-3" />
-                  ±{Math.round(gpsAccuracy)}m
+                  ±{Math.round(selectedLocation.accuracy)}m
                 </div>
-                {locationType && (
+                {selectedLocation.locationType && (
                   <div className={`bg-white/90 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg ${
-                    locationType === 'ROOFTOP' ? 'text-green-700' :
-                    locationType === 'RANGE_INTERPOLATED' ? 'text-amber-700' :
+                    selectedLocation.locationType === 'ROOFTOP' ? 'text-green-700' :
+                    selectedLocation.locationType === 'RANGE_INTERPOLATED' ? 'text-amber-700' :
                     'text-gray-700'
                   }`}>
-                    {locationType === 'ROOFTOP' && '🎯 Exact'}
-                    {locationType === 'RANGE_INTERPOLATED' && '📍 Approx'}
-                    {locationType === 'GEOMETRIC_CENTER' && '📍 Area Center'}
-                    {locationType === 'APPROXIMATE' && '📍 Rough'}
+                    {selectedLocation.locationType === 'ROOFTOP' && '🎯 Exact'}
+                    {selectedLocation.locationType === 'RANGE_INTERPOLATED' && '📍 Approx'}
+                    {selectedLocation.locationType === 'GEOMETRIC_CENTER' && '📍 Area Center'}
+                    {selectedLocation.locationType === 'APPROXIMATE' && '📍 Rough'}
                   </div>
                 )}
               </div>
@@ -592,10 +595,10 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
         <div className="overflow-y-auto flex-1 px-5 pt-4 pb-3" style={{ minHeight: 0 }}>
 
           {/* Detected address banner */}
-          {displayName && (
+          {selectedLocation.displayName && (
             <div className="bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 mb-4 flex items-start gap-2">
               <MapPin className="w-3.5 h-3.5 text-violet-400 mt-0.5 flex-shrink-0" />
-              <p className="text-[11px] text-white/60 font-medium leading-relaxed line-clamp-2">{displayName}</p>
+              <p className="text-[11px] text-white/60 font-medium leading-relaxed line-clamp-2">{selectedLocation.displayName}</p>
             </div>
           )}
 
@@ -628,7 +631,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
           <button
             type="button"
             onClick={handleSave}
-            disabled={!hasValidLocation || !centerLat || !centerLng || isGeocoding}
+            disabled={!hasValidLocation || !selectedLocation.lat || !selectedLocation.lng || isGeocoding}
             className="w-full py-3.5 bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white text-[13px] font-extrabold rounded-2xl cursor-pointer shadow-lg shadow-violet-900/40 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
           >
             <Check className="w-4 h-4" />
