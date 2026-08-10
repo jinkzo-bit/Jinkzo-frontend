@@ -1,4 +1,3 @@
-import { VITE_GOOGLE_MAPS_API_KEY } from './api';
 
 export const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
 

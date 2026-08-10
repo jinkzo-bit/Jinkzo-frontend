@@ -91,7 +91,7 @@ export default function Checkout() {
             const res = await fetch(`${API_BASE}/maps/geocode?address=${encodeURIComponent(restAddress)}`);
             const data = await res.json();
             if (data.success && data.data) restPos = { lat: data.data.lat, lng: data.data.lng };
-          } catch (_) {}
+          } catch (err) { console.error('Failed to geocode restaurant address:', err); }
         }
 
         let custPos = (activeAddress?.lat && activeAddress?.lng) ? { lat: activeAddress.lat, lng: activeAddress.lng } : null;
@@ -101,7 +101,7 @@ export default function Checkout() {
             const res = await fetch(`${API_BASE}/maps/geocode?address=${encodeURIComponent(fullCustAddress)}`);
             const data = await res.json();
             if (data.success && data.data) custPos = { lat: data.data.lat, lng: data.data.lng };
-          } catch (_) {}
+          } catch (err) { console.error('Failed to geocode customer address:', err); }
         }
 
         if (restPos && custPos) {
@@ -148,7 +148,7 @@ export default function Checkout() {
     e.preventDefault();
     if (!newStreet || !newCity || !newState || !newZip) return;
     setIsAddressSaving(true);
-    const res = await addAddress({ street: newStreet, city: newCity, state: newState, zip: newZip, isDefault: true });
+    const res = await addAddress({ street: newStreet, city: newCity, state: newState, zip: newZip, isDefault: true, lat: newLat ?? null, lng: newLng ?? null });
     setIsAddressSaving(false);
     if (res.success) {
       setShowAddressForm(false);
@@ -206,6 +206,9 @@ export default function Checkout() {
           state: activeAddress.state,
           zip: activeAddress.zip
         },
+        ...(activeAddress?.lat != null && activeAddress?.lng != null
+          ? { deliveryLocation: { lat: activeAddress.lat, lng: activeAddress.lng } }
+          : {}),
         restaurantId: items[0]?.restaurantId || restaurant?._id,
         paymentMethod,
         subtotal,

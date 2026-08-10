@@ -195,7 +195,6 @@ export default function LoginSignup() {
     if (!name.trim()) return setFormError('Please enter your full name.');
     if (!phone.trim()) return setFormError('Please enter your mobile number.');
     if (!email.trim()) return setFormError('Please enter your email address.');
-    if (role === 'customer' && !address.trim()) return setFormError('Please enter your delivery address.');
     if (!password) return setFormError('Please enter a password.');
     if (password.length < 6) return setFormError('Password must be at least 6 characters long.');
     if (password !== confirmPassword) return setFormError('Passwords do not match.');
@@ -542,8 +541,8 @@ export default function LoginSignup() {
                     <span className={`w-1.5 h-1.5 rounded-full ${/[a-z]/.test(password) ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
                     Lowercase letter (a-z)
                   </div>
-                  <div className={`flex items-center gap-1.5 transition-colors ${/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
+                  <div className={`flex items-center gap-1.5 transition-colors ${/[0-9!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${/[0-9!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password) ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
                     Number / Special char
                   </div>
                 </div>

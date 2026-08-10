@@ -56,7 +56,7 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
               
               for (const otherMarker of markers) {
                 if (visited.has(otherMarker)) continue;
-                const distance = google.maps.geometry.spherical.computeDistanceBetween(
+                const distance = window.google.maps.geometry.spherical.computeDistanceBetween(
                   marker.getPosition(),
                   otherMarker.getPosition()
                 );
