@@ -136,13 +136,22 @@ export default function RideBooking() {
               else computedFare = p.tier6.fee;
             }
             setFare(computedFare);
+            setFare(computedFare);
+          } else {
+            setDistance('error');
+            setFare(0);
+            setErrorMsg("Unable to calculate route. Please try selecting the locations again.");
           }
         } catch (err) {
           console.error("Failed to preview route distance", err);
+          setDistance('error');
+          setFare(0);
+          setErrorMsg(err.message || "Unable to calculate route. Please try selecting the locations again.");
         }
       } else {
         setDistance(0);
         setFare(0);
+        setErrorMsg('');
       }
     };
     fetchRoute();
@@ -581,13 +590,13 @@ export default function RideBooking() {
               <div className="flex justify-between">
                 <span>Calculated Distance</span>
                 <span className="text-main font-bold">
-                  {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : `${distance} km`)}
+                  {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : distance === 'error' ? 'Error' : `${distance} km`)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>Distance Pricing Fee</span>
                 <span className="text-main font-bold">
-                  {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : `₹${fare}`)}
+                  {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : distance === 'error' ? 'Error' : `₹${fare}`)}
                 </span>
               </div>
             </div>
@@ -631,9 +640,22 @@ export default function RideBooking() {
             <div className="bg-yellow-50/50 border border-yellow-200/50 rounded-2xl p-3 flex gap-2 text-yellow-800 text-[10px]">
               <HelpCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-extrabold">Price Rules Guide (Bike Taxi):</p>
+                <p className="font-extrabold">Price Rules Guide ({vehicleType === 'bike' ? 'Bike Taxi' : 'Auto Taxi'}):</p>
                 <p className="mt-0.5 leading-relaxed font-semibold">
-                  Distance is calculated dynamically between locations: 1km is priced at ₹20, 2km at ₹30, and 3km or more is capped at a flat ₹40.
+                  Distance is calculated dynamically between locations: 
+                  {vehicleType === 'bike' ? (
+                    ` 0–${platformSettings?.rideBikePricing?.tier1?.maxDistanceKm || 2}km: ₹${platformSettings?.rideBikePricing?.tier1?.fee || 20}, ` +
+                    `>${platformSettings?.rideBikePricing?.tier1?.maxDistanceKm || 2}–${platformSettings?.rideBikePricing?.tier2?.maxDistanceKm || 3.5}km: ₹${platformSettings?.rideBikePricing?.tier2?.fee || 25}, ` +
+                    `>${platformSettings?.rideBikePricing?.tier2?.maxDistanceKm || 3.5}–${platformSettings?.rideBikePricing?.tier3?.maxDistanceKm || 6}km: ₹${platformSettings?.rideBikePricing?.tier3?.fee || 40}, ` +
+                    `>${platformSettings?.rideBikePricing?.tier3?.maxDistanceKm || 6}–${platformSettings?.rideBikePricing?.tier4?.maxDistanceKm || 12}km: ₹${platformSettings?.rideBikePricing?.tier4?.fee || 80}, ` +
+                    `>${platformSettings?.rideBikePricing?.tier4?.maxDistanceKm || 12}km: capped at ₹${platformSettings?.rideBikePricing?.tier5?.fee || 120}.`
+                  ) : (
+                    ` 0–${platformSettings?.rideAutoPricing?.tier1?.maxDistanceKm || 2}km: ₹${platformSettings?.rideAutoPricing?.tier1?.fee || 30}, ` +
+                    `>${platformSettings?.rideAutoPricing?.tier1?.maxDistanceKm || 2}–${platformSettings?.rideAutoPricing?.tier2?.maxDistanceKm || 3.5}km: ₹${platformSettings?.rideAutoPricing?.tier2?.fee || 40}, ` +
+                    `>${platformSettings?.rideAutoPricing?.tier2?.maxDistanceKm || 3.5}–${platformSettings?.rideAutoPricing?.tier3?.maxDistanceKm || 6}km: ₹${platformSettings?.rideAutoPricing?.tier3?.fee || 70}, ` +
+                    `>${platformSettings?.rideAutoPricing?.tier3?.maxDistanceKm || 6}–${platformSettings?.rideAutoPricing?.tier4?.maxDistanceKm || 12}km: ₹${platformSettings?.rideAutoPricing?.tier4?.fee || 120}, ` +
+                    `>${platformSettings?.rideAutoPricing?.tier4?.maxDistanceKm || 12}km: up to ₹${platformSettings?.rideAutoPricing?.tier6?.fee || 400}.`
+                  )}
                 </p>
               </div>
             </div>

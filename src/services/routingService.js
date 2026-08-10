@@ -29,6 +29,8 @@ export async function getRoute(origin, destination) {
         success: true,
         ...data.data,
       };
+    } else {
+      throw new Error(data.message || 'Routing failed on server');
     }
   } catch (err) {
     if (err.name === 'AbortError') {
@@ -36,24 +38,6 @@ export async function getRoute(origin, destination) {
     } else {
       console.warn('[RoutingService] Backend proxy failed:', err.message);
     }
+    throw err; // DO NOT fallback to 0 distance
   }
-  
-  console.warn('[RoutingService] Google Routes failed, using straight line fallback');
-  // Final fallback: straight line/L-shape
-  return {
-    provider: 'fallback',
-    success: false,
-    distanceMeters: 0,
-    distanceKm: 0,
-    durationSeconds: 0,
-    durationMinutes: 0,
-    polyline: [
-      origin,
-      { lat: origin.lat, lng: (origin.lng + destination.lng) / 2 },
-      { lat: destination.lat, lng: (origin.lng + destination.lng) / 2 },
-      destination,
-    ],
-    origin,
-    destination
-  };
 }
