@@ -2033,53 +2033,120 @@ export default function AdminDashboard() {
 
                   <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3">
                     <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-orange-500" />Ride Bike Pricing</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                      {['tier1', 'tier2', 'tier3'].map((tier, idx) => (
-                        <React.Fragment key={tier}>
-                          <div>
-                            <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Max (km)</label>
-                            <input type="number" step="0.1"
-                              value={platformSettings?.rideBikePricing?.[tier]?.maxDistanceKm || (idx===0?1.5:idx===1?2.5:9999)}
-                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
-                              className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
-                            />
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      {['tier1', 'tier2', 'tier3', 'tier4', 'tier5'].map((tier, idx) => {
+                        const defaults = [
+                          { max: 2, fee: 20 },
+                          { max: 3.5, fee: 25 },
+                          { max: 6, fee: 40 },
+                          { max: 12, fee: 80 },
+                          { max: 20, fee: 120 }
+                        ];
+                        return (
+                          <div key={tier} className="col-span-1 flex flex-col gap-2">
+                            <div>
+                              <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Max (km)</label>
+                              <input type="number" step="0.1"
+                                value={platformSettings?.rideBikePricing?.[tier]?.maxDistanceKm || defaults[idx].max}
+                                onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
+                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Fee (₹)</label>
+                              <input type="number" 
+                                value={platformSettings?.rideBikePricing?.[tier]?.fee || defaults[idx].fee}
+                                onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], fee: parseFloat(e.target.value) } } })}
+                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Fee (₹)</label>
-                            <input type="number" 
-                              value={platformSettings?.rideBikePricing?.[tier]?.fee || (idx===0?20:idx===1?30:40)}
-                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], fee: parseFloat(e.target.value) } } })}
-                              className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
-                            />
-                          </div>
-                        </React.Fragment>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
                   <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3">
                     <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-green-500" />Ride Auto Pricing</h4>
                     <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                      {['tier1', 'tier2', 'tier3'].map((tier, idx) => (
-                        <React.Fragment key={tier}>
-                          <div>
-                            <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Max (km)</label>
-                            <input type="number" step="0.1"
-                              value={platformSettings?.rideAutoPricing?.[tier]?.maxDistanceKm || (idx===0?1.5:idx===1?2.5:9999)}
-                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
-                              className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
-                            />
+                      {['tier1', 'tier2', 'tier3', 'tier4', 'tier5', 'tier6'].map((tier, idx) => {
+                        const defaults = [
+                          { max: 2, fee: 30 },
+                          { max: 3.5, fee: 40 },
+                          { max: 6, fee: 70 },
+                          { max: 12, fee: 120 },
+                          { max: 20, fee: 200 },
+                          { max: 40, fee: 400 }
+                        ];
+                        return (
+                          <div key={tier} className="col-span-1 flex flex-col gap-2">
+                            <div>
+                              <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Max (km)</label>
+                              <input type="number" step="0.1"
+                                value={platformSettings?.rideAutoPricing?.[tier]?.maxDistanceKm || defaults[idx].max}
+                                onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
+                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-[10px] font-bold w-full"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Fee (₹)</label>
+                              <input type="number" 
+                                value={platformSettings?.rideAutoPricing?.[tier]?.fee || defaults[idx].fee}
+                                onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], fee: parseFloat(e.target.value) } } })}
+                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-[10px] font-bold w-full"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Fee (₹)</label>
-                            <input type="number" 
-                              value={platformSettings?.rideAutoPricing?.[tier]?.fee || (idx===0?35:idx===1?50:65)}
-                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], fee: parseFloat(e.target.value) } } })}
-                              className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
-                            />
-                          </div>
-                        </React.Fragment>
-                      ))}
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3">
+                    <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500" />Ride Services & Multi-Order Grouping</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      
+                      <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox"
+                            checked={platformSettings?.rideServices?.bikeEnabled ?? true}
+                            onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, bikeEnabled: e.target.checked } })}
+                            className="w-4 h-4 text-primary"
+                          />
+                          <span className="text-[11px] font-bold uppercase">Bike Taxi ON</span>
+                        </label>
+                      </div>
+
+                      <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox"
+                            checked={platformSettings?.rideServices?.autoEnabled ?? true}
+                            onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, autoEnabled: e.target.checked } })}
+                            className="w-4 h-4 text-primary"
+                          />
+                          <span className="text-[11px] font-bold uppercase">Auto Taxi ON</span>
+                        </label>
+                      </div>
+
+                      <div className="flex flex-col gap-2 bg-base border border-line-strong rounded-lg p-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox"
+                            checked={platformSettings?.sameAddressMultiOrder?.enabled ?? true}
+                            onChange={(e) => setPlatformSettings({ ...platformSettings, sameAddressMultiOrder: { ...platformSettings.sameAddressMultiOrder, enabled: e.target.checked } })}
+                            className="w-4 h-4 text-primary"
+                          />
+                          <span className="text-[11px] font-bold uppercase">Multi-Order Discount ON</span>
+                        </label>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-muted uppercase">Max Orders:</span>
+                          <input type="number" min="1"
+                            value={platformSettings?.sameAddressMultiOrder?.maxOrders || 3}
+                            onChange={(e) => setPlatformSettings({ ...platformSettings, sameAddressMultiOrder: { ...platformSettings.sameAddressMultiOrder, maxOrders: parseInt(e.target.value) } })}
+                            className="bg-white border border-line-strong rounded-md px-2 py-1 text-xs font-bold w-16 text-center"
+                          />
+                        </div>
+                      </div>
+
                     </div>
                   </div>
 

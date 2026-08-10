@@ -93,7 +93,7 @@ export default function Checkout() {
     }
   }, [restaurant?.lat, restaurant?.lng, user?.addresses?.[selectedAddressIndex]?.lat, user?.addresses?.[selectedAddressIndex]?.lng]); // eslint-disable-line
 
-  const { subtotal, deliveryFee, platformFee, promoDiscount, total, restaurantFees, activeSurcharges } = getCalculations(routeInfo?.distanceKm);
+  const { subtotal, deliveryFee, platformFee, promoDiscount, total, restaurantFees, activeSurcharges, groupingApplied } = getCalculations(routeInfo?.distanceKm);
 
   // Group items by restaurant
   const groupedItems = items.reduce((acc, item) => {
@@ -469,10 +469,17 @@ export default function Checkout() {
                   return (
                     <div key={group.restaurantId} className="flex items-center justify-between text-[10px] text-muted pl-2">
                       <span className="truncate max-w-[180px] font-medium">• {group.restaurantName}</span>
-                      <span className="font-bold">₹{fee}</span>
+                      <span className="font-bold">
+                        {fee > 0 ? `₹${fee}` : <span className="text-green-600 bg-green-50 px-1 rounded uppercase">Waived</span>}
+                      </span>
                     </div>
                   );
                 })}
+                {groupingApplied && (
+                  <div className="flex items-center justify-between text-[10px] text-green-700 bg-green-50 mt-1 px-2 py-1 rounded">
+                    <span className="font-bold">✨ Multi-Order Grouping Discount Applied</span>
+                  </div>
+                )}
                 {activeSurcharges && activeSurcharges.map((sc, idx) => (
                   <div key={idx} className="flex items-center justify-between font-semibold mt-1">
                     <span>{sc.name}</span>

@@ -263,23 +263,64 @@ export const useCartStore = create(
       tier5: { maxDistanceKm: 20, fee: 120 }
     };
 
-    Object.keys(uniqueRestaurants).forEach(rId => {
-      let fee = fdp.tier1.fee; // Default preview
+    const precalculatedData = {};
+    const rIds = Object.keys(uniqueRestaurants);
+    
+    rIds.forEach(rId => {
+      let fee = fdp.tier1.fee;
+      let tier = 'tier1';
       if (distanceKm !== undefined && distanceKm !== null) {
-        if (distanceKm <= fdp.tier1.maxDistanceKm) {
-          fee = fdp.tier1.fee;
-        } else if (distanceKm <= fdp.tier2.maxDistanceKm) {
-          fee = fdp.tier2.fee;
-        } else if (distanceKm <= fdp.tier3.maxDistanceKm) {
-          fee = fdp.tier3.fee;
-        } else if (distanceKm <= fdp.tier4.maxDistanceKm) {
-          fee = fdp.tier4.fee;
-        } else {
-          fee = fdp.tier5.fee;
-        }
+        if (distanceKm <= fdp.tier1.maxDistanceKm) { fee = fdp.tier1.fee; tier = 'tier1'; }
+        else if (distanceKm <= fdp.tier2.maxDistanceKm) { fee = fdp.tier2.fee; tier = 'tier2'; }
+        else if (distanceKm <= fdp.tier3.maxDistanceKm) { fee = fdp.tier3.fee; tier = 'tier3'; }
+        else if (distanceKm <= fdp.tier4.maxDistanceKm) { fee = fdp.tier4.fee; tier = 'tier4'; }
+        else { fee = fdp.tier5.fee; tier = 'tier5'; }
       }
-      restaurantFees[rId] = fee;
-      deliveryFee += fee;
+      precalculatedData[rId] = { normalFee: fee, tier };
+    });
+
+    const multiOrderConfig = platformSettings?.sameAddressMultiOrder || { enabled: true, maxOrders: 3, eligibleTiers: ["tier4", "tier5"] };
+    const eligibleOrders = [];
+    if (multiOrderConfig.enabled) {
+      rIds.forEach(rId => {
+        if (multiOrderConfig.eligibleTiers.includes(precalculatedData[rId].tier)) {
+          eligibleOrders.push(rId);
+        }
+      });
+    }
+
+    const finalFees = {};
+    rIds.forEach(rId => {
+      finalFees[rId] = precalculatedData[rId].normalFee;
+    });
+
+    let groupingApplied = false;
+    if (eligibleOrders.length > 1) {
+      groupingApplied = true;
+      const maxParticipating = Math.min(eligibleOrders.length, multiOrderConfig.maxOrders || 3);
+      const participatingGroup = eligibleOrders.slice(0, maxParticipating);
+      
+      let highestFee = -1;
+      let highestFeeRestaurantId = null;
+      participatingGroup.forEach(rId => {
+        if (precalculatedData[rId].normalFee > highestFee) {
+          highestFee = precalculatedData[rId].normalFee;
+          highestFeeRestaurantId = rId;
+        }
+      });
+
+      participatingGroup.forEach(rId => {
+        if (rId === highestFeeRestaurantId) {
+          finalFees[rId] = highestFee;
+        } else {
+          finalFees[rId] = 0;
+        }
+      });
+    }
+
+    rIds.forEach(rId => {
+      restaurantFees[rId] = finalFees[rId];
+      deliveryFee += finalFees[rId];
     });
 
     const platformFee = platformSettings ? (platformSettings.platformFee ?? 5) : 5;
@@ -294,7 +335,7 @@ export const useCartStore = create(
       if (s.festival?.enabled) { activeSurcharges.push({ name: 'Festival Charge', fee: s.festival.fee || 15 }); totalSurchargeFee += s.festival.fee || 15; }
     }
 
-    return { subtotal, deliveryFee, platformFee, taxes: 0, restaurantFees, activeSurcharges, totalSurchargeFee };
+    return { subtotal, deliveryFee, platformFee, taxes: 0, restaurantFees, activeSurcharges, totalSurchargeFee, groupingApplied };
   },
 
   getCalculations: (distanceKm = null) => {

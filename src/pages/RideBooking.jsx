@@ -96,18 +96,32 @@ export default function RideBooking() {
             let computedFare;
             if (vehicleType === 'bike') {
               const p = platformSettings?.rideBikePricing || {
-                tier1: { maxDistanceKm: 1.5, fee: 20 }, tier2: { maxDistanceKm: 2.5, fee: 30 }, tier3: { maxDistanceKm: 9999, fee: 40 }
+                tier1: { maxDistanceKm: 2, fee: 20 },
+                tier2: { maxDistanceKm: 3.5, fee: 25 },
+                tier3: { maxDistanceKm: 6, fee: 40 },
+                tier4: { maxDistanceKm: 12, fee: 80 },
+                tier5: { maxDistanceKm: 20, fee: 120 }
               };
               if (calculatedDistance <= p.tier1.maxDistanceKm) computedFare = p.tier1.fee;
-              else if (calculatedDistance > p.tier1.maxDistanceKm && calculatedDistance <= p.tier2.maxDistanceKm) computedFare = p.tier2.fee;
-              else computedFare = p.tier3.fee;
+              else if (calculatedDistance <= p.tier2.maxDistanceKm) computedFare = p.tier2.fee;
+              else if (calculatedDistance <= p.tier3.maxDistanceKm) computedFare = p.tier3.fee;
+              else if (calculatedDistance <= p.tier4.maxDistanceKm) computedFare = p.tier4.fee;
+              else computedFare = p.tier5.fee;
             } else {
               const p = platformSettings?.rideAutoPricing || {
-                tier1: { maxDistanceKm: 1.5, fee: 35 }, tier2: { maxDistanceKm: 2.5, fee: 50 }, tier3: { maxDistanceKm: 9999, fee: 65 }
+                tier1: { maxDistanceKm: 2, fee: 30 },
+                tier2: { maxDistanceKm: 3.5, fee: 40 },
+                tier3: { maxDistanceKm: 6, fee: 70 },
+                tier4: { maxDistanceKm: 12, fee: 120 },
+                tier5: { maxDistanceKm: 20, fee: 200 },
+                tier6: { maxDistanceKm: 40, fee: 400 }
               };
               if (calculatedDistance <= p.tier1.maxDistanceKm) computedFare = p.tier1.fee;
-              else if (calculatedDistance > p.tier1.maxDistanceKm && calculatedDistance <= p.tier2.maxDistanceKm) computedFare = p.tier2.fee;
-              else computedFare = p.tier3.fee;
+              else if (calculatedDistance <= p.tier2.maxDistanceKm) computedFare = p.tier2.fee;
+              else if (calculatedDistance <= p.tier3.maxDistanceKm) computedFare = p.tier3.fee;
+              else if (calculatedDistance <= p.tier4.maxDistanceKm) computedFare = p.tier4.fee;
+              else if (calculatedDistance <= p.tier5.maxDistanceKm) computedFare = p.tier5.fee;
+              else computedFare = p.tier6.fee;
             }
             setFare(computedFare);
           }
@@ -472,51 +486,76 @@ export default function RideBooking() {
             <div className="flex flex-col gap-2.5">
               <span className="text-[9px] text-muted font-extrabold uppercase px-1">Select Ride Type</span>
               
-              {/* Bike option */}
-              <button
-                type="button"
-                onClick={() => setVehicleType('bike')}
-                className={`w-full p-3 rounded-2xl border text-left flex justify-between items-center transition-all cursor-pointer ${
-                  vehicleType === 'bike' ? 'border-yellow-400 bg-yellow-500/5 shadow-2xs' : 'border-line bg-surface hover:border-line-strong'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-yellow-100 text-yellow-700 flex items-center justify-center rounded-xl font-bold">
-                    <Bike className="w-5 h-5" />
+              {platformSettings?.rideServices?.bikeEnabled !== false && (
+                <button
+                  type="button"
+                  onClick={() => setVehicleType('bike')}
+                  className={`w-full p-3 rounded-2xl border text-left flex justify-between items-center transition-all cursor-pointer ${
+                    vehicleType === 'bike' ? 'border-yellow-400 bg-yellow-500/5 shadow-2xs' : 'border-line bg-surface hover:border-line-strong'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-yellow-100 text-yellow-700 flex items-center justify-center rounded-xl font-bold">
+                      <Bike className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-main">Ride Bike</h4>
+                      <p className="text-[9px] text-muted font-semibold">Swift bike taxi dispatch</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-main">Ride Bike</h4>
-                    <p className="text-[9px] text-muted font-semibold">Swift bike taxi dispatch</p>
+                  <div className="text-right">
+                    <span className="text-sm font-black text-gray-850">
+                      ₹{distance > 0 ? (
+                        distance <= (platformSettings?.rideBikePricing?.tier1?.maxDistanceKm || 2) ? (platformSettings?.rideBikePricing?.tier1?.fee || 20) :
+                        distance <= (platformSettings?.rideBikePricing?.tier2?.maxDistanceKm || 3.5) ? (platformSettings?.rideBikePricing?.tier2?.fee || 25) :
+                        distance <= (platformSettings?.rideBikePricing?.tier3?.maxDistanceKm || 6) ? (platformSettings?.rideBikePricing?.tier3?.fee || 40) :
+                        distance <= (platformSettings?.rideBikePricing?.tier4?.maxDistanceKm || 12) ? (platformSettings?.rideBikePricing?.tier4?.fee || 80) :
+                        (platformSettings?.rideBikePricing?.tier5?.fee || 120)
+                      ) : '--'}
+                    </span>
+                    <p className="text-[8px] font-bold text-gray-450">Tiers: ₹{platformSettings?.rideBikePricing?.tier1?.fee || 20} / ₹{platformSettings?.rideBikePricing?.tier2?.fee || 25} / ₹{platformSettings?.rideBikePricing?.tier3?.fee || 40}...</p>
                   </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-sm font-black text-gray-850">₹{distance > 0 ? (distance <= 1.5 ? 20 : distance <= 2.5 ? 30 : 40) : '--'}</span>
-                  <p className="text-[8px] font-bold text-gray-450">Tiers: ₹20 / ₹30 / ₹40</p>
-                </div>
-              </button>
+                </button>
+              )}
 
-              {/* Auto option */}
-              <button
-                type="button"
-                onClick={() => setVehicleType('auto')}
-                className={`w-full p-3 rounded-2xl border text-left flex justify-between items-center transition-all cursor-pointer ${
-                  vehicleType === 'auto' ? 'border-yellow-400 bg-yellow-500/5 shadow-2xs' : 'border-line bg-surface hover:border-line-strong'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-yellow-100 text-yellow-700 flex items-center justify-center rounded-xl font-bold">
-                    <Bike className="w-5 h-5 rotate-12" />
+              {platformSettings?.rideServices?.autoEnabled !== false && (
+                <button
+                  type="button"
+                  onClick={() => setVehicleType('auto')}
+                  className={`w-full p-3 rounded-2xl border text-left flex justify-between items-center transition-all cursor-pointer ${
+                    vehicleType === 'auto' ? 'border-yellow-400 bg-yellow-500/5 shadow-2xs' : 'border-line bg-surface hover:border-line-strong'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-yellow-100 text-yellow-700 flex items-center justify-center rounded-xl font-bold">
+                      <Bike className="w-5 h-5 rotate-12" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-main">Ride Auto</h4>
+                      <p className="text-[9px] text-muted font-semibold">Spacious Auto-rickshaw</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-main">Ride Auto</h4>
-                    <p className="text-[9px] text-muted font-semibold">Spacious Auto-rickshaw</p>
+                  <div className="text-right">
+                    <span className="text-sm font-black text-gray-850">
+                      ₹{distance > 0 ? (
+                        distance <= (platformSettings?.rideAutoPricing?.tier1?.maxDistanceKm || 2) ? (platformSettings?.rideAutoPricing?.tier1?.fee || 30) :
+                        distance <= (platformSettings?.rideAutoPricing?.tier2?.maxDistanceKm || 3.5) ? (platformSettings?.rideAutoPricing?.tier2?.fee || 40) :
+                        distance <= (platformSettings?.rideAutoPricing?.tier3?.maxDistanceKm || 6) ? (platformSettings?.rideAutoPricing?.tier3?.fee || 70) :
+                        distance <= (platformSettings?.rideAutoPricing?.tier4?.maxDistanceKm || 12) ? (platformSettings?.rideAutoPricing?.tier4?.fee || 120) :
+                        distance <= (platformSettings?.rideAutoPricing?.tier5?.maxDistanceKm || 20) ? (platformSettings?.rideAutoPricing?.tier5?.fee || 200) :
+                        (platformSettings?.rideAutoPricing?.tier6?.fee || 400)
+                      ) : '--'}
+                    </span>
+                    <p className="text-[8px] font-bold text-gray-450">Tiers: ₹{platformSettings?.rideAutoPricing?.tier1?.fee || 30} / ₹{platformSettings?.rideAutoPricing?.tier2?.fee || 40} / ₹{platformSettings?.rideAutoPricing?.tier3?.fee || 70}...</p>
                   </div>
+                </button>
+              )}
+
+              {platformSettings?.rideServices?.bikeEnabled === false && platformSettings?.rideServices?.autoEnabled === false && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-center">
+                  <p className="text-xs font-bold text-red-600">All ride services are currently disabled by Admin.</p>
                 </div>
-                <div className="text-right">
-                  <span className="text-sm font-black text-gray-850">₹{distance > 0 ? (distance <= 1.5 ? 35 : distance <= 2.5 ? 50 : 65) : '--'}</span>
-                  <p className="text-[8px] font-bold text-gray-450">Tiers: ₹35 / ₹50 / ₹65</p>
-                </div>
-              </button>
+              )}
             </div>
 
             {/* Calculations breakdown */}
