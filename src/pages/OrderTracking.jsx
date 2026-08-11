@@ -250,24 +250,39 @@ export default function OrderTracking() {
 
   // Active status timeline markers
   const timelineSteps = order.orderType === 'ride' ? [
-    { label: 'Booking Placed', state: 'Placed', desc: 'Finding nearest Ride Captain' },
-    { label: 'Captain Assigned', state: 'Confirmed', desc: 'Captain accepted your ride request' },
-    { label: 'Captain at Pickup', state: 'Preparing', desc: 'Captain is waiting at pickup spot' },
-    { label: 'Ride in Progress', state: 'Out for Delivery', desc: 'Captain is en route to destination' },
-    { label: 'Completed', state: 'Delivered', desc: 'Reached destination successfully!' }
+    { label: 'Booking Placed', mappedState: 0, desc: 'Finding nearest Ride Captain' },
+    { label: 'Captain Assigned', mappedState: 1, desc: 'Captain accepted your ride request' },
+    { label: 'Captain at Pickup', mappedState: 2, desc: 'Captain is waiting at pickup spot' },
+    { label: 'Ride in Progress', mappedState: 3, desc: 'Captain is en route to destination' },
+    { label: 'Completed', mappedState: 4, desc: 'Reached destination successfully!' }
   ] : [
-    { label: 'Order Placed', state: 'Placed', desc: 'Awaiting restaurant approval' },
-    { label: 'Confirmed', state: 'Confirmed', desc: 'Accepted by the kitchen' },
-    { label: 'Preparing', state: 'Preparing', desc: 'Dishes are being cooked' },
-    { label: 'Out for Delivery', state: 'Out for Delivery', desc: 'Rider is driving to you' },
-    { label: 'Delivered', state: 'Delivered', desc: 'Enjoy your meal!' }
+    { label: 'Order Placed', mappedState: 0, desc: 'Awaiting restaurant approval' },
+    { label: 'Preparing', mappedState: 1, desc: 'Accepted & being cooked' },
+    { label: 'Awaiting Pickup', mappedState: 2, desc: 'Rider is assigned and on the way' },
+    { label: 'Out for Delivery', mappedState: 3, desc: 'Rider is driving to you' },
+    { label: 'Delivered', mappedState: 4, desc: 'Enjoy your meal!' }
   ];
 
-  const getStepIndex = (currentStatus) => {
-    return timelineSteps.findIndex(step => step.state === currentStatus);
+  const getStepIndex = (currentStatus, type) => {
+    if (type === 'ride') {
+      if (currentStatus === 'Placed') return 0;
+      if (currentStatus === 'Confirmed' || currentStatus === 'Rider_Assigned') return 1;
+      if (currentStatus === 'Preparing' || currentStatus === 'Rider_At_Restaurant') return 2;
+      if (currentStatus === 'Out for Delivery' || currentStatus === 'Out_for_Delivery' || currentStatus === 'Rider_At_Customer') return 3;
+      if (currentStatus === 'Delivered' || currentStatus === 'Completed') return 4;
+      return 0;
+    } else {
+      // Food / Parcel
+      if (currentStatus === 'Placed') return 0;
+      if (currentStatus === 'Confirmed' || currentStatus === 'Accepted' || currentStatus === 'Preparing') return 1;
+      if (['Ready_for_Pickup', 'Rider_Assigned', 'Rider_At_Restaurant', 'Picked_Up'].includes(currentStatus)) return 2;
+      if (['Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(currentStatus)) return 3;
+      if (currentStatus === 'Delivered' || currentStatus === 'Completed') return 4;
+      return 0;
+    }
   };
 
-  const activeIndex = getStepIndex(order.status);
+  const activeIndex = getStepIndex(order.status, order.orderType);
   const allOrdersInSession = [order, ...siblingOrders].sort((a, b) => String(a._id).localeCompare(String(b._id)));
 
   return (
@@ -324,6 +339,7 @@ export default function OrderTracking() {
           <span>Polling Live Feed</span>
         </div>
       </div>
+      )}
 
       {/* Sibling Orders Selector */}
       {allOrdersInSession.length > 1 && (
@@ -482,7 +498,7 @@ export default function OrderTracking() {
           </h3>
 
           <div className="flex flex-col gap-6 relative pl-6 border-l-2 border-line">
-            {timelineSteps.map((step, idx) => {
+            {order.status !== 'Rejected' && timelineSteps.map((step, idx) => {
               const isCompleted = idx < activeIndex;
               const isActive = idx === activeIndex;
               

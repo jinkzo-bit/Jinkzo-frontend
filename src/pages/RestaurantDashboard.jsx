@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
 import LocationPickerModal from '../components/LocationPickerModal';
+import NotificationCenter from '../components/NotificationCenter';
 
 export default function RestaurantDashboard() {
   const { user, token, logout } = useAuthStore();
@@ -128,6 +129,8 @@ export default function RestaurantDashboard() {
   const [orders, setOrders] = useState([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState(true);
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
+  const [rejectingOrderId, setRejectingOrderId] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState('');
   
   // Orders Pipeline sub-tabs and Date filtering
   const [orderPipelineTab, setOrderPipelineTab] = useState('new'); // 'new', 'ongoing', 'completed'
@@ -378,7 +381,7 @@ export default function RestaurantDashboard() {
   };
 
   // Order Status update
-  const handleUpdateOrderStatus = async (orderId, nextStatus) => {
+  const handleUpdateOrderStatus = async (orderId, nextStatus, reason = null) => {
     setUpdatingOrderId(orderId);
     try {
       const res = await fetch(`${API_BASE}/orders/${orderId}/status`, {
@@ -387,7 +390,7 @@ export default function RestaurantDashboard() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ status: nextStatus })
+        body: JSON.stringify({ status: nextStatus, rejectionReason: reason })
       });
       if (res.ok) {
         const updated = await res.json();
@@ -561,9 +564,9 @@ export default function RestaurantDashboard() {
   };
 
   const getNextStatusText = (status) => {
-    if (status === 'Placed') return { next: 'Confirmed', label: 'Accept Order' };
-    if (status === 'Confirmed') return { next: 'Preparing', label: 'Start Cooking' };
-    if (status === 'Preparing') return { next: 'Out for Delivery', label: 'Dispatch Order' };
+    if (status === 'Placed') return { next: 'Accepted', label: 'Accept Order' };
+    if (status === 'Accepted') return { next: 'Preparing', label: 'Start Cooking' };
+    if (status === 'Preparing') return { next: 'Ready_for_Pickup', label: 'Mark Ready for Pickup' };
     return null;
   };
 

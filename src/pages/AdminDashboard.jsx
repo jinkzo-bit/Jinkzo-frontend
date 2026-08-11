@@ -17,6 +17,8 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
 
   const [activeSubTab, setActiveSubTab] = useState('analytics'); // 'analytics', 'kyc', 'users', 'withdrawals', 'complaints', 'coupons', 'settings'
+
+  const availableRiders = allUsers.filter(u => u.role === 'delivery' && u.kycStatus === 'Approved' && !u.isBlocked && u.deliveryDetails?.isAvailable);
   
   // States
   const [metrics, setMetrics] = useState(null);
@@ -162,6 +164,30 @@ export default function AdminDashboard() {
       setAllOrders([]);
     } finally {
       setIsOrdersLoading(false);
+    }
+  };
+
+  const handleAssignRider = async (orderId, riderId) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/orders/${orderId}/assign-rider`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ riderId })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setOrders(prev => prev.map(o => o._id === orderId ? updated : o));
+        alert('Rider manually assigned successfully');
+      } else {
+        const errData = await res.json();
+        alert(errData.message || 'Failed to assign rider');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error assigning rider');
     }
   };
 

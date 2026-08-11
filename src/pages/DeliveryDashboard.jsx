@@ -5,6 +5,7 @@ import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, Chevr
 import { useAuthStore } from '../store/authStore';
 import InteractiveMap from '../components/InteractiveMap';
 import { io } from 'socket.io-client';
+import NotificationCenter from '../components/NotificationCenter';
 import { formatAppDateOnly, formatAppTimeOnly } from '../utils/dateUtils';
 
 export default function DeliveryDashboard() {
@@ -370,7 +371,7 @@ export default function DeliveryDashboard() {
 
   // Geolocation and Socket.IO GPS update streaming for Out for Delivery orders
   useEffect(() => {
-    if (!selectedOrder || selectedOrder.status !== 'Out for Delivery' || !token) return;
+    if (!selectedOrder || !['Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(selectedOrder.status) || !token) return;
 
     const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
     const socket = io(socketHost, {
@@ -536,9 +537,18 @@ export default function DeliveryDashboard() {
   };
 
   const getNextRiderAction = (status) => {
+    // New Hybrid Assignment States
+    if (status === 'Rider_Assigned' || status === 'Ready_for_Pickup') return { next: 'Rider_At_Restaurant', label: 'Arrive at Restaurant' };
+    if (status === 'Rider_At_Restaurant') return { next: 'Picked_Up', label: 'Pick Up Order' };
+    if (status === 'Picked_Up') return { next: 'Out_for_Delivery', label: 'Start Delivery' };
+    if (status === 'Out_for_Delivery') return { next: 'Rider_At_Customer', label: 'Arrive at Customer' };
+    if (status === 'Rider_At_Customer') return { next: 'Delivered', label: 'Mark as Completed' };
+
+    // Legacy fallback
     if (status === 'Confirmed') return { next: 'Preparing', label: 'Arrive at Restaurant' };
     if (status === 'Preparing') return { next: 'Out for Delivery', label: 'Pick Up & Start Run' };
     if (status === 'Out for Delivery') return { next: 'Delivered', label: 'Mark as Delivered' };
+
     return null;
   };
 
@@ -570,6 +580,7 @@ export default function DeliveryDashboard() {
         {/* Availability & Capabilities Switches */}
         {user?.kycStatus === 'Approved' && (
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-surface border border-line p-4 rounded-2xl shadow-2xs">
+            <NotificationCenter userId={user?._id} role="delivery" />
             {/* Duty Toggle */}
             <div className="flex items-center gap-2.5 pr-4 sm:border-r sm:border-gray-150">
               <span className={`text-xs font-bold ${isAvailable ? 'text-green-600' : 'text-gray-450'}`}>
