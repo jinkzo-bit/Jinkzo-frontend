@@ -11,6 +11,7 @@ export default function RideBooking() {
   const { user, token } = useAuthStore();
   const { showToast, platformSettings, fetchPlatformSettings } = useCartStore();
   const navigate = useNavigate();
+  const routeRequestIdRef = React.useRef(0);
 
   // Booking Type: 'ride' or 'parcel'
   const [serviceType, setServiceType] = useState('ride');
@@ -96,9 +97,15 @@ export default function RideBooking() {
   React.useEffect(() => {
     const fetchRoute = async () => {
       if (pickupLat && pickupLng && destLat && destLng) {
+        routeRequestIdRef.current += 1;
+        const currentRequestId = routeRequestIdRef.current;
+        
         setDistance(null); // indicating 'Calculating...'
         try {
           const res = await getRoute({ lat: pickupLat, lng: pickupLng }, { lat: destLat, lng: destLng });
+          
+          if (currentRequestId !== routeRequestIdRef.current) return;
+          
           if (res && res.success && res.distanceKm != null) {
             const calculatedDistance = res.distanceKm;
             setDistance(calculatedDistance);
@@ -138,11 +145,13 @@ export default function RideBooking() {
             setFare(computedFare);
             setErrorMsg('');
           } else {
+            if (currentRequestId !== routeRequestIdRef.current) return;
             setDistance('error');
             setFare(0);
             setErrorMsg("Unable to calculate route. Please try selecting the locations again.");
           }
         } catch (err) {
+          if (currentRequestId !== routeRequestIdRef.current) return;
           console.error("Failed to preview route distance", err);
           setDistance('error');
           setFare(0);
