@@ -18,8 +18,6 @@ export default function AdminDashboard() {
 
   const [activeSubTab, setActiveSubTab] = useState('analytics'); // 'analytics', 'kyc', 'users', 'withdrawals', 'complaints', 'coupons', 'settings'
 
-  const availableRiders = allUsers.filter(u => u.role === 'delivery' && u.kycStatus === 'Approved' && !u.isBlocked && u.deliveryDetails?.isAvailable);
-  
   // States
   const [metrics, setMetrics] = useState(null);
   const [platformSettings, setPlatformSettings] = useState({
@@ -45,6 +43,7 @@ export default function AdminDashboard() {
 
   // User Manager
   const [allUsers, setAllUsers] = useState([]);
+  const availableRiders = allUsers.filter(u => u.role === 'delivery' && u.kycStatus === 'Approved' && !u.isBlocked && u.deliveryDetails?.isAvailable);
   const [userRoleFilter, setUserRoleFilter] = useState('all'); // 'all', 'customer', 'restaurant', 'delivery'
   const [riderAvailabilityFilter, setRiderAvailabilityFilter] = useState('all'); // 'all', 'food', 'ride'
   const [isUsersLoading, setIsUsersLoading] = useState(true);
