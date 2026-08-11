@@ -22,29 +22,7 @@ const MAP_OPTIONS = {
   fullscreenControl: false,
   clickableIcons: false,
   gestureHandling: 'greedy',
-  styles: [
-    { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
-    { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
-    { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9e8f7' }] },
-    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
-    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e0e0e0' }] },
-    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dadada' }] },
-    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#c6c6c6' }] },
-    { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-    { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#e8f5e9' }] },
-    { featureType: 'park', elementType: 'geometry', stylers: [{ color: '#e5f2e5' }] },
-    { featureType: 'park', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
-    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
-    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e5f2e5' }] },
-    { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#f2f2f2' }] },
-    { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-    { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },
-    { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
-  ],
+  mapTypeId: 'roadmap',
 };
 
 // ── SVG marker builders (Swiggy/Zomato style pin markers) ────────────────────
@@ -82,9 +60,9 @@ const RIDER_SVG = `
     <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="rgba(0,0,0,0.32)" />
   </filter>
   <g filter="url(#rshadow)">
-    <circle cx="26" cy="26" r="22" fill="#E23744"/>
-    <circle cx="26" cy="26" r="19" fill="#cc1f2d"/>
-    <text x="26" y="32" text-anchor="middle" font-size="20" font-family="Arial">&#128691;</text>
+    <circle cx="26" cy="26" r="22" fill="#18181b"/>
+    <circle cx="26" cy="26" r="19" fill="#27272a"/>
+    <path d="M26 12L34 36L26 32L18 36L26 12Z" fill="#FC8019"/>
   </g>
 </svg>`;
 
@@ -97,7 +75,7 @@ const RIDE_SVG = `
   <g filter="url(#cshadow)">
     <circle cx="26" cy="26" r="22" fill="#1e40af"/>
     <circle cx="26" cy="26" r="19" fill="#1d4ed8"/>
-    <text x="26" y="32" text-anchor="middle" font-size="20" font-family="Arial">&#128663;</text>
+    <path d="M26 12L34 36L26 32L18 36L26 12Z" fill="#60a5fa"/>
   </g>
 </svg>`;
 
@@ -115,11 +93,17 @@ const PICKER_SVG = `
 </svg>`;
 
 // Convert SVG string to Google Maps icon object
-const svgToIcon = (svgString, width, height, anchorX, anchorY) => ({
-  url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgString)}`,
-  scaledSize: { width, height },
-  anchor: { x: anchorX, y: anchorY },
-});
+const svgToIcon = (svgString, width, height, anchorX, anchorY, rotation = 0) => {
+  let finalSvg = svgString;
+  if (rotation !== 0) {
+    finalSvg = svgString.replace('<g filter=', `<g transform="rotate(${rotation}, ${width/2}, ${height/2})" filter=`);
+  }
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(finalSvg)}`,
+    scaledSize: window.google ? new window.google.maps.Size(width, height) : { width, height },
+    anchor: window.google ? new window.google.maps.Point(anchorX, anchorY) : { x: anchorX, y: anchorY },
+  };
+};
 
 
 
@@ -157,12 +141,18 @@ export default function GoogleMapContainer({
   const [activePopup, setActivePopup] = useState(null);
   const [error, setError] = useState(null);
   const [trafficOn, setTrafficOn] = useState(false);
+  const [riderBearing, setRiderBearing] = useState(0);
+  const [showFollowButton, setShowFollowButton] = useState(false);
+  
+  const isAutoFollowRef = useRef(true);
+  const animationFrameRef = useRef(null);
+  const previousRiderPosRef = useRef(null);
 
   // ── Build SVG icon objects once Maps API is loaded ─────────────────────────
   const restaurantIcon = isLoaded ? svgToIcon(RESTAURANT_SVG, 44, 56, 22, 52) : undefined;
   const homeIcon       = isLoaded ? svgToIcon(HOME_SVG, 44, 56, 22, 52)       : undefined;
-  const riderIcon      = isLoaded ? svgToIcon(RIDER_SVG, 52, 52, 26, 26)      : undefined;
-  const rideIcon       = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26)       : undefined;
+  const riderIcon      = isLoaded ? svgToIcon(RIDER_SVG, 52, 52, 26, 26, riderBearing)      : undefined;
+  const rideIcon       = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26, riderBearing)       : undefined;
   const pickerIcon     = isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50)     : undefined;
 
   // ── Map load callback ──────────────────────────────────────────────────────
@@ -340,6 +330,12 @@ export default function GoogleMapContainer({
         bounds.extend(restLatLng);
         bounds.extend(custLatLng);
         mapRef.current.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+        
+        window.google.maps.event.addListenerOnce(mapRef.current, 'idle', () => {
+          if (mapRef.current.getZoom() > 17) {
+            mapRef.current.setZoom(17);
+          }
+        });
       }
     };
 
@@ -362,9 +358,51 @@ export default function GoogleMapContainer({
     socket.on('locationUpdated', ({ lat, lng }) => {
       console.log('[SOCKET] Rider coordinate update:', lat, lng);
       hasLiveGPS.current = true;
-      setRiderPos({ lat, lng });
-      if (status === 'Out for Delivery' && mapRef.current) {
-        mapRef.current.panTo({ lat, lng });
+      const newPos = { lat, lng };
+
+      if (previousRiderPosRef.current) {
+        const oldPos = previousRiderPosRef.current;
+        const dist = Math.hypot(newPos.lat - oldPos.lat, newPos.lng - oldPos.lng);
+        
+        // Calculate bearing only if movement is meaningful
+        if (dist > 0.0001) {
+          const dy = newPos.lat - oldPos.lat;
+          const dx = Math.cos(Math.PI / 180 * oldPos.lat) * (newPos.lng - oldPos.lng);
+          const angle = Math.atan2(dx, dy) * 180 / Math.PI;
+          setRiderBearing(angle);
+        }
+
+        const startTime = performance.now();
+        const duration = 1000;
+        
+        const animate = (time) => {
+          let elapsed = time - startTime;
+          let progress = Math.min(elapsed / duration, 1);
+          progress = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+
+          const currentLat = oldPos.lat + (newPos.lat - oldPos.lat) * progress;
+          const currentLng = oldPos.lng + (newPos.lng - oldPos.lng) * progress;
+          setRiderPos({ lat: currentLat, lng: currentLng });
+
+          if (isAutoFollowRef.current && status === 'Out for Delivery' && mapRef.current) {
+             mapRef.current.panTo({ lat: currentLat, lng: currentLng });
+          }
+
+          if (progress < 1) {
+             animationFrameRef.current = requestAnimationFrame(animate);
+          } else {
+             previousRiderPosRef.current = newPos;
+          }
+        };
+
+        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        setRiderPos(newPos);
+        previousRiderPosRef.current = newPos;
+        if (isAutoFollowRef.current && status === 'Out for Delivery' && mapRef.current) {
+          mapRef.current.panTo(newPos);
+        }
       }
     });
 
@@ -509,6 +547,12 @@ export default function GoogleMapContainer({
         onLoad={onMapLoad}
         onUnmount={onMapUnmount}
         onClick={mode === 'picker' ? handlePickerMapClick : undefined}
+        onDragStart={() => {
+          if (mode === 'tracking') {
+            isAutoFollowRef.current = false;
+            setShowFollowButton(true);
+          }
+        }}
       >
         {/* ── PICKER MODE MARKER ── */}
         {mode === 'picker' && pickerPos && (
@@ -639,6 +683,40 @@ export default function GoogleMapContainer({
           title="Zoom out"
         >−</button>
       </div>
+
+      {/* ── Follow Rider Toggle (Tracking Mode) ── */}
+      {mode === 'tracking' && showFollowButton && (
+        <button
+          onClick={() => {
+            isAutoFollowRef.current = true;
+            setShowFollowButton(false);
+            if (riderPos && mapRef.current) mapRef.current.panTo(riderPos);
+          }}
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 20,
+            background: '#18181b',
+            color: 'white',
+            border: 'none',
+            borderRadius: 20,
+            padding: '8px 16px',
+            fontSize: 12,
+            fontWeight: 700,
+            fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+            display: 'flex', alignItems: 'center', gap: 6,
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            transition: 'all 0.18s ease',
+          }}
+          title="Follow Rider"
+        >
+          <MapPin style={{ width: 14, height: 14 }} />
+          Follow Rider
+        </button>
+      )}
 
       {/* ── Traffic Layer Toggle (Tracking Mode) ── */}
       {mode === 'tracking' && (
