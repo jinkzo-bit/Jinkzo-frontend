@@ -43,7 +43,8 @@ export default function AdminDashboard() {
 
   // User Manager
   const [allUsers, setAllUsers] = useState([]);
-  const availableRiders = allUsers.filter(u => u.role === 'delivery' && u.kycStatus === 'Approved' && !u.isBlocked && u.deliveryDetails?.isAvailable);
+  const availableFoodRiders = allUsers.filter(u => u.role === 'delivery' && u.kycStatus === 'Approved' && !u.isBlocked && u.deliveryDetails?.isAvailable && u.deliveryDetails?.activeFoodDelivery !== false);
+  const availableRideCaptains = allUsers.filter(u => u.role === 'delivery' && u.kycStatus === 'Approved' && !u.isBlocked && u.deliveryDetails?.isAvailable && u.deliveryDetails?.activeRide !== false);
   const [userRoleFilter, setUserRoleFilter] = useState('all'); // 'all', 'customer', 'restaurant', 'delivery'
   const [riderAvailabilityFilter, setRiderAvailabilityFilter] = useState('all'); // 'all', 'food', 'ride'
   const [isUsersLoading, setIsUsersLoading] = useState(true);
@@ -189,6 +190,32 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error(err);
       alert('Error assigning rider');
+    }
+  };
+
+  const [selectedCaptains, setSelectedCaptains] = useState({});
+
+  const handleAssignCaptain = async (orderId, captainId) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/orders/${orderId}/assign-captain`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ captainId })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setAllOrders(prev => prev.map(o => o._id === orderId ? updated : o));
+        alert('Captain manually assigned successfully');
+      } else {
+        const errData = await res.json();
+        alert(errData.message || 'Failed to assign captain');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error assigning captain');
     }
   };
 
@@ -1749,7 +1776,7 @@ export default function AdminDashboard() {
                                 className="flex-1 bg-base border border-line-strong rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-400"
                               >
                                 <option value="">Select Rider to Assign</option>
-                                {availableRiders.map(rider => (
+                                {availableFoodRiders.map(rider => (
                                   <option key={rider._id} value={rider._id}>{rider.name} ({rider.phone})</option>
                                 ))}
                               </select>
@@ -1759,6 +1786,67 @@ export default function AdminDashboard() {
                                 className="px-4 py-2 bg-red-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 hover:bg-red-700"
                               >
                                 ASSIGN RIDER
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* RIDE ASSIGNMENT SECTION */}
+                  {filteredOrders.filter(o => o.orderType === 'ride' && o.status === 'Placed' && !o.deliveryAgent?.phone).length > 0 && (
+                    <div className="flex flex-col gap-4 mt-2">
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <AlertCircle className="w-6 h-6 text-yellow-600 animate-pulse" />
+                          <div>
+                            <h4 className="font-display font-black text-sm text-yellow-700">RIDE ASSIGNMENT REQUIRED</h4>
+                            <p className="text-[10px] font-bold text-yellow-600/80">These ride orders are waiting for a captain to be assigned.</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filteredOrders.filter(o => o.orderType === 'ride' && o.status === 'Placed' && !o.deliveryAgent?.phone).map(order => (
+                          <div key={`assign-ride-${order._id}`} className="bg-surface border-2 border-yellow-100 p-5 rounded-3xl shadow-sm flex flex-col gap-3">
+                            <div className="flex justify-between items-start pb-2 border-b border-yellow-100/50">
+                              <div>
+                                <span className="font-mono text-[10px] font-bold text-yellow-600 uppercase">#{String(order._id || '').slice(-8)}</span>
+                                <span className="text-[10px] font-bold text-muted ml-2">Total: ₹{order.total.toFixed(2)}</span>
+                              </div>
+                              <span className="text-[9px] font-black px-2 py-0.5 rounded uppercase border bg-yellow-50 border-yellow-200 text-yellow-700">Needs Captain</span>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 gap-2 text-[10px] font-semibold text-muted">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="uppercase font-extrabold text-yellow-500">Customer Details</span>
+                                <span className="text-main">{order.customerName}</span>
+                                <span>{order.customerPhone || order.customerEmail}</span>
+                              </div>
+                              <div className="flex flex-col gap-0.5 mt-1">
+                                <span className="uppercase font-extrabold text-yellow-500">Route</span>
+                                <span className="text-main truncate">From: {order.address?.street || 'Unknown'}</span>
+                                <span className="text-main truncate">To: {order.dropAddress?.street || 'Unknown'}</span>
+                              </div>
+                            </div>
+                            
+                            <div className="pt-2 flex gap-2">
+                              <select 
+                                value={selectedCaptains[order._id] || ''}
+                                onChange={(e) => setSelectedCaptains(prev => ({...prev, [order._id]: e.target.value}))}
+                                className="flex-1 bg-base border border-line-strong rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-yellow-400"
+                              >
+                                <option value="">Select Captain</option>
+                                {availableRideCaptains.map(captain => (
+                                  <option key={captain._id} value={captain._id}>{captain.name} ({captain.phone})</option>
+                                ))}
+                              </select>
+                              <button 
+                                onClick={() => selectedCaptains[order._id] && handleAssignCaptain(order._id, selectedCaptains[order._id])}
+                                disabled={!selectedCaptains[order._id]}
+                                className="px-4 py-2 bg-yellow-500 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 hover:bg-yellow-600"
+                              >
+                                DISPATCH
                               </button>
                             </div>
                           </div>
