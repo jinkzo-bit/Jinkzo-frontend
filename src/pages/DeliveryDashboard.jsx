@@ -157,6 +157,8 @@ export default function DeliveryDashboard() {
   // Chat State
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [riderLoc, setRiderLoc] = useState(null);
+  const [selectedOrderRestaurantName, setSelectedOrderRestaurantName] = useState('');
   const chatContainerRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -294,6 +296,7 @@ export default function DeliveryDashboard() {
           if (res.ok) {
             const data = await res.json();
             setSelectedOrderRestaurantAddress(data.address);
+            setSelectedOrderRestaurantName(data.name || 'Restaurant');
           }
         } catch (err) {
           console.error("Error fetching restaurant address in delivery dashboard:", err);
@@ -302,6 +305,7 @@ export default function DeliveryDashboard() {
       fetchRestaurantAddress();
     } else {
       setSelectedOrderRestaurantAddress('');
+      setSelectedOrderRestaurantName('');
     }
   }, [selectedOrder]);
 
@@ -387,13 +391,14 @@ export default function DeliveryDashboard() {
     if (navigator.geolocation) {
       watchId = navigator.geolocation.watchPosition(
         (position) => {
-          const { latitude, longitude } = position.coords;
-          console.log('[GPS SOCKET] Dispatching coordinate update:', latitude, longitude);
-          socket.emit('updateLocation', {
-            orderId: selectedOrder._id,
-            lat: latitude,
-            lng: longitude
-          });
+            const { latitude, longitude } = position.coords;
+            console.log('[GPS SOCKET] Dispatching coordinate update:', latitude, longitude);
+            setRiderLoc({ lat: latitude, lng: longitude });
+            socket.emit('updateLocation', {
+              orderId: selectedOrder._id,
+              lat: latitude,
+              lng: longitude
+            });
         },
         (err) => {
           console.error('[GPS SOCKET] Geolocation error:', err);
@@ -537,12 +542,13 @@ export default function DeliveryDashboard() {
   };
 
   const getNextRiderAction = (status) => {
-    // New Hybrid Assignment States
-    if (status === 'Rider_Assigned' || status === 'Ready_for_Pickup') return { next: 'Rider_At_Restaurant', label: 'Arrive at Restaurant' };
-    if (status === 'Rider_At_Restaurant') return { next: 'Picked_Up', label: 'Pick Up Order' };
+    // New Food/Hybrid Assignment States
+    // Note: Rider_Assigned is handled by a custom Accept/Reject UI, so no single action here
+    if (status === 'Rider_Accepted') return { next: 'Rider_At_Restaurant', label: 'Reached Restaurant' };
+    if (status === 'Rider_At_Restaurant') return { next: 'Picked_Up', label: 'Pick Order' };
     if (status === 'Picked_Up') return { next: 'Out_for_Delivery', label: 'Start Delivery' };
-    if (status === 'Out_for_Delivery') return { next: 'Rider_At_Customer', label: 'Arrive at Customer' };
-    if (status === 'Rider_At_Customer') return { next: 'Delivered', label: 'Mark as Completed' };
+    if (status === 'Out_for_Delivery') return { next: 'Rider_At_Customer', label: 'Reached Customer' };
+    if (status === 'Rider_At_Customer') return { next: 'Delivered', label: 'Delivered' };
 
     // Legacy fallback
     if (status === 'Confirmed') return { next: 'Preparing', label: 'Arrive at Restaurant' };
@@ -736,7 +742,9 @@ export default function DeliveryDashboard() {
                         <span>#{order._id.substr(-8).toUpperCase()}</span>
                         <span className={`px-1.5 py-0.5 rounded ${getStatusBadge(order.status)}`}>{order.status}</span>
                       </div>
-                      <p className="text-xs font-bold text-main line-clamp-1">To: {order.address?.street || 'Customer Location'}, {order.address?.city || ''}</p>
+                      <p className="text-xs font-bold text-main line-clamp-1">
+                        To: {order.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? (selectedOrderRestaurantName || 'Restaurant') : (order.address?.street || 'Customer Location')}, {order.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? '' : (order.address?.city || '')}
+                      </p>
                       <div className="border-t border-line pt-2 flex justify-between items-center text-[10px] font-bold text-muted">
                         <span>Grand Total: ₹{order.total}</span>
                         <span className="text-primary flex items-center">Track <ChevronRight className="w-3 h-3" /></span>
@@ -765,14 +773,43 @@ export default function DeliveryDashboard() {
                     </div>
 
                     {/* Real Google Maps tracking map using exact order location snapshots */}
-                    <InteractiveMap 
-                      status={selectedOrder.status} 
-                      restaurantLat={selectedOrder.restaurantLocation?.lat}
-                      restaurantLng={selectedOrder.restaurantLocation?.lng}
-                      customerLat={selectedOrder.customerLocation?.lat}
-                      customerLng={selectedOrder.customerLocation?.lng}
-                      orderId={selectedOrder._id}
-                    />
+                    {(() => {
+                      const isRide = selectedOrder.orderType === 'ride';
+                      const isBeforePickup = ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
+                      
+                      let mapOriginLat, mapOriginLng, mapDestLat, mapDestLng;
+                      
+                      if (isRide) {
+                        // Ride logic preserved
+                        mapOriginLat = selectedOrder.restaurantLocation?.lat; // (pickup location mapped here for rides)
+                        mapOriginLng = selectedOrder.restaurantLocation?.lng;
+                        mapDestLat = selectedOrder.customerLocation?.lat;
+                        mapDestLng = selectedOrder.customerLocation?.lng;
+                      } else {
+                        // Food logic
+                        mapOriginLat = riderLoc?.lat || selectedOrder.restaurantLocation?.lat;
+                        mapOriginLng = riderLoc?.lng || selectedOrder.restaurantLocation?.lng;
+                        
+                        if (isBeforePickup) {
+                          mapDestLat = selectedOrder.restaurantLocation?.lat;
+                          mapDestLng = selectedOrder.restaurantLocation?.lng;
+                        } else {
+                          mapDestLat = selectedOrder.customerLocation?.lat;
+                          mapDestLng = selectedOrder.customerLocation?.lng;
+                        }
+                      }
+                      
+                      return (
+                        <InteractiveMap 
+                          status={selectedOrder.status} 
+                          restaurantLat={mapOriginLat}
+                          restaurantLng={mapOriginLng}
+                          customerLat={mapDestLat}
+                          customerLng={mapDestLng}
+                          orderId={selectedOrder._id}
+                        />
+                      );
+                    })()}
 
                     {/* Driver Instructions */}
                     {selectedOrder.instruction && (
@@ -786,7 +823,28 @@ export default function DeliveryDashboard() {
                     )}
 
                     {/* Action buttons */}
-                    {getNextRiderAction(selectedOrder.status) ? (
+                    {selectedOrder.status === 'Rider_Assigned' ? (
+                      <div className="bg-base border border-gray-150 p-4 rounded-2xl flex flex-col gap-2">
+                        <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Milestone Control</span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleUpdateStatus(selectedOrder._id, 'Rider_Accepted')}
+                            disabled={updatingId === selectedOrder._id}
+                            className="flex-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <CheckCircle className="w-4.5 h-4.5" />
+                            <span>ACCEPT ORDER</span>
+                          </button>
+                          <button
+                            onClick={() => handleUpdateStatus(selectedOrder._id, 'Rider_Rejected')}
+                            disabled={updatingId === selectedOrder._id}
+                            className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <span>REJECT</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : getNextRiderAction(selectedOrder.status) ? (
                       <div className="bg-base border border-gray-150 p-4 rounded-2xl flex flex-col gap-2">
                         <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Milestone Control</span>
                         <button
@@ -911,29 +969,35 @@ export default function DeliveryDashboard() {
                     </div>
 
                     {/* Address details */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
-                      <div className="border border-line p-3.5 rounded-2xl">
-                        <span className="text-[9px] text-muted font-extrabold uppercase">1. Pickup Kitchen</span>
-                        <h5 className="font-bold text-main mt-1">Burger Point</h5>
-                        <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">Shop 4, Linking Road, Mumbai</p>
-                      </div>
-                      <div className="border border-line p-3.5 rounded-2xl flex flex-col justify-between">
-                        <div>
-                          <span className="text-[9px] text-muted font-extrabold uppercase">2. Drop Customer</span>
-                          <h5 className="font-bold text-main mt-1">{selectedOrder.user?.name || 'Delivery Address'}</h5>
-                          <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">
-                            {selectedOrder.address?.street || 'Customer Location'}, {selectedOrder.address?.city || ''}, {selectedOrder.address?.state || ''} - {selectedOrder.address?.zip || ''}
-                          </p>
+                    {(() => {
+                      const isBeforePickup = selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
+                      
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
+                          <div className={`border ${isBeforePickup ? 'border-primary shadow-xs' : 'border-line'} p-3.5 rounded-2xl`}>
+                            <span className="text-[9px] text-muted font-extrabold uppercase">1. Pickup Kitchen</span>
+                            <h5 className="font-bold text-main mt-1">{selectedOrderRestaurantName || 'Restaurant'}</h5>
+                            <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">{selectedOrderRestaurantAddress || 'Restaurant Address'}</p>
+                          </div>
+                          <div className={`border ${!isBeforePickup ? 'border-primary shadow-xs' : 'border-line'} p-3.5 rounded-2xl flex flex-col justify-between`}>
+                            <div>
+                              <span className="text-[9px] text-muted font-extrabold uppercase">2. Drop Customer</span>
+                              <h5 className="font-bold text-main mt-1">{selectedOrder.user?.name || 'Delivery Address'}</h5>
+                              <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">
+                                {selectedOrder.address?.street || 'Customer Location'}, {selectedOrder.address?.city || ''}, {selectedOrder.address?.state || ''} - {selectedOrder.address?.zip || ''}
+                              </p>
+                            </div>
+                            <a 
+                              href={`tel:${selectedOrder.user?.phone || selectedOrder.customerPhone || '+919876543210'}`}
+                              className="mt-3 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                            >
+                              <Phone className="w-3.5 h-3.5" />
+                              <span>Call Customer ({selectedOrder.user?.phone || selectedOrder.customerPhone || '+91 98765 43210'})</span>
+                            </a>
+                          </div>
                         </div>
-                        <a 
-                          href={`tel:${selectedOrder.user?.phone || selectedOrder.customerPhone || '+919876543210'}`}
-                          className="mt-3 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
-                        >
-                          <Phone className="w-3.5 h-3.5" />
-                          <span>Call Customer ({selectedOrder.user?.phone || selectedOrder.customerPhone || '+91 98765 43210'})</span>
-                        </a>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="bg-surface rounded-3xl border border-line p-16 text-center flex flex-col items-center justify-center gap-3">

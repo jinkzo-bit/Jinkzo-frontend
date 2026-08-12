@@ -149,8 +149,12 @@ export default function GoogleMapContainer({
   const previousRiderPosRef = useRef(null);
 
   // ── Build SVG icon objects once Maps API is loaded ─────────────────────────
-  const restaurantIcon = isLoaded ? svgToIcon(RESTAURANT_SVG, 44, 56, 22, 52) : undefined;
-  const homeIcon       = isLoaded ? svgToIcon(HOME_SVG, 44, 56, 22, 52)       : undefined;
+  const isBeforePickup = ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(status);
+  // We don't render an origin icon because the rider marker will cover it
+  const restaurantIcon = isLoaded ? { path: 'M0,0' } : undefined; 
+  // Destination icon swaps between restaurant and home based on phase
+  const homeIcon       = isLoaded ? (isBeforePickup ? svgToIcon(RESTAURANT_SVG, 44, 56, 22, 52) : svgToIcon(HOME_SVG, 44, 56, 22, 52)) : undefined;
+  
   const riderIcon      = isLoaded ? svgToIcon(RIDER_SVG, 52, 52, 26, 26, riderBearing)      : undefined;
   const rideIcon       = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26, riderBearing)       : undefined;
   const pickerIcon     = isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50)     : undefined;
