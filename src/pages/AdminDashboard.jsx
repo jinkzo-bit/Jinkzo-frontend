@@ -856,12 +856,12 @@ export default function AdminDashboard() {
   const dateFilteredOrders = getOrdersByDate(allOrders);
 
   const newOrdersCount = dateFilteredOrders.filter(o => o.status === 'Placed').length;
-  const ongoingOrdersCount = dateFilteredOrders.filter(o => ['Confirmed', 'Preparing', 'Out for Delivery'].includes(o.status) && !['Delivered', 'Completed', 'Cancelled'].includes(o.status)).length;
+  const ongoingOrdersCount = dateFilteredOrders.filter(o => ['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_At_Restaurant', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status)).length;
   const completedOrdersCount = dateFilteredOrders.filter(o => ['Delivered', 'Completed'].includes(o.status)).length;
 
   const filteredOrders = dateFilteredOrders.filter(o => {
     if (orderPipelineTab === 'new') return o.status === 'Placed';
-    if (orderPipelineTab === 'ongoing') return ['Confirmed', 'Preparing', 'Out for Delivery'].includes(o.status) && !['Delivered', 'Completed', 'Cancelled'].includes(o.status);
+    if (orderPipelineTab === 'ongoing') return ['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_At_Restaurant', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status);
     if (orderPipelineTab === 'completed') return ['Delivered', 'Completed'].includes(o.status);
     return true;
   });
@@ -1722,7 +1722,7 @@ export default function AdminDashboard() {
               ) : (
                 <div className="flex flex-col gap-8">
                   {/* RIDER ASSIGNMENT REQUIRED SECTION */}
-                  {filteredOrders.filter(o => o.orderType !== 'ride' && o.status === 'Ready_for_Pickup' && !o.deliveryAgent?.phone).length > 0 && (
+                  {allOrders.filter(o => o.orderType !== 'ride' && o.status === 'Ready_for_Pickup' && !o.deliveryAgent?.phone).length > 0 && (
                     <div className="flex flex-col gap-4">
                       <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
                         <div className="flex items-center gap-3">
@@ -1734,7 +1734,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {filteredOrders.filter(o => o.orderType !== 'ride' && o.status === 'Ready_for_Pickup' && !o.deliveryAgent?.phone).map(order => (
+                        {allOrders.filter(o => o.orderType !== 'ride' && o.status === 'Ready_for_Pickup' && !o.deliveryAgent?.phone).map(order => (
                           <div key={`assign-${order._id}`} className="bg-surface border-2 border-red-100 p-5 rounded-3xl shadow-sm flex flex-col gap-3">
                             <div className="flex justify-between items-start pb-2 border-b border-red-100/50">
                               <div>
@@ -1795,7 +1795,7 @@ export default function AdminDashboard() {
                   )}
 
                   {/* RIDE ASSIGNMENT SECTION */}
-                  {filteredOrders.filter(o => o.orderType === 'ride' && o.status === 'Placed' && !o.deliveryAgent?.phone).length > 0 && (
+                  {allOrders.filter(o => o.orderType === 'ride' && o.status === 'Placed' && !o.deliveryAgent?.phone).length > 0 && (
                     <div className="flex flex-col gap-4 mt-2">
                       <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
                         <div className="flex items-center gap-3">
@@ -1807,7 +1807,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {filteredOrders.filter(o => o.orderType === 'ride' && o.status === 'Placed' && !o.deliveryAgent?.phone).map(order => (
+                        {allOrders.filter(o => o.orderType === 'ride' && o.status === 'Placed' && !o.deliveryAgent?.phone).map(order => (
                           <div key={`assign-ride-${order._id}`} className="bg-surface border-2 border-yellow-100 p-5 rounded-3xl shadow-sm flex flex-col gap-3">
                             <div className="flex justify-between items-start pb-2 border-b border-yellow-100/50">
                               <div>
