@@ -339,7 +339,6 @@ export default function OrderTracking() {
           <span>Polling Live Feed</span>
         </div>
       </div>
-      )}
 
       {/* Sibling Orders Selector */}
       {allOrdersInSession.length > 1 && (

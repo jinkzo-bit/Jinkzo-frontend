@@ -138,7 +138,7 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
                         <h4 className={`text-sm font-semibold ${!notif.read ? "text-blue-800" : "text-gray-800"}`}>{notif.title}</h4>
                       {!notif.read && <span className="w-2 h-2 rounded-full bg-blue-600 mt-1"></span>}
                     </div>
-                    <p className="text-xs text-gray-600 mt-1">{notif.message}</p>
+                    <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{notif.message}</p>
                     <span className="text-[10px] text-gray-400 mt-2 block">
                       {new Date(notif.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </span>

@@ -131,6 +131,8 @@ export default function RestaurantDashboard() {
   const [updatingOrderId, setUpdatingOrderId] = useState(null);
   const [rejectingOrderId, setRejectingOrderId] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [customRejectionReason, setCustomRejectionReason] = useState('');
+  const rejectionOptions = ["Item unavailable", "Restaurant too busy", "Kitchen unavailable", "Delivery issue", "Restaurant temporarily unavailable", "Other"];
   
   // Orders Pipeline sub-tabs and Date filtering
   const [orderPipelineTab, setOrderPipelineTab] = useState('new'); // 'new', 'ongoing', 'completed'
@@ -722,13 +724,15 @@ export default function RestaurantDashboard() {
   const dateFilteredOrders = getOrdersByDate(orders);
 
   const newOrdersCount = dateFilteredOrders.filter(o => o.status === 'Placed').length;
-  const ongoingOrdersCount = dateFilteredOrders.filter(o => ['Confirmed', 'Preparing', 'Out for Delivery'].includes(o.status) && !['Delivered', 'Completed', 'Cancelled'].includes(o.status)).length;
+  const ongoingOrdersCount = dateFilteredOrders.filter(o => ['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_At_Restaurant', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status)).length;
   const completedOrdersCount = dateFilteredOrders.filter(o => ['Delivered', 'Completed'].includes(o.status)).length;
+  const rejectedOrdersCount = dateFilteredOrders.filter(o => ['Rejected', 'Cancelled'].includes(o.status)).length;
 
   const filteredOrders = dateFilteredOrders.filter(o => {
     if (orderPipelineTab === 'new') return o.status === 'Placed';
-    if (orderPipelineTab === 'ongoing') return ['Confirmed', 'Preparing', 'Out for Delivery'].includes(o.status) && !['Delivered', 'Completed', 'Cancelled'].includes(o.status);
+    if (orderPipelineTab === 'ongoing') return ['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_At_Restaurant', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status);
     if (orderPipelineTab === 'completed') return ['Delivered', 'Completed'].includes(o.status);
+    if (orderPipelineTab === 'rejected') return ['Rejected', 'Cancelled'].includes(o.status);
     return true;
   });
 
@@ -1020,7 +1024,8 @@ export default function RestaurantDashboard() {
                 {[
                   { id: 'new', label: 'New Orders', count: newOrdersCount, color: 'bg-violet-500' },
                   { id: 'ongoing', label: 'Ongoing Orders', count: ongoingOrdersCount, color: 'bg-primary' },
-                  { id: 'completed', label: 'Completed Orders', count: completedOrdersCount, color: 'bg-green-600' }
+                  { id: 'completed', label: 'Completed Orders', count: completedOrdersCount, color: 'bg-green-600' },
+                  { id: 'rejected', label: 'Rejected/Cancelled', count: rejectedOrdersCount, color: 'bg-red-500' }
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -1097,20 +1102,30 @@ export default function RestaurantDashboard() {
                           <span className="text-xs font-black text-main">Total: ₹{order.total.toFixed(2)}</span>
                           
                           {/* Accept/Advance Actions */}
-                          {action ? (
-                            <button
-                              onClick={() => handleUpdateOrderStatus(order._id, action.next)}
-                              disabled={updatingOrderId === order._id}
-                              className="bg-primary hover:bg-primary-hover text-white text-[10px] font-bold px-4 py-2 rounded-xl shadow-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>{action.label}</span>
-                            </button>
-                          ) : (
-                            <span className="text-[10px] font-bold text-muted flex items-center gap-1">
-                              <Check className="w-4 h-4 text-green-600" /> {order.status === 'Out for Delivery' ? 'Handed Over to Rider (Out for Delivery)' : 'Finished & Handed Over'}
-                            </span>
-                          )}
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            {order.status === 'Placed' && (
+                              <button
+                                onClick={() => setRejectingOrderId(order._id)}
+                                className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-[10px] font-bold px-4 py-2 rounded-xl shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>Reject Order</span>
+                              </button>
+                            )}
+                            {action ? (
+                              <button
+                                onClick={() => handleUpdateOrderStatus(order._id, action.next)}
+                                disabled={updatingOrderId === order._id}
+                                className="bg-primary hover:bg-primary-hover text-white text-[10px] font-bold px-4 py-2 rounded-xl shadow-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>{action.label}</span>
+                              </button>
+                            ) : (
+                              <span className="text-[10px] font-bold text-muted flex items-center gap-1">
+                                <Check className="w-4 h-4 text-green-600" /> {order.status === 'Out for Delivery' ? 'Handed Over to Rider (Out for Delivery)' : 'Finished & Handed Over'}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -1743,6 +1758,31 @@ export default function RestaurantDashboard() {
         }
         title="Set Restaurant Location"
       />
+
+      {/* ── REJECTION MODAL ── */}
+      {rejectingOrderId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4 animate-fade-in">
+            <h3 className="font-display font-black text-xl text-red-600 border-b border-line pb-2">Reject Order</h3>
+            <p className="text-xs font-semibold text-muted">Please select a reason for rejection. This will notify the customer immediately.</p>
+            <div className="flex flex-col gap-2 mt-2">
+              {rejectionOptions.map(reason => (
+                <label key={reason} className="flex items-center gap-2 cursor-pointer text-sm font-bold text-main">
+                  <input type="radio" name="rejectionReason" value={reason} checked={rejectionReason === reason} onChange={e => setRejectionReason(e.target.value)} className="w-4 h-4 text-red-600 focus:ring-red-500" />
+                  {reason}
+                </label>
+              ))}
+              {rejectionReason === 'Other' && (
+                <input type="text" placeholder="Type custom reason..." value={customRejectionReason} onChange={e => setCustomRejectionReason(e.target.value)} className="mt-2 bg-base border border-line-strong rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500" />
+              )}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button type="button" onClick={() => { setRejectingOrderId(null); setRejectionReason(''); setCustomRejectionReason(''); }} className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+              <button type="button" disabled={!rejectionReason || (rejectionReason === 'Other' && !customRejectionReason)} onClick={() => { handleUpdateOrderStatus(rejectingOrderId, 'Rejected', rejectionReason === 'Other' ? customRejectionReason : rejectionReason); setRejectingOrderId(null); setRejectionReason(''); setCustomRejectionReason(''); }} className="flex-1 py-2.5 bg-red-600 text-white text-xs font-bold rounded-xl hover:bg-red-700 cursor-pointer disabled:opacity-50">Confirm Rejection</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

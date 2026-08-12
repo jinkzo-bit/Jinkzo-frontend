@@ -166,6 +166,8 @@ export default function AdminDashboard() {
     }
   };
 
+  const [selectedRiders, setSelectedRiders] = useState({});
+
   const handleAssignRider = async (orderId, riderId) => {
     try {
       const res = await fetch(`${API_BASE}/admin/orders/${orderId}/assign-rider`, {
@@ -178,7 +180,7 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         const updated = await res.json();
-        setOrders(prev => prev.map(o => o._id === orderId ? updated : o));
+        setAllOrders(prev => prev.map(o => o._id === orderId ? updated : o));
         alert('Rider manually assigned successfully');
       } else {
         const errData = await res.json();
@@ -1690,10 +1692,87 @@ export default function AdminDashboard() {
 
               {isOrdersLoading ? (
                 <div className="h-48 bg-surface border border-line rounded-3xl animate-pulse" />
-              ) : filteredOrders.length > 0 ? (
-                <div className="flex flex-col gap-4">
-                  {filteredOrders.map(order => (
-                    <div key={order._id} className="bg-surface border border-line p-5 rounded-3xl shadow-2xs flex flex-col gap-3.5 animate-fade-in">
+              ) : (
+                <div className="flex flex-col gap-8">
+                  {/* RIDER ASSIGNMENT REQUIRED SECTION */}
+                  {filteredOrders.filter(o => o.orderType !== 'ride' && o.status === 'Ready_for_Pickup' && !o.deliveryAgent?.phone).length > 0 && (
+                    <div className="flex flex-col gap-4">
+                      <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <AlertCircle className="w-6 h-6 text-red-600 animate-pulse" />
+                          <div>
+                            <h4 className="font-display font-black text-sm text-red-700">RIDER ASSIGNMENT REQUIRED</h4>
+                            <p className="text-[10px] font-bold text-red-600/80">These orders are ready for pickup but no rider has accepted them yet.</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filteredOrders.filter(o => o.orderType !== 'ride' && o.status === 'Ready_for_Pickup' && !o.deliveryAgent?.phone).map(order => (
+                          <div key={`assign-${order._id}`} className="bg-surface border-2 border-red-100 p-5 rounded-3xl shadow-sm flex flex-col gap-3">
+                            <div className="flex justify-between items-start pb-2 border-b border-red-100/50">
+                              <div>
+                                <span className="font-mono text-[10px] font-bold text-red-600 uppercase">#{String(order._id || '').slice(-8)}</span>
+                                <span className="text-[10px] font-bold text-muted ml-2">Total: ₹{order.total.toFixed(2)}</span>
+                              </div>
+                              <span className="text-[9px] font-black px-2 py-0.5 rounded uppercase border bg-red-50 border-red-200 text-red-700">Ready for Pickup</span>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold text-muted">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="uppercase font-extrabold text-red-400">Restaurant</span>
+                                <span className="text-main">{order.restaurant?.name || 'Unknown'}</span>
+                                <span className="truncate">{order.restaurant?.address || ''}</span>
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="uppercase font-extrabold text-red-400">Customer</span>
+                                <span className="text-main">{order.customerName}</span>
+                                <span>{order.customerPhone || order.customerEmail}</span>
+                              </div>
+                            </div>
+                            
+                            {/* Items details */}
+                            {Array.isArray(order.items) && order.items.length > 0 && (
+                              <div className="flex flex-col gap-1 py-1 px-1 bg-base/50 rounded-lg">
+                                {order.items.map((item, idx) => (
+                                  <div key={idx} className="flex justify-between text-[10px] font-bold text-main pl-1">
+                                    <span>x{item.quantity} {item.name}</span>
+                                    <span className="text-muted font-medium">₹{item.price * item.quantity}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="pt-2 flex gap-2">
+                              <select 
+                                value={selectedRiders[order._id] || ''}
+                                onChange={(e) => setSelectedRiders(prev => ({...prev, [order._id]: e.target.value}))}
+                                className="flex-1 bg-base border border-line-strong rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-400"
+                              >
+                                <option value="">Select Rider to Assign</option>
+                                {availableRiders.map(rider => (
+                                  <option key={rider._id} value={rider._id}>{rider.name} ({rider.phone})</option>
+                                ))}
+                              </select>
+                              <button 
+                                onClick={() => selectedRiders[order._id] && handleAssignRider(order._id, selectedRiders[order._id])}
+                                disabled={!selectedRiders[order._id]}
+                                className="px-4 py-2 bg-red-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 hover:bg-red-700"
+                              >
+                                ASSIGN RIDER
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-4 mt-2 border-t border-line pt-4">
+                    <h4 className="font-display font-extrabold text-sm text-main">All Orders Log</h4>
+                    {filteredOrders.length > 0 ? (
+                      <div className="flex flex-col gap-4">
+                        {filteredOrders.map(order => (
+                          <div key={order._id} className="bg-surface border border-line p-5 rounded-3xl shadow-2xs flex flex-col gap-3.5 animate-fade-in">
                       {/* Top Header Row */}
                       <div className="flex justify-between items-start sm:items-center pb-3 border-b border-line flex-wrap gap-2 text-xs">
                         <div className="flex flex-wrap items-center gap-2">
@@ -1826,7 +1905,10 @@ export default function AdminDashboard() {
                 </div>
               )}
             </div>
+          </div>
           )}
+        </div>
+      )}
 
           {/* WALLET CASHOUTS TAB */}
           {activeSubTab === 'withdrawals' && (
