@@ -453,9 +453,13 @@ export default function DeliveryDashboard() {
         setSelectedOrder(updated);
         fetchOrdersData();
         fetchProfile(); // Refresh earnings
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Failed to update status: ${errorData.message || res.statusText || 'Unknown error'}`);
       }
     } catch (err) {
       console.error(err);
+      alert(`Error updating status: ${err.message}`);
     } finally {
       setUpdatingId(null);
     }
