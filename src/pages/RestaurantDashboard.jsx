@@ -1058,7 +1058,9 @@ export default function RestaurantDashboard() {
                             <span className="text-[10px] text-muted font-semibold ml-2">• Placed on {order.createdAt ? formatAppDate(order.createdAt) : ''}</span>
                           </div>
                           <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
-                            ['Delivered', 'Completed'].includes(order.status) ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-violet-100 text-violet-700 animate-pulse border border-violet-200'
+                            ['Delivered', 'Completed'].includes(order.status) ? 'bg-green-100 text-green-700 border border-green-200' : 
+                            ['Rejected', 'Cancelled'].includes(order.status) ? 'bg-red-100 text-red-700 border border-red-200' :
+                            'bg-violet-100 text-violet-700 animate-pulse border border-violet-200'
                           }`}>
                             {order.status}
                           </span>
@@ -1095,6 +1097,14 @@ export default function RestaurantDashboard() {
                                 "{order.review.comment}"
                               </p>
                             )}
+                          </div>
+                        )}
+
+                        {/* Rejection Reason */}
+                        {order.status === 'Rejected' && order.rejectionReason && (
+                          <div className="bg-red-50 border border-red-100 rounded-xl p-3 my-1.5">
+                            <p className="text-[10px] text-red-800 font-bold uppercase tracking-wider mb-0.5">Rejection Reason:</p>
+                            <p className="text-xs text-red-900 font-semibold">{order.rejectionReason}</p>
                           </div>
                         )}
 

@@ -452,6 +452,8 @@ export default function Profile() {
                           ? 'bg-green-100 text-green-700' 
                           : order.status === 'Placed'
                           ? 'bg-violet-100 text-violet-700 animate-pulse'
+                          : order.status === 'Rejected'
+                          ? 'bg-red-100 text-red-700'
                           : 'bg-blue-100 text-blue-700'
                       }`}>
                         {order.status}
@@ -459,6 +461,14 @@ export default function Profile() {
                       <p className="text-xs font-bold text-main mt-0.5">₹{(order.total != null ? order.total : 0).toFixed(2)}</p>
                     </div>
                   </div>
+
+                  {/* Rejection Reason (if rejected) */}
+                  {order.status === 'Rejected' && order.rejectionReason && (
+                    <div className="bg-red-50 border border-red-100 rounded-xl p-3 -mt-1">
+                      <p className="text-[10px] text-red-800 font-bold uppercase tracking-wider mb-0.5">Rejection Reason:</p>
+                      <p className="text-xs text-red-900 font-semibold">{order.rejectionReason}</p>
+                    </div>
+                  )}
 
                   {/* Row 2: Actions */}
                   <div className="flex justify-between items-center gap-4">
