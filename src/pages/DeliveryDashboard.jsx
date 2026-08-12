@@ -159,6 +159,7 @@ export default function DeliveryDashboard() {
   const [isSending, setIsSending] = useState(false);
   const [riderLoc, setRiderLoc] = useState(null);
   const [selectedOrderRestaurantName, setSelectedOrderRestaurantName] = useState('');
+  const [selectedOrderRestaurantPhone, setSelectedOrderRestaurantPhone] = useState('');
   const chatContainerRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -179,6 +180,7 @@ export default function DeliveryDashboard() {
 
     setIsSending(true);
     try {
+      const isBeforePickup = selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
       const res = await fetch(`${API_BASE}/orders/${selectedOrder._id}/messages`, {
         method: 'POST',
         headers: {
@@ -187,7 +189,8 @@ export default function DeliveryDashboard() {
         },
         body: JSON.stringify({
           text: messageText,
-          sender: 'rider'
+          sender: 'rider',
+          target: isBeforePickup ? 'restaurant' : 'customer'
         })
       });
 
@@ -297,6 +300,7 @@ export default function DeliveryDashboard() {
             const data = await res.json();
             setSelectedOrderRestaurantAddress(data.address);
             setSelectedOrderRestaurantName(data.name || 'Restaurant');
+            setSelectedOrderRestaurantPhone(data.phone || '');
           }
         } catch (err) {
           console.error("Error fetching restaurant address in delivery dashboard:", err);
@@ -306,6 +310,7 @@ export default function DeliveryDashboard() {
     } else {
       setSelectedOrderRestaurantAddress('');
       setSelectedOrderRestaurantName('');
+      setSelectedOrderRestaurantPhone('');
     }
   }, [selectedOrder]);
 
@@ -375,7 +380,7 @@ export default function DeliveryDashboard() {
 
   // Geolocation and Socket.IO GPS update streaming for Out for Delivery orders
   useEffect(() => {
-    if (!selectedOrder || !['Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(selectedOrder.status) || !token) return;
+    if (!selectedOrder || !['Rider_Accepted', 'Rider_At_Restaurant', 'Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(selectedOrder.status) || !token) return;
 
     const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
     const socket = io(socketHost, {
@@ -860,45 +865,6 @@ export default function DeliveryDashboard() {
                           <span>{getNextRiderAction(selectedOrder.status).label}</span>
                         </button>
                       </div>
-                    ) : selectedOrder.status === 'Delivered' ? (
-                      <div className="flex flex-col gap-3">
-                        <div className="bg-green-50 border border-green-100 text-green-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2">
-                          <CheckCircle className="w-5 h-5 text-green-600" />
-                          <span>Ride successfully delivered! Earnings credited to wallet.</span>
-                        </div>
-                        {/* Customer Feedback Display */}
-                        {selectedOrder.riderReview ? (
-                          <div className="bg-violet-50/50 border border-violet-100 rounded-2xl p-4 flex flex-col gap-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[9px] font-extrabold text-muted uppercase tracking-wider flex items-center gap-1">
-                                <MessageSquare className="w-3.5 h-3.5" /> Customer Feedback
-                              </span>
-                              <div className="flex items-center gap-0.5">
-                                {[1, 2, 3, 4, 5].map((s) => (
-                                  <Star key={s} className={`w-3.5 h-3.5 ${s <= selectedOrder.riderReview.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-200'}`} />
-                                ))}
-                              </div>
-                            </div>
-                            {selectedOrder.riderReview.tipAmount > 0 && (
-                              <div className="flex items-center justify-between bg-green-50 border border-green-100 rounded-xl px-3 py-2">
-                                <span className="text-[10px] font-bold text-green-700 flex items-center gap-1">
-                                  <Heart className="w-3 h-3 text-green-600 fill-green-100" /> Tip Received
-                                </span>
-                                <span className="text-sm font-black text-green-700">₹{selectedOrder.riderReview.tipAmount}</span>
-                              </div>
-                            )}
-                            {selectedOrder.riderReview.comment && (
-                              <div className="bg-surface/60 rounded-xl px-3 py-2.5 border border-violet-100/50">
-                                <p className="text-[10px] text-muted font-semibold italic">"{selectedOrder.riderReview.comment}"</p>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="bg-base border border-line rounded-2xl p-3 text-center">
-                            <p className="text-[10px] text-muted font-semibold">Awaiting customer feedback...</p>
-                          </div>
-                        )}
-                      </div>
                     ) : (
                       <div className="bg-violet-50 border border-violet-100 text-violet-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2 animate-pulse">
                         <Clock className="w-5 h-5 text-primary" />
@@ -907,16 +873,28 @@ export default function DeliveryDashboard() {
                     )}
 
                     {/* Live Chat Panel */}
+                    {selectedOrder.status !== 'Delivered' && (
                     <div className="rounded-2xl p-4 border border-gray-150 flex flex-col gap-3 bg-surface mt-1">
                       <h4 className="font-display font-extrabold text-xs text-gray-805 uppercase tracking-wider pb-1 border-b border-line flex items-center justify-between">
-                        <span>Live Chat with Customer</span>
+                        <span>{selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'Live Chat with Restaurant' : 'Live Chat with Customer'}</span>
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                       </h4>
 
                       {/* Scrollable messages container */}
                       <div ref={chatContainerRef} className="h-48 overflow-y-auto flex flex-col gap-3 pr-1.5 scrollbar-thin">
                         {selectedOrder.messages && selectedOrder.messages.length > 0 ? (
-                          selectedOrder.messages.map((msg, idx) => {
+                          selectedOrder.messages
+                            .filter(msg => {
+                              const isBeforePickup = selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
+                              if (isBeforePickup) {
+                                // Before pickup: Only show restaurant messages or rider messages targeted at restaurant
+                                return msg.sender === 'restaurant' || msg.sender === 'system' || (msg.sender === 'rider' && msg.target !== 'customer');
+                              } else {
+                                // After pickup: Only show customer messages or rider messages targeted at customer
+                                return msg.sender === 'customer' || msg.sender === 'system' || (msg.sender === 'rider' && msg.target !== 'restaurant');
+                              }
+                            })
+                            .map((msg, idx) => {
                             if (msg.sender === 'system') {
                               return (
                                 <div key={idx} className="text-[9px] text-muted font-bold text-center bg-base/70 py-1 px-2.5 rounded-lg w-max mx-auto max-w-[85%] border border-line">
@@ -948,7 +926,7 @@ export default function DeliveryDashboard() {
                           <div className="flex-grow flex flex-col items-center justify-center text-center text-muted gap-1.5 py-6">
                             <span className="text-lg">💬</span>
                             <p className="text-[10px] font-bold text-muted">No messages yet</p>
-                            <p className="text-[9px] max-w-[160px] leading-tight">Send a message to coordinate direction details with the customer.</p>
+                            <p className="text-[9px] max-w-[160px] leading-tight">Send a message to coordinate direction details with the {selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'restaurant' : 'customer'}.</p>
                           </div>
                         )}
                       </div>
@@ -957,7 +935,7 @@ export default function DeliveryDashboard() {
                       <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-line pt-2 mt-0.5">
                         <input
                           type="text"
-                          placeholder="Type a message to customer..."
+                          placeholder={`Type a message to ${selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'restaurant' : 'customer'}...`}
                           value={messageText}
                           onChange={(e) => setMessageText(e.target.value)}
                           className="bg-base border border-line-strong focus:border-primary focus:bg-surface rounded-xl px-3 py-2 text-xs text-main outline-none flex-grow"
@@ -971,17 +949,71 @@ export default function DeliveryDashboard() {
                         </button>
                       </form>
                     </div>
+                    )}
 
                     {/* Address details */}
                     {(() => {
+                      if (selectedOrder.status === 'Delivered') {
+                        return (
+                          <div className="flex flex-col gap-3">
+                            <div className="bg-green-50 border border-green-100 text-green-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2">
+                              <CheckCircle className="w-5 h-5 text-green-600" />
+                              <span>Ride successfully delivered! Earnings credited to wallet.</span>
+                            </div>
+                            {selectedOrder.riderReview ? (
+                              <div className="bg-violet-50/50 border border-violet-100 rounded-2xl p-4 flex flex-col gap-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[9px] font-extrabold text-muted uppercase tracking-wider flex items-center gap-1">
+                                    <MessageSquare className="w-3.5 h-3.5" /> Customer Feedback
+                                  </span>
+                                  <div className="flex items-center gap-0.5">
+                                    {[1, 2, 3, 4, 5].map((s) => (
+                                      <Star key={s} className={`w-3.5 h-3.5 ${s <= selectedOrder.riderReview.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-200'}`} />
+                                    ))}
+                                  </div>
+                                </div>
+                                {selectedOrder.riderReview.tipAmount > 0 && (
+                                  <div className="flex items-center justify-between bg-green-50 border border-green-100 rounded-xl px-3 py-2">
+                                    <span className="text-[10px] font-bold text-green-700 flex items-center gap-1">
+                                      <Heart className="w-3 h-3 text-green-600 fill-green-100" /> Tip Received
+                                    </span>
+                                    <span className="text-sm font-black text-green-700">₹{selectedOrder.riderReview.tipAmount}</span>
+                                  </div>
+                                )}
+                                {selectedOrder.riderReview.comment && (
+                                  <div className="bg-surface/60 rounded-xl px-3 py-2.5 border border-violet-100/50">
+                                    <p className="text-[10px] text-muted font-semibold italic">"{selectedOrder.riderReview.comment}"</p>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="bg-base border border-line rounded-2xl p-3 text-center">
+                                <p className="text-[10px] text-muted font-semibold">Awaiting customer feedback...</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
                       const isBeforePickup = selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
                       
                       return (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
-                          <div className={`border ${isBeforePickup ? 'border-primary shadow-xs' : 'border-line'} p-3.5 rounded-2xl`}>
-                            <span className="text-[9px] text-muted font-extrabold uppercase">1. Pickup Kitchen</span>
-                            <h5 className="font-bold text-main mt-1">{selectedOrderRestaurantName || 'Restaurant'}</h5>
-                            <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">{selectedOrderRestaurantAddress || 'Restaurant Address'}</p>
+                          <div className={`border ${isBeforePickup ? 'border-primary shadow-xs' : 'border-line'} p-3.5 rounded-2xl flex flex-col justify-between`}>
+                            <div>
+                              <span className="text-[9px] text-muted font-extrabold uppercase">1. Pickup Kitchen</span>
+                              <h5 className="font-bold text-main mt-1">{selectedOrderRestaurantName || 'Restaurant'}</h5>
+                              <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">{selectedOrderRestaurantAddress || 'Restaurant Address'}</p>
+                            </div>
+                            {isBeforePickup && selectedOrderRestaurantPhone && (
+                              <a 
+                                href={`tel:${selectedOrderRestaurantPhone}`}
+                                className="mt-3 bg-violet-100 hover:bg-violet-200 text-violet-700 text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                              >
+                                <Phone className="w-3.5 h-3.5" />
+                                <span>Call Restaurant</span>
+                              </a>
+                            )}
                           </div>
                           <div className={`border ${!isBeforePickup ? 'border-primary shadow-xs' : 'border-line'} p-3.5 rounded-2xl flex flex-col justify-between`}>
                             <div>
@@ -991,13 +1023,15 @@ export default function DeliveryDashboard() {
                                 {selectedOrder.address?.street || 'Customer Location'}, {selectedOrder.address?.city || ''}, {selectedOrder.address?.state || ''} - {selectedOrder.address?.zip || ''}
                               </p>
                             </div>
-                            <a 
-                              href={`tel:${selectedOrder.user?.phone || selectedOrder.customerPhone || '+919876543210'}`}
-                              className="mt-3 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
-                            >
-                              <Phone className="w-3.5 h-3.5" />
-                              <span>Call Customer ({selectedOrder.user?.phone || selectedOrder.customerPhone || '+91 98765 43210'})</span>
-                            </a>
+                            {!isBeforePickup && (
+                              <a 
+                                href={`tel:${selectedOrder.user?.phone || selectedOrder.customerPhone}`}
+                                className="mt-3 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                              >
+                                <Phone className="w-3.5 h-3.5" />
+                                <span>Call Customer ({selectedOrder.user?.phone || selectedOrder.customerPhone})</span>
+                              </a>
+                            )}
                           </div>
                         </div>
                       );
