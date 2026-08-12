@@ -1025,11 +1025,11 @@ export default function DeliveryDashboard() {
                             </div>
                             {!isBeforePickup && (
                               <a 
-                                href={`tel:${selectedOrder.user?.phone || selectedOrder.customerPhone}`}
+                                href={`tel:${selectedOrder.userId?.phone || selectedOrder.customerPhone}`}
                                 className="mt-3 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
                               >
                                 <Phone className="w-3.5 h-3.5" />
-                                <span>Call Customer ({selectedOrder.user?.phone || selectedOrder.customerPhone})</span>
+                                <span>Call Customer ({selectedOrder.userId?.phone || selectedOrder.customerPhone})</span>
                               </a>
                             )}
                           </div>
