@@ -207,17 +207,36 @@ export default function Profile() {
     navigate('/');
   };
 
-  const handleReorder = (order) => {
+  const handleReorder = async (order) => {
     clearCart();
     
-    // We need to fetch/mock a restaurant object so the cart knows where it is ordering from
-    // We can extract a mockup of the restaurant from the order details or just set a basic one
-    const mockRestaurant = {
-      _id: '607f1f77bcf86cd799439021', // Fallback to Burger Point
-      name: 'Burger Point',
-      image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&h=400&q=80',
-      address: 'Shop 4, Linking Road, Mumbai'
-    };
+    // We need to fetch the actual restaurant object so the cart has proper coordinates for routing
+    let actualRestaurant = null;
+    try {
+      // Find the first valid restaurant ID from the items
+      const restId = order.items.find(i => i.restaurantId)?.restaurantId;
+      if (restId) {
+        // Fetch full restaurant object including lat/lng
+        const res = await fetch(`${API_BASE}/restaurants/${restId}`);
+        if (res.ok) {
+          actualRestaurant = await res.json();
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch actual restaurant for reorder:', err);
+    }
+    
+    // Fallback if the restaurant was deleted from the database
+    if (!actualRestaurant) {
+      actualRestaurant = {
+        _id: '607f1f77bcf86cd799439021',
+        name: 'Burger Point',
+        image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&h=400&q=80',
+        address: 'Shop 4, Linking Road, Mumbai',
+        lat: 19.06,
+        lng: 72.8347
+      };
+    }
 
     // Re-populate all items
     order.items.forEach(item => {
@@ -232,7 +251,7 @@ export default function Profile() {
       
       // Since addItem increments, we run it 'quantity' times
       for (let q = 0; q < item.quantity; q++) {
-        addItem(reorderItem, mockRestaurant);
+        addItem(reorderItem, actualRestaurant);
       }
     });
 

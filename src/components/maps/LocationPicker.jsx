@@ -200,7 +200,7 @@ export default function LocationPicker({
       locationType: locationType || 'SEARCH',
     }, 'SEARCH');
 
-    setSelectedLocation(prev => ({ ...prev, placeId: pid, formattedAddress: fa }));
+    setSelectedLocation(prev => ({ ...prev, placeId: pid, formattedAddress: fa, lat, lng }));
     setHasValidLocation(true);
     skipNextGeocodeRef.current = true;
 
