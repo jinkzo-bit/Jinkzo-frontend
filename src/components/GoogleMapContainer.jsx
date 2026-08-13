@@ -428,10 +428,13 @@ export default function GoogleMapContainer({
     const segIndex = Math.min(Math.floor(rawIndex), totalSegments - 1);
     const segProgress = rawIndex - segIndex;
 
-    const p1 = points[segIndex];
-    const p2 = points[Math.min(segIndex + 1, totalSegments)];
-    const lat = p1.lat + (p2.lat - p1.lat) * segProgress;
-    const lng = p1.lng + (p2.lng - p1.lng) * segProgress;
+    const lat1 = typeof p1.lat === 'function' ? p1.lat() : p1.lat;
+    const lng1 = typeof p1.lng === 'function' ? p1.lng() : p1.lng;
+    const lat2 = typeof p2.lat === 'function' ? p2.lat() : p2.lat;
+    const lng2 = typeof p2.lng === 'function' ? p2.lng() : p2.lng;
+
+    const lat = lat1 + (lat2 - lat1) * segProgress;
+    const lng = lng1 + (lng2 - lng1) * segProgress;
 
     if (!hasLiveGPS.current) {
       setRiderPos({ lat, lng });

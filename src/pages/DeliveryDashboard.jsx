@@ -790,10 +790,10 @@ export default function DeliveryDashboard() {
                       
                       if (isRide) {
                         // Ride logic preserved
-                        mapOriginLat = selectedOrder.restaurantLocation?.lat; // (pickup location mapped here for rides)
-                        mapOriginLng = selectedOrder.restaurantLocation?.lng;
-                        mapDestLat = selectedOrder.customerLocation?.lat;
-                        mapDestLng = selectedOrder.customerLocation?.lng;
+                        mapOriginLat = selectedOrder?.restaurantLocation?.lat; // (pickup location mapped here for rides)
+                        mapOriginLng = selectedOrder?.restaurantLocation?.lng;
+                        mapDestLat = selectedOrder?.customerLocation?.lat;
+                        mapDestLng = selectedOrder?.customerLocation?.lng;
                       } else {
                         // Food logic
                         mapOriginLat = riderLoc?.lat || selectedOrder.restaurantLocation?.lat;
@@ -960,7 +960,7 @@ export default function DeliveryDashboard() {
                               <CheckCircle className="w-5 h-5 text-green-600" />
                               <span>Ride successfully delivered! Earnings credited to wallet.</span>
                             </div>
-                            {selectedOrder.riderReview ? (
+                            {selectedOrder?.riderReview ? (
                               <div className="bg-violet-50/50 border border-violet-100 rounded-2xl p-4 flex flex-col gap-3">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[9px] font-extrabold text-muted uppercase tracking-wider flex items-center gap-1">
@@ -980,7 +980,7 @@ export default function DeliveryDashboard() {
                                     <span className="text-sm font-black text-green-700">₹{selectedOrder.riderReview.tipAmount}</span>
                                   </div>
                                 )}
-                                {selectedOrder.riderReview.comment && (
+                                {selectedOrder?.riderReview?.comment && (
                                   <div className="bg-surface/60 rounded-xl px-3 py-2.5 border border-violet-100/50">
                                     <p className="text-[10px] text-muted font-semibold italic">"{selectedOrder.riderReview.comment}"</p>
                                   </div>
@@ -1186,7 +1186,7 @@ export default function DeliveryDashboard() {
                                 ))}
                               </div>
                             </div>
-                            {order.riderReview.tipAmount > 0 && (
+                            {order?.riderReview?.tipAmount > 0 && (
                               <span className="text-[10px] font-black text-green-600 bg-green-50 px-2 py-0.5 rounded-lg border border-green-100 flex items-center gap-1">
                                 <Heart className="w-3 h-3 text-green-500 fill-green-100" />
                                 +₹{order.riderReview.tipAmount} tip
