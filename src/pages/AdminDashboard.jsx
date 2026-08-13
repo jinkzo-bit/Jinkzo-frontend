@@ -2414,6 +2414,41 @@ export default function AdminDashboard() {
                   </label>
                 </div>
 
+                {/* Rider Assignment Mode */}
+                <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3 mt-2">
+                  <h4 className="text-xs font-bold text-main flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-amber-500" />
+                    Rider Assignment Mode
+                  </h4>
+                  <p className="text-[11px] text-muted">Controls how riders are assigned to new orders and rides. Default is MANUAL.</p>
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="riderAssignmentMode"
+                        value="manual"
+                        checked={(platformSettings.riderAssignmentMode || 'manual') === 'manual'}
+                        onChange={() => setPlatformSettings({ ...platformSettings, riderAssignmentMode: 'manual' })}
+                        className="w-4 h-4 text-primary"
+                      />
+                      <span className="text-xs font-bold uppercase">Manual</span>
+                      <span className="text-[10px] text-muted font-medium">(Admin picks rider)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="riderAssignmentMode"
+                        value="auto"
+                        checked={(platformSettings.riderAssignmentMode || 'manual') === 'auto'}
+                        onChange={() => setPlatformSettings({ ...platformSettings, riderAssignmentMode: 'auto' })}
+                        className="w-4 h-4 text-primary"
+                      />
+                      <span className="text-xs font-bold uppercase">Auto</span>
+                      <span className="text-[10px] text-muted font-medium">(System offers to all eligible, first accept wins)</span>
+                    </label>
+                  </div>
+                </div>
+
                 <button
                   type="submit"
                   disabled={isSettingsSaving}

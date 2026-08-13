@@ -422,8 +422,43 @@ export default function DeliveryDashboard() {
     };
   }, [selectedOrder?._id, selectedOrder?.status, token]);
 
+  // Socket listener for AUTO assignment mode — real-time pool updates
+  useEffect(() => {
+    if (!token || !user?._id) return;
+
+    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
+    const socket = io(socketHost, {
+      auth: { token },
+      withCredentials: true,
+      transports: ['websocket', 'polling']
+    });
+
+    socket.on('connect', () => {
+      // Join rider's personal room so backend can push targeted events
+      socket.emit('join', `user_${user._id}`);
+    });
+
+    // AUTO mode: backend pushes this when a new opportunity is available for this rider
+    socket.on('auto_ride_opportunity', () => {
+      fetchOrdersData();
+    });
+
+    // When any rider wins (orderStatusChanged broadcast), all riders re-fetch
+    // so the claimed order disappears from losers' available pool
+    socket.on('orderStatusChanged', () => {
+      fetchOrdersData();
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [token, user?._id]);
+
+  const [claimConflictMsg, setClaimConflictMsg] = useState('');
+
   const handleAcceptOrder = async (orderId) => {
     setUpdatingId(orderId);
+    setClaimConflictMsg('');
     try {
       const res = await fetch(`${API_BASE}/delivery-partner/orders/${orderId}/accept`, {
         method: 'PUT',
@@ -434,6 +469,14 @@ export default function DeliveryDashboard() {
         setSelectedOrder(claimed);
         fetchOrdersData();
         setActiveSubTab('orders'); // Jump back to orders tab to view tracking map
+      } else if (res.status === 409) {
+        // Expected race condition — another rider accepted first
+        const data = await res.json().catch(() => ({}));
+        setClaimConflictMsg(data.message || 'This order was already claimed by another rider.');
+        fetchOrdersData(); // Refresh pool so the order disappears
+      } else {
+        const data = await res.json().catch(() => ({}));
+        console.error('Accept order failed:', data.message);
       }
     } catch (err) {
       console.error(err);
@@ -1070,7 +1113,15 @@ export default function DeliveryDashboard() {
           {activeSubTab === 'pool' && (
             <div className="flex flex-col gap-4">
               <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Active Order Requests Pool</h3>
-              
+
+              {claimConflictMsg && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold p-3 rounded-xl flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-500" />
+                  <span>{claimConflictMsg}</span>
+                  <button onClick={() => setClaimConflictMsg('')} className="ml-auto text-amber-400 hover:text-amber-700 cursor-pointer">✕</button>
+                </div>
+              )}
+
               {user?.kycStatus !== 'Approved' ? (
                 <p className="text-xs text-red-500 italic">Please approve your KYC to fetch orders.</p>
               ) : !isAvailable ? (
