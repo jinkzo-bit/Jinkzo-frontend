@@ -550,7 +550,14 @@ export default function DeliveryDashboard() {
     return 'bg-green-100 text-green-700 border-green-200';
   };
 
-  const getNextRiderAction = (status) => {
+  const getNextRiderAction = (status, orderType) => {
+    if (orderType === 'ride') {
+      if (status === 'Rider_Accepted') return { next: 'Rider_At_Pickup', label: 'Reached Pickup Point' };
+      if (status === 'Rider_At_Pickup') return { next: 'Picked_Up', label: 'Picked Up Customer' };
+      if (status === 'Picked_Up') return { next: 'Delivered', label: 'Dropped Customer' };
+      return null;
+    }
+
     // New Food/Hybrid Assignment States
     // Note: Rider_Assigned is handled by a custom Accept/Reject UI, so no single action here
     if (status === 'Rider_Accepted') return { next: 'Rider_At_Restaurant', label: 'Reached Restaurant' };
@@ -784,16 +791,26 @@ export default function DeliveryDashboard() {
                     {/* Real Google Maps tracking map using exact order location snapshots */}
                     {(() => {
                       const isRide = selectedOrder.orderType === 'ride';
-                      const isBeforePickup = ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
+                      // Ride statuses before pickup: Rider_Assigned, Rider_Accepted, Rider_At_Pickup
+                      // Food statuses before pickup: Rider_Assigned, Rider_Accepted, Rider_At_Restaurant, Confirmed, Preparing
+                      const isBeforePickup = isRide 
+                        ? ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Pickup', 'Placed'].includes(selectedOrder.status)
+                        : ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Confirmed', 'Preparing'].includes(selectedOrder.status);
                       
                       let mapOriginLat, mapOriginLng, mapDestLat, mapDestLng;
                       
                       if (isRide) {
-                        // Ride logic preserved
-                        mapOriginLat = selectedOrder?.restaurantLocation?.lat; // (pickup location mapped here for rides)
-                        mapOriginLng = selectedOrder?.restaurantLocation?.lng;
-                        mapDestLat = selectedOrder?.customerLocation?.lat;
-                        mapDestLng = selectedOrder?.customerLocation?.lng;
+                        // Ride logic: Rider loc as origin. Dest = Pickup if before pickup, else Drop
+                        mapOriginLat = riderLoc?.lat || selectedOrder?.restaurantLocation?.lat; // (pickup location mapped here for rides)
+                        mapOriginLng = riderLoc?.lng || selectedOrder?.restaurantLocation?.lng;
+                        
+                        if (isBeforePickup) {
+                          mapDestLat = selectedOrder?.restaurantLocation?.lat;
+                          mapDestLng = selectedOrder?.restaurantLocation?.lng;
+                        } else {
+                          mapDestLat = selectedOrder?.customerLocation?.lat;
+                          mapDestLng = selectedOrder?.customerLocation?.lng;
+                        }
                       } else {
                         // Food logic
                         mapOriginLat = riderLoc?.lat || selectedOrder.restaurantLocation?.lat;
@@ -842,27 +859,27 @@ export default function DeliveryDashboard() {
                             className="flex-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                           >
                             <CheckCircle className="w-4.5 h-4.5" />
-                            <span>ACCEPT ORDER</span>
+                            <span>{selectedOrder.orderType === 'ride' ? 'ACCEPT RIDE' : 'ACCEPT ORDER'}</span>
                           </button>
                           <button
                             onClick={() => handleUpdateStatus(selectedOrder._id, 'Rider_Rejected')}
                             disabled={updatingId === selectedOrder._id}
                             className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                           >
-                            <span>REJECT</span>
+                            <span>{selectedOrder.orderType === 'ride' ? 'REJECT RIDE' : 'REJECT'}</span>
                           </button>
                         </div>
                       </div>
-                    ) : getNextRiderAction(selectedOrder.status) ? (
+                    ) : getNextRiderAction(selectedOrder.status, selectedOrder.orderType) ? (
                       <div className="bg-base border border-gray-150 p-4 rounded-2xl flex flex-col gap-2">
                         <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Milestone Control</span>
                         <button
-                          onClick={() => handleUpdateStatus(selectedOrder._id, getNextRiderAction(selectedOrder.status).next)}
+                          onClick={() => handleUpdateStatus(selectedOrder._id, getNextRiderAction(selectedOrder.status, selectedOrder.orderType).next)}
                           disabled={updatingId === selectedOrder._id}
                           className="bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                         >
                           <CheckCircle className="w-4.5 h-4.5" />
-                          <span>{getNextRiderAction(selectedOrder.status).label}</span>
+                          <span>{getNextRiderAction(selectedOrder.status, selectedOrder.orderType).label}</span>
                         </button>
                       </div>
                     ) : (
