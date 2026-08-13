@@ -429,7 +429,7 @@ export default function GoogleMapContainer({
     const segProgress = rawIndex - segIndex;
 
     const p1 = points[segIndex];
-    const p2 = points[segIndex + 1] || p1;
+    const p2 = points[Math.min(segIndex + 1, totalSegments)];
 
     const lat1 = typeof p1.lat === 'function' ? p1.lat() : p1.lat;
     const lng1 = typeof p1.lng === 'function' ? p1.lng() : p1.lng;
