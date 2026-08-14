@@ -503,7 +503,7 @@ export default function Profile() {
                     </p>
 
                     <div className="flex items-center gap-2">
-                      {order.status === 'Delivered' && order.riderReview && (
+                      {order.status === 'Delivered' && Number(order.riderReview?.rating) > 0 && (
                         <div className="flex items-center gap-1 text-[10px] text-green-700 font-bold bg-green-50 px-2.5 py-1 rounded-xl border border-green-200 mr-1">
                           {order.riderReview.tipAmount > 0 && (
                             <span>Tipped ₹{order.riderReview.tipAmount} •&nbsp;</span>
@@ -515,7 +515,7 @@ export default function Profile() {
                         </div>
                       )}
 
-                      {order.status === 'Delivered' && !order.riderReview && order.deliveryAgent && (
+                      {order.status === 'Delivered' && !(Number(order.riderReview?.rating) > 0) && order.deliveryAgent && (
                         <button
                           onClick={() => {
                             setSelectedReviewOrder(order);

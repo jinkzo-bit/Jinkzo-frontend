@@ -1943,7 +1943,7 @@ export default function AdminDashboard() {
                       )}
 
                       {/* Review details */}
-                      {order.review && (
+                      {Number(order.review?.rating) > 0 && (
                         <div className="bg-green-50/20 border border-green-100 rounded-2xl p-4 text-xs font-semibold text-green-955 flex flex-col gap-1.5">
                           <div className="flex items-center gap-1">
                             {[1, 2, 3, 4, 5].map((star) => (

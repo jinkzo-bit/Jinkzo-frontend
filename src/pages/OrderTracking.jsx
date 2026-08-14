@@ -144,7 +144,7 @@ export default function OrderTracking() {
           setOrder(data);
 
           // Auto-open rider review modal if delivered and not yet reviewed
-          if (data.status === 'Delivered' && !data.riderReview && !autoOpenTriggered.current) {
+          if (data.status === 'Delivered' && !(Number(data.riderReview?.rating) > 0) && !autoOpenTriggered.current) {
             autoOpenTriggered.current = true;
             setIsRiderModalOpen(true);
           }
@@ -412,7 +412,7 @@ export default function OrderTracking() {
             </div>
           </div>
 
-          {order.review ? (
+          {Number(order.review?.rating) > 0 ? (
             <div className="flex flex-col gap-3.5 bg-green-50/40 border border-green-100 rounded-2xl p-5 text-green-950">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">

@@ -836,53 +836,20 @@ export default function DeliveryDashboard() {
                     </div>
 
                     {/* Real Google Maps tracking map using exact order location snapshots */}
-                    {(() => {
-                      const isRide = selectedOrder.orderType === 'ride';
-                      // Ride statuses before pickup: Rider_Assigned, Rider_Accepted, Rider_At_Pickup
-                      // Food statuses before pickup: Rider_Assigned, Rider_Accepted, Rider_At_Restaurant, Confirmed, Preparing
-                      const isBeforePickup = isRide 
-                        ? ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Pickup', 'Placed'].includes(selectedOrder.status)
-                        : ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Confirmed', 'Preparing'].includes(selectedOrder.status);
-                      
-                      let mapOriginLat, mapOriginLng, mapDestLat, mapDestLng;
-                      
-                      if (isRide) {
-                        // Ride logic: Rider loc as origin. Dest = Pickup if before pickup, else Drop
-                        mapOriginLat = riderLoc?.lat || selectedOrder?.restaurantLocation?.lat; // (pickup location mapped here for rides)
-                        mapOriginLng = riderLoc?.lng || selectedOrder?.restaurantLocation?.lng;
-                        
-                        if (isBeforePickup) {
-                          mapDestLat = selectedOrder?.restaurantLocation?.lat;
-                          mapDestLng = selectedOrder?.restaurantLocation?.lng;
-                        } else {
-                          mapDestLat = selectedOrder?.customerLocation?.lat;
-                          mapDestLng = selectedOrder?.customerLocation?.lng;
-                        }
-                      } else {
-                        // Food logic
-                        mapOriginLat = riderLoc?.lat || selectedOrder.restaurantLocation?.lat;
-                        mapOriginLng = riderLoc?.lng || selectedOrder.restaurantLocation?.lng;
-                        
-                        if (isBeforePickup) {
-                          mapDestLat = selectedOrder.restaurantLocation?.lat;
-                          mapDestLng = selectedOrder.restaurantLocation?.lng;
-                        } else {
-                          mapDestLat = selectedOrder.customerLocation?.lat;
-                          mapDestLng = selectedOrder.customerLocation?.lng;
-                        }
-                      }
-                      
-                      return (
-                        <InteractiveMap 
-                          status={selectedOrder.status} 
-                          restaurantLat={mapOriginLat}
-                          restaurantLng={mapOriginLng}
-                          customerLat={mapDestLat}
-                          customerLng={mapDestLng}
-                          orderId={selectedOrder._id}
-                        />
-                      );
-                    })()}
+                    <InteractiveMap 
+                      status={selectedOrder.status} 
+                      restaurantLat={selectedOrder.orderType !== 'ride' ? selectedOrder.restaurantLocation?.lat : undefined}
+                      restaurantLng={selectedOrder.orderType !== 'ride' ? selectedOrder.restaurantLocation?.lng : undefined}
+                      customerLat={selectedOrder.orderType !== 'ride' ? selectedOrder.customerLocation?.lat : undefined}
+                      customerLng={selectedOrder.orderType !== 'ride' ? selectedOrder.customerLocation?.lng : undefined}
+                      deliveryMethod={selectedOrder.orderType === 'ride' ? 'Ride' : 'Standard'}
+                      orderId={selectedOrder._id}
+                      isRide={selectedOrder.orderType === 'ride'}
+                      ridePickupLat={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.lat ?? selectedOrder.customerLocation?.lat) : undefined}
+                      ridePickupLng={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.lng ?? selectedOrder.customerLocation?.lng) : undefined}
+                      rideDropLat={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lat ?? selectedOrder.restaurantLocation?.lat) : undefined}
+                      rideDropLng={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lng ?? selectedOrder.restaurantLocation?.lng) : undefined}
+                    />
 
                     {/* Driver Instructions */}
                     {selectedOrder.instruction && (
@@ -932,7 +899,7 @@ export default function DeliveryDashboard() {
                     ) : (
                       <div className="bg-violet-50 border border-violet-100 text-violet-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2 animate-pulse">
                         <Clock className="w-5 h-5 text-primary" />
-                        <span>Awaiting kitchen preparation...</span>
+                        <span>{selectedOrder.orderType === 'ride' ? 'Waiting for pickup...' : 'Awaiting kitchen preparation...'}</span>
                       </div>
                     )}
 
@@ -1022,9 +989,9 @@ export default function DeliveryDashboard() {
                           <div className="flex flex-col gap-3">
                             <div className="bg-green-50 border border-green-100 text-green-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2">
                               <CheckCircle className="w-5 h-5 text-green-600" />
-                              <span>Ride successfully delivered! Earnings credited to wallet.</span>
+                              <span>{selectedOrder.orderType === 'ride' ? 'Ride successfully completed! Earnings credited to wallet.' : 'Order successfully delivered! Earnings credited to wallet.'}</span>
                             </div>
-                            {selectedOrder?.riderReview ? (
+                            {Number(selectedOrder.riderReview?.rating) > 0 ? (
                               <div className="bg-violet-50/50 border border-violet-100 rounded-2xl p-4 flex flex-col gap-3">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[9px] font-extrabold text-muted uppercase tracking-wider flex items-center gap-1">
@@ -1065,11 +1032,19 @@ export default function DeliveryDashboard() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
                           <div className={`border ${isBeforePickup ? 'border-primary shadow-xs' : 'border-line'} p-3.5 rounded-2xl flex flex-col justify-between`}>
                             <div>
-                              <span className="text-[9px] text-muted font-extrabold uppercase">1. Pickup Kitchen</span>
-                              <h5 className="font-bold text-main mt-1">{selectedOrderRestaurantName || 'Restaurant'}</h5>
-                              <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">{selectedOrderRestaurantAddress || 'Restaurant Address'}</p>
+                              <span className="text-[9px] text-muted font-extrabold uppercase">
+                                {selectedOrder.orderType === 'ride' ? '1. Pickup Location' : '1. Pickup Kitchen'}
+                              </span>
+                              <h5 className="font-bold text-main mt-1">
+                                {selectedOrder.orderType === 'ride' 
+                                  ? (selectedOrder.pickupLocation?.formattedAddress || selectedOrder.pickupAddress?.street || selectedOrder.customerLocation?.formattedAddress || 'Pickup Point')
+                                  : (selectedOrderRestaurantName || 'Restaurant')}
+                              </h5>
+                              <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">
+                                {selectedOrder.orderType === 'ride' ? '' : (selectedOrderRestaurantAddress || 'Restaurant Address')}
+                              </p>
                             </div>
-                            {isBeforePickup && selectedOrderRestaurantPhone && (
+                            {isBeforePickup && selectedOrderRestaurantPhone && selectedOrder.orderType !== 'ride' && (
                               <a 
                                 href={`tel:${selectedOrderRestaurantPhone}`}
                                 className="mt-3 bg-violet-100 hover:bg-violet-200 text-violet-700 text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
@@ -1081,19 +1056,27 @@ export default function DeliveryDashboard() {
                           </div>
                           <div className={`border ${!isBeforePickup ? 'border-primary shadow-xs' : 'border-line'} p-3.5 rounded-2xl flex flex-col justify-between`}>
                             <div>
-                              <span className="text-[9px] text-muted font-extrabold uppercase">2. Drop Customer</span>
-                              <h5 className="font-bold text-main mt-1">{selectedOrder.user?.name || 'Delivery Address'}</h5>
+                              <span className="text-[9px] text-muted font-extrabold uppercase">
+                                {selectedOrder.orderType === 'ride' ? '2. Drop Location' : '2. Drop Customer'}
+                              </span>
+                              <h5 className="font-bold text-main mt-1">
+                                {selectedOrder.orderType === 'ride'
+                                  ? (selectedOrder.dropLocation?.formattedAddress || selectedOrder.address?.street || selectedOrder.restaurantLocation?.formattedAddress || 'Destination')
+                                  : (selectedOrder.user?.name || 'Delivery Address')}
+                              </h5>
                               <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">
-                                {selectedOrder.address?.street || 'Customer Location'}, {selectedOrder.address?.city || ''}, {selectedOrder.address?.state || ''} - {selectedOrder.address?.zip || ''}
+                                {selectedOrder.orderType === 'ride' 
+                                  ? '' 
+                                  : `${selectedOrder.address?.street || 'Customer Location'}, ${selectedOrder.address?.city || ''}, ${selectedOrder.address?.state || ''} - ${selectedOrder.address?.zip || ''}`}
                               </p>
                             </div>
                             {!isBeforePickup && (
                               <a 
-                                href={`tel:${selectedOrder.userId?.phone || selectedOrder.customerPhone}`}
+                                href={`tel:${selectedOrder.userId?.phone || selectedOrder.customerPhone || selectedOrder.user?.phone}`}
                                 className="mt-3 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
                               >
                                 <Phone className="w-3.5 h-3.5" />
-                                <span>Call Customer ({selectedOrder.userId?.phone || selectedOrder.customerPhone})</span>
+                                <span>Call Customer ({selectedOrder.userId?.phone || selectedOrder.customerPhone || selectedOrder.user?.phone || 'Unknown'})</span>
                               </a>
                             )}
                           </div>
@@ -1247,7 +1230,7 @@ export default function DeliveryDashboard() {
                       </div>
 
                       {/* Customer Feedback & Tip Section */}
-                      {order.riderReview ? (
+                      {Number(order.riderReview?.rating) > 0 ? (
                         <div className="border-t border-line pt-3 flex flex-col gap-2">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
