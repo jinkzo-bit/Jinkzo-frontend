@@ -443,10 +443,14 @@ export default function DeliveryDashboard() {
       fetchOrdersData();
     });
 
-    // When any rider wins (orderStatusChanged broadcast), all riders re-fetch
-    // so the claimed order disappears from losers' available pool
-    socket.on('orderStatusChanged', () => {
-      fetchOrdersData();
+    // When a rider wins the race (status becomes Rider_Assigned),
+    // other riders should re-fetch so the claimed order disappears from their pool.
+    // We do NOT re-fetch on every status change (e.g. Accepted, Preparing, etc.)
+    // because those are not pool-affecting and the 6-second poll handles them.
+    socket.on('orderStatusChanged', ({ status } = {}) => {
+      if (status === 'Rider_Assigned') {
+        fetchOrdersData();
+      }
     });
 
     return () => {
