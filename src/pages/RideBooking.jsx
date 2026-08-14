@@ -146,7 +146,15 @@ export default function RideBooking() {
             if (platformSettings?.surcharges?.rain?.enabled) {
               rainSurcharge = platformSettings.surcharges.rain.fee || 10;
             }
-            setFare(computedFare + rainSurcharge);
+            let lateNightSurcharge = 0;
+            if (platformSettings?.surcharges?.lateNight?.enabled) {
+              lateNightSurcharge = platformSettings.surcharges.lateNight.fee || 20;
+            }
+            let festivalSurcharge = 0;
+            if (platformSettings?.surcharges?.festival?.enabled) {
+              festivalSurcharge = platformSettings.surcharges.festival.fee || 15;
+            }
+            setFare(computedFare + rainSurcharge + lateNightSurcharge + festivalSurcharge);
             setErrorMsg('');
           } else {
             if (currentRequestId !== routeRequestIdRef.current) return;
@@ -609,13 +617,25 @@ export default function RideBooking() {
               <div className="flex justify-between">
                 <span>Distance Pricing Fee</span>
                 <span className="text-main font-bold">
-                  {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : distance === 'error' ? 'Error' : `₹${fare - (platformSettings?.surcharges?.rain?.enabled ? (platformSettings.surcharges.rain.fee || 10) : 0)}`)}
+                  {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : distance === 'error' ? 'Error' : `₹${fare - ((platformSettings?.surcharges?.rain?.enabled ? (platformSettings.surcharges.rain.fee || 10) : 0) + (platformSettings?.surcharges?.lateNight?.enabled ? (platformSettings.surcharges.lateNight.fee || 20) : 0) + (platformSettings?.surcharges?.festival?.enabled ? (platformSettings.surcharges.festival.fee || 15) : 0))}`)}
                 </span>
               </div>
               {platformSettings?.surcharges?.rain?.enabled && (
                 <div className="flex justify-between">
                   <span>Rain Charge</span>
                   <span className="text-red-500 font-bold">+₹{platformSettings.surcharges.rain.fee || 10}</span>
+                </div>
+              )}
+              {platformSettings?.surcharges?.lateNight?.enabled && (
+                <div className="flex justify-between">
+                  <span>Late Night Charge</span>
+                  <span className="text-red-500 font-bold">+₹{platformSettings.surcharges.lateNight.fee || 20}</span>
+                </div>
+              )}
+              {platformSettings?.surcharges?.festival?.enabled && (
+                <div className="flex justify-between">
+                  <span>Festival Charge</span>
+                  <span className="text-red-500 font-bold">+₹{platformSettings.surcharges.festival.fee || 15}</span>
                 </div>
               )}
             </div>
