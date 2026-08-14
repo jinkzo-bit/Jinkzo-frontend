@@ -1,7 +1,6 @@
 import { API_BASE } from '../config/api';
 import React, { useState, useEffect } from 'react';
-import { X, Star, Heart, Sparkles, AlertCircle } from 'lucide-react';
-import RazorpaySim from './RazorpaySim';
+import { X, Star, Sparkles, AlertCircle } from 'lucide-react';
 
 export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryAgent, token, onFeedbackSubmit }) {
   const [rating, setRating] = useState(0);
@@ -108,23 +107,8 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
       return;
     }
 
-    const tipAmount = getTipAmount();
-
-    // If tip is > 0, route through payment gateway first
-    if (tipAmount > 0) {
-      setPendingTipAmount(tipAmount);
-      setShowPaymentGateway(true);
-    } else {
-      // No tip — submit directly
-      await submitReview(0);
-    }
-  };
-
-  // Called when RazorpaySim reports payment success
-  const handlePaymentSuccess = async (paymentId) => {
-    setShowPaymentGateway(false);
-    console.log('Tip payment authorized:', paymentId);
-    await submitReview(pendingTipAmount);
+    // No tip — submit directly
+    await submitReview(0);
   };
 
   const agentName = deliveryAgent?.name || 'Your Rider';
@@ -211,69 +195,6 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
                   </div>
                 </div>
 
-                {/* Tipping Section */}
-                <div className="flex flex-col gap-2.5 border-t border-line pt-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase font-extrabold tracking-wider text-gray-450 flex items-center gap-1">
-                      <Heart className="w-3.5 h-3.5 text-red-400 fill-red-100" />
-                      <span>Support your Rider with a Tip</span>
-                    </span>
-                    {getTipAmount() > 0 && (
-                      <span className="text-xs font-black text-primary animate-pulse bg-violet-50 px-2 py-0.5 rounded-md">
-                        ₹{getTipAmount()}
-                      </span>
-                    )}
-                  </div>
-                  
-                  {/* Tip buttons */}
-                  <div className="grid grid-cols-4 gap-2">
-                    {tipOptions.map((opt) => {
-                      const isSelected = selectedTip === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => handleTipSelect(opt.value)}
-                          className={`py-2 rounded-xl text-xs font-bold transition-all border text-center cursor-pointer ${
-                            isSelected
-                              ? 'bg-primary text-white border-primary shadow-xs'
-                              : 'bg-surface text-gray-650 border-line-strong hover:bg-base'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Custom Tip Input */}
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <input
-                      type="text"
-                      pattern="\d*"
-                      placeholder="Enter custom tip amount..."
-                      value={customTip}
-                      onChange={handleCustomTipChange}
-                      className={`bg-base border rounded-xl px-3.5 py-2.5 text-xs text-main outline-none flex-grow leading-none transition-all ${
-                        selectedTip === 'custom'
-                          ? 'border-primary focus:bg-surface bg-surface ring-1 ring-primary'
-                          : 'border-line-strong focus:border-primary focus:bg-surface'
-                      }`}
-                    />
-                    {customTip && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCustomTip('');
-                          setSelectedTip(null);
-                        }}
-                        className="text-[10px] font-bold text-muted hover:text-muted px-2 py-2"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
 
                 {/* Compliments Comment box */}
                 <div className="flex flex-col gap-1.5 border-t border-line pt-4">
@@ -321,13 +242,6 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
         </div>
       </div>
 
-      {/* Razorpay Payment Gateway overlay (renders on top of the feedback modal) */}
-      <RazorpaySim
-        amount={pendingTipAmount}
-        isOpen={showPaymentGateway}
-        onClose={() => setShowPaymentGateway(false)}
-        onSuccess={handlePaymentSuccess}
-      />
     </>
   );
 }

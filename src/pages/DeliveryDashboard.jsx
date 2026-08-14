@@ -809,14 +809,27 @@ export default function DeliveryDashboard() {
                       </div>
                       <div className="flex flex-col gap-1">
                         {order.orderType === 'ride' ? (
-                          <>
-                            <p className="text-[10px] font-extrabold text-muted truncate">
-                              FR: {order.pickupLocation?.formattedAddress || order.pickupAddress?.street || 'Pickup'}
-                            </p>
-                            <p className="text-xs font-bold text-main truncate">
-                              TO: {order.dropLocation?.formattedAddress || order.address?.street || 'Drop'}
-                            </p>
-                          </>
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-black text-main">🏍️ BIKE RIDE</span>
+                            <span className="text-[9px] font-bold text-muted truncate">
+                              Customer: {order.customerName || order.user?.name || 'Customer'}
+                            </span>
+                            <div className="flex flex-col gap-1 mt-1 bg-gray-50 p-2 rounded-lg border border-gray-150">
+                              <span className="text-[9px] font-extrabold text-gray-500">FROM</span>
+                              <span className="text-[10px] font-bold text-main truncate">
+                                {order.pickupLocation?.formattedAddress || order.pickupAddress?.street || 'Pickup'}
+                              </span>
+                              <span className="text-[9px] font-extrabold text-gray-500 mt-0.5">TO</span>
+                              <span className="text-[10px] font-bold text-main truncate">
+                                {order.dropLocation?.formattedAddress || order.address?.street || 'Drop'}
+                              </span>
+                            </div>
+                            {order.distance && (
+                              <div className="text-[9px] font-bold text-muted mt-1">
+                                Distance: {(order.distance / 1000).toFixed(2)} km
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <p className="text-xs font-bold text-main line-clamp-1">
                             To: {['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? (selectedOrderRestaurantName || 'Restaurant') : (order.address?.street || 'Customer Location')}, {['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? '' : (order.address?.city || '')}
@@ -844,7 +857,9 @@ export default function DeliveryDashboard() {
                   <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4 animate-scale-up">
                     <div className="flex justify-between items-center border-b border-line pb-3">
                       <div>
-                        <h4 className="font-display font-extrabold text-sm text-main">Dispatch Details</h4>
+                        <h4 className="font-display font-extrabold text-sm text-main">
+                          {selectedOrder.orderType === 'ride' ? '🏍️ BIKE RIDE' : 'Dispatch Details'}
+                        </h4>
                         <p className="text-[9px] font-mono text-muted">ID: {selectedOrder._id}</p>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${getStatusBadge(selectedOrder.status)}`}>{selectedOrder.status}</span>
@@ -1023,7 +1038,7 @@ export default function DeliveryDashboard() {
                                     ))}
                                   </div>
                                 </div>
-                                {selectedOrder.riderReview.tipAmount > 0 && (
+                                {selectedOrder.riderReview?.tipAmount > 0 && (
                                   <div className="flex items-center justify-between bg-green-50 border border-green-100 rounded-xl px-3 py-2">
                                     <span className="text-[10px] font-bold text-green-700 flex items-center gap-1">
                                       <Heart className="w-3 h-3 text-green-600 fill-green-100" /> Tip Received
@@ -1031,7 +1046,7 @@ export default function DeliveryDashboard() {
                                     <span className="text-sm font-black text-green-700">₹{selectedOrder.riderReview.tipAmount}</span>
                                   </div>
                                 )}
-                                {selectedOrder?.riderReview?.comment && (
+                                {selectedOrder.riderReview?.comment && (
                                   <div className="bg-surface/60 rounded-xl px-3 py-2.5 border border-violet-100/50">
                                     <p className="text-[10px] text-muted font-semibold italic">"{selectedOrder.riderReview.comment}"</p>
                                   </div>
@@ -1048,23 +1063,46 @@ export default function DeliveryDashboard() {
 
                       const isBeforePickup = selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
                       
+                      if (selectedOrder.orderType === 'ride') {
+                        return (
+                          <div className="border border-line p-4 rounded-2xl flex items-center justify-between shadow-xs">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Customer</span>
+                              <h5 className="font-bold text-main text-sm">
+                                {selectedOrder.customerName || selectedOrder.user?.name || 'Customer'}
+                              </h5>
+                              <p className="text-[10px] text-gray-500 font-semibold max-w-[200px] truncate">
+                                {selectedOrder.pickupLocation?.formattedAddress || selectedOrder.pickupAddress?.street || 'Pickup'} 
+                                {' → '} 
+                                {selectedOrder.dropLocation?.formattedAddress || selectedOrder.address?.street || 'Drop'}
+                              </p>
+                            </div>
+                            <a 
+                              href={`tel:${selectedOrder.customerPhone || selectedOrder.user?.phone || selectedOrder.userId?.phone}`}
+                              className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+                            >
+                              <Phone className="w-4 h-4" />
+                              <span>Call Customer</span>
+                            </a>
+                          </div>
+                        );
+                      }
+
                       return (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
                           <div className={`border ${isBeforePickup ? 'border-primary shadow-xs' : 'border-line'} p-3.5 rounded-2xl flex flex-col justify-between`}>
                             <div>
                               <span className="text-[9px] text-muted font-extrabold uppercase">
-                                {selectedOrder.orderType === 'ride' ? '1. Pickup Location' : '1. Pickup Kitchen'}
+                                1. Pickup Kitchen
                               </span>
                               <h5 className="font-bold text-main mt-1">
-                                {selectedOrder.orderType === 'ride' 
-                                  ? (selectedOrder.pickupLocation?.formattedAddress || selectedOrder.pickupAddress?.street || selectedOrder.customerLocation?.formattedAddress || 'Pickup Point')
-                                  : (selectedOrderRestaurantName || 'Restaurant')}
+                                {selectedOrderRestaurantName || 'Restaurant'}
                               </h5>
                               <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">
-                                {selectedOrder.orderType === 'ride' ? '' : (selectedOrderRestaurantAddress || 'Restaurant Address')}
+                                {selectedOrderRestaurantAddress || 'Restaurant Address'}
                               </p>
                             </div>
-                            {isBeforePickup && selectedOrderRestaurantPhone && selectedOrder.orderType !== 'ride' && (
+                            {isBeforePickup && selectedOrderRestaurantPhone && (
                               <a 
                                 href={`tel:${selectedOrderRestaurantPhone}`}
                                 className="mt-3 bg-violet-100 hover:bg-violet-200 text-violet-700 text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
@@ -1077,17 +1115,13 @@ export default function DeliveryDashboard() {
                           <div className={`border ${!isBeforePickup ? 'border-primary shadow-xs' : 'border-line'} p-3.5 rounded-2xl flex flex-col justify-between`}>
                             <div>
                               <span className="text-[9px] text-muted font-extrabold uppercase">
-                                {selectedOrder.orderType === 'ride' ? '2. Drop Location' : '2. Drop Customer'}
+                                2. Drop Customer
                               </span>
                               <h5 className="font-bold text-main mt-1">
-                                {selectedOrder.orderType === 'ride'
-                                  ? (selectedOrder.dropLocation?.formattedAddress || selectedOrder.address?.street || selectedOrder.restaurantLocation?.formattedAddress || 'Destination')
-                                  : (selectedOrder.user?.name || 'Delivery Address')}
+                                {selectedOrder.user?.name || 'Delivery Address'}
                               </h5>
                               <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">
-                                {selectedOrder.orderType === 'ride' 
-                                  ? '' 
-                                  : `${selectedOrder.address?.street || 'Customer Location'}, ${selectedOrder.address?.city || ''}, ${selectedOrder.address?.state || ''} - ${selectedOrder.address?.zip || ''}`}
+                                {`${selectedOrder.address?.street || 'Customer Location'}, ${selectedOrder.address?.city || ''}, ${selectedOrder.address?.state || ''} - ${selectedOrder.address?.zip || ''}`}
                               </p>
                             </div>
                             {!isBeforePickup && (
