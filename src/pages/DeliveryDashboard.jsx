@@ -812,7 +812,7 @@ export default function DeliveryDashboard() {
                           <div className="flex flex-col gap-1.5">
                             <span className="text-[10px] font-black text-main">🏍️ BIKE RIDE</span>
                             <span className="text-[9px] font-bold text-muted truncate">
-                              Customer: {order.customerName || order.user?.name || 'Customer'}
+                              Customer: {order.customerName || order.user?.name || order.userId?.name || 'Customer'}
                             </span>
                             <div className="flex flex-col gap-1 mt-1 bg-gray-50 p-2 rounded-lg border border-gray-150">
                               <span className="text-[9px] font-extrabold text-gray-500">FROM</span>
@@ -1069,7 +1069,7 @@ export default function DeliveryDashboard() {
                             <div className="flex flex-col gap-1">
                               <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Customer</span>
                               <h5 className="font-bold text-main text-sm">
-                                {selectedOrder.customerName || selectedOrder.user?.name || 'Customer'}
+                                {selectedOrder.customerName || selectedOrder.user?.name || selectedOrder.userId?.name || 'Customer'}
                               </h5>
                               <p className="text-[10px] text-gray-500 font-semibold max-w-[200px] truncate">
                                 {selectedOrder.pickupLocation?.formattedAddress || selectedOrder.pickupAddress?.street || 'Pickup'} 
@@ -1118,7 +1118,7 @@ export default function DeliveryDashboard() {
                                 2. Drop Customer
                               </span>
                               <h5 className="font-bold text-main mt-1">
-                                {selectedOrder.user?.name || 'Delivery Address'}
+                                {selectedOrder.customerName || selectedOrder.user?.name || selectedOrder.userId?.name || 'Delivery Address'}
                               </h5>
                               <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">
                                 {`${selectedOrder.address?.street || 'Customer Location'}, ${selectedOrder.address?.city || ''}, ${selectedOrder.address?.state || ''} - ${selectedOrder.address?.zip || ''}`}
@@ -1186,8 +1186,8 @@ export default function DeliveryDashboard() {
                           {order.orderType === 'ride' ? (
                             <>
                               <div className="flex items-center gap-1.5 text-main">
-                                <span className="font-extrabold text-[10px] text-gray-500 w-10">RIDER:</span>
-                                <span className="truncate">{order.customerName || order.user?.name || 'Customer'}</span>
+                                <span className="font-extrabold text-[10px] text-gray-500 w-16">CUSTOMER:</span>
+                                <span className="truncate">{order.customerName || order.user?.name || order.userId?.name || 'Customer'}</span>
                               </div>
                               <div className="flex items-center gap-1.5 text-main">
                                 <span className="font-extrabold text-[10px] text-gray-500 w-10">FROM:</span>

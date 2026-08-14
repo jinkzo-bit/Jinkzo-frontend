@@ -871,13 +871,13 @@ export default function AdminDashboard() {
   const dateFilteredOrders = getOrdersByDate(allOrders);
 
   const newOrdersCount = dateFilteredOrders.filter(o => o.status === 'Placed').length;
-  const ongoingOrdersCount = dateFilteredOrders.filter(o => ['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_At_Restaurant', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status)).length;
-  const completedOrdersCount = dateFilteredOrders.filter(o => ['Delivered', 'Completed'].includes(o.status)).length;
+  const ongoingOrdersCount = dateFilteredOrders.filter(o => ['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status)).length;
+  const completedOrdersCount = dateFilteredOrders.filter(o => ['Delivered', 'Completed', 'Rejected', 'Cancelled'].includes(o.status)).length;
 
   const filteredOrders = dateFilteredOrders.filter(o => {
     if (orderPipelineTab === 'new') return o.status === 'Placed';
-    if (orderPipelineTab === 'ongoing') return ['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_At_Restaurant', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status);
-    if (orderPipelineTab === 'completed') return ['Delivered', 'Completed'].includes(o.status);
+    if (orderPipelineTab === 'ongoing') return ['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status);
+    if (orderPipelineTab === 'completed') return ['Delivered', 'Completed', 'Rejected', 'Cancelled'].includes(o.status);
     return true;
   });
 
