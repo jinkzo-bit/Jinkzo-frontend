@@ -79,6 +79,19 @@ const RIDE_SVG = `
   </g>
 </svg>`;
 
+// Pickup point marker — blue pin with person icon (for ride pickup location)
+const PICKUP_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
+  <filter id="pkshadow" x="-30%" y="-10%" width="160%" height="140%">
+    <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="rgba(0,0,0,0.28)" />
+  </filter>
+  <g filter="url(#pkshadow)">
+    <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 34 16 34s16-22.75 16-34C38 9.163 30.837 2 22 2z" fill="#2563eb"/>
+    <circle cx="22" cy="18" r="9" fill="white"/>
+    <text x="22" y="23" text-anchor="middle" font-size="12" font-family="Arial">&#128694;</text>
+  </g>
+</svg>`;
+
 // Picker / location pin — brand color
 const PICKER_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52">
@@ -123,7 +136,13 @@ export default function GoogleMapContainer({
   deliveryMethod = 'Standard',
   orderId = null,
   onRouteInfo = null,
-  showTraffic = false,      // NEW: traffic layer toggle
+  showTraffic = false,      // traffic layer toggle
+  // Ride-specific props (ride orders only; food orders leave these undefined/null)
+  isRide = false,
+  ridePickupLat = null,
+  ridePickupLng = null,
+  rideDropLat = null,
+  rideDropLng = null,
 }) {
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
@@ -149,12 +168,30 @@ export default function GoogleMapContainer({
   const previousRiderPosRef = useRef(null);
 
   // ── Build SVG icon objects once Maps API is loaded ─────────────────────────
-  const isBeforePickup = ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(status);
+  const isRideOrder = isRide || deliveryMethod === 'Ride';
+
+  // isBeforePickup: determines whether the route target is the origin (restaurant/pickup)
+  // Food: before pickup = Rider_Assigned, Rider_Accepted, Rider_At_Restaurant
+  // Ride: before pickup = Rider_Assigned, Rider_Accepted (Rider_At_Restaurant is food-only)
+  const isBeforePickup = isRideOrder
+    ? ['Rider_Assigned', 'Rider_Accepted'].includes(status)
+    : ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(status);
+
   // We don't render an origin icon because the rider marker will cover it
-  const restaurantIcon = isLoaded ? { path: 'M0,0' } : undefined; 
-  // Destination icon swaps between restaurant and home based on phase
-  const homeIcon       = isLoaded ? (isBeforePickup ? svgToIcon(RESTAURANT_SVG, 44, 56, 22, 52) : svgToIcon(HOME_SVG, 44, 56, 22, 52)) : undefined;
-  
+  const restaurantIcon = isLoaded ? { path: 'M0,0' } : undefined;
+  // Destination icon:
+  //   Food — swaps between restaurant pin (before pickup) and home pin (after pickup)
+  //   Ride — swaps between pickup pin (blue person, phase 1) and home/drop pin (phase 2)
+  const homeIcon = isLoaded
+    ? (isRideOrder
+        ? (isBeforePickup
+            ? svgToIcon(PICKUP_SVG, 44, 56, 22, 52)   // ride phase 1: show pickup point
+            : svgToIcon(HOME_SVG,   44, 56, 22, 52))  // ride phase 2: show destination
+        : (isBeforePickup
+            ? svgToIcon(RESTAURANT_SVG, 44, 56, 22, 52)  // food before pickup: restaurant
+            : svgToIcon(HOME_SVG,       44, 56, 22, 52))) // food after pickup: home
+    : undefined;
+
   const riderIcon      = isLoaded ? svgToIcon(RIDER_SVG, 52, 52, 26, 26, riderBearing)      : undefined;
   const rideIcon       = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26, riderBearing)       : undefined;
   const pickerIcon     = isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50)     : undefined;
@@ -258,8 +295,20 @@ export default function GoogleMapContainer({
     setPickerPos(null);
 
     const drawRoute = async () => {
-      let restPos = (restaurantLat && restaurantLng) ? { lat: restaurantLat, lng: restaurantLng } : null;
-      let custPos = (customerLat && customerLng) ? { lat: customerLat, lng: customerLng } : null;
+      // ── For RIDE orders, use ride-specific pickup/drop coordinates ─────────
+      // Phase 1 (before pickup): route origin = pickup point, destination = pickup point
+      //   (the rider's GPS tracks toward the pickup; we draw pickup↔drop to show full route)
+      // Phase 2 (after pickup): same points, rider GPS is now heading to drop
+      // In both phases the polyline shows the full pickup→drop route.
+      // For FOOD orders: use restaurantLat/Lng and customerLat/Lng as before.
+      let restPos, custPos;
+      if (isRideOrder && ridePickupLat != null && ridePickupLng != null && rideDropLat != null && rideDropLng != null) {
+        restPos = { lat: ridePickupLat, lng: ridePickupLng }; // ride pickup
+        custPos = { lat: rideDropLat,   lng: rideDropLng   }; // ride drop
+      } else {
+        restPos = (restaurantLat && restaurantLng) ? { lat: restaurantLat, lng: restaurantLng } : null;
+        custPos = (customerLat  && customerLng)  ? { lat: customerLat,  lng: customerLng  } : null;
+      }
 
       if (!restPos || !custPos) {
         console.warn('[GoogleMapContainer] Missing required coordinates for tracking map.');
@@ -344,7 +393,7 @@ export default function GoogleMapContainer({
     };
 
     drawRoute();
-  }, [isLoaded, mode, restaurantLat, restaurantLng, customerLat, customerLng, restaurantAddress, customerAddress]);
+  }, [isLoaded, mode, restaurantLat, restaurantLng, customerLat, customerLng, restaurantAddress, customerAddress, isRideOrder, ridePickupLat, ridePickupLng, rideDropLat, rideDropLng]);
 
   // ── Socket.IO Live Driver GPS tracking listener ────────────────────────────
   useEffect(() => {
@@ -588,7 +637,7 @@ export default function GoogleMapContainer({
           <Marker
             position={restaurantPos}
             icon={restaurantIcon}
-            title="Restaurant"
+            title={isRideOrder ? 'Pickup Point' : 'Restaurant'}
             zIndex={10}
             onClick={() => setActivePopup(activePopup === 'restaurant' ? null : 'restaurant')}
           >
@@ -602,7 +651,7 @@ export default function GoogleMapContainer({
                   padding: '2px 4px',
                   whiteSpace: 'nowrap',
                 }}>
-                  🍽️ &nbsp;Restaurant · Kitchen
+                  {isRideOrder ? '📍\u00a0Pickup Point' : '🍽️\u00a0Restaurant · Kitchen'}
                 </div>
               </InfoWindow>
             )}
@@ -614,7 +663,7 @@ export default function GoogleMapContainer({
           <Marker
             position={customerPos}
             icon={homeIcon}
-            title="Delivery Address"
+            title={isRideOrder ? (isBeforePickup ? 'Pickup Point' : 'Drop Location') : 'Delivery Address'}
             zIndex={10}
             onClick={() => setActivePopup(activePopup === 'customer' ? null : 'customer')}
           >
@@ -628,7 +677,9 @@ export default function GoogleMapContainer({
                   padding: '2px 4px',
                   whiteSpace: 'nowrap',
                 }}>
-                  🏠 &nbsp;Delivery Address
+                  {isRideOrder
+                    ? (isBeforePickup ? '📍\u00a0Pickup Point' : '🏁\u00a0Drop Location')
+                    : '🏠\u00a0Delivery Address'}
                 </div>
               </InfoWindow>
             )}

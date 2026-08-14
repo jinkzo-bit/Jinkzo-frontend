@@ -266,13 +266,13 @@ export default function OrderTracking() {
   const getStepIndex = (currentStatus, type) => {
     if (type === 'ride') {
       if (currentStatus === 'Placed') return 0;
-      if (currentStatus === 'Confirmed' || currentStatus === 'Rider_Assigned') return 1;
-      if (currentStatus === 'Preparing' || currentStatus === 'Rider_At_Restaurant') return 2;
-      if (currentStatus === 'Out for Delivery' || currentStatus === 'Out_for_Delivery' || currentStatus === 'Rider_At_Customer') return 3;
-      if (currentStatus === 'Delivered' || currentStatus === 'Completed') return 4;
+      if (['Confirmed', 'Rider_Assigned', 'Rider_Accepted'].includes(currentStatus)) return 1;
+      if (currentStatus === 'Rider_At_Pickup') return 2;
+      if (currentStatus === 'Picked_Up') return 3;
+      if (['Delivered', 'Completed'].includes(currentStatus)) return 4;
       return 0;
     } else {
-      // Food / Parcel
+      // Food / Parcel — UNCHANGED
       if (currentStatus === 'Placed') return 0;
       if (currentStatus === 'Confirmed' || currentStatus === 'Accepted' || currentStatus === 'Preparing') return 1;
       if (['Ready_for_Pickup', 'Rider_Assigned', 'Rider_At_Restaurant', 'Picked_Up'].includes(currentStatus)) return 2;
@@ -378,14 +378,25 @@ export default function OrderTracking() {
       )}
 
       {/* Real Google Maps tracking map */}
+      {/* For rides:
+           pickupLocation / customerLocation = pickup (where rider heads FIRST)
+           dropLocation / restaurantLocation = destination (where rider heads AFTER pickup)
+           We pass them as ridePickupLat/Lng and rideDropLat/Lng so GoogleMapContainer
+           can route correctly for each phase without confusing food-order semantics.
+      */}
       <InteractiveMap 
         status={order.status} 
-        restaurantLat={order.restaurantLocation?.lat}
-        restaurantLng={order.restaurantLocation?.lng}
-        customerLat={order.customerLocation?.lat}
-        customerLng={order.customerLocation?.lng}
+        restaurantLat={order.orderType !== 'ride' ? order.restaurantLocation?.lat : undefined}
+        restaurantLng={order.orderType !== 'ride' ? order.restaurantLocation?.lng : undefined}
+        customerLat={order.orderType !== 'ride' ? order.customerLocation?.lat : undefined}
+        customerLng={order.orderType !== 'ride' ? order.customerLocation?.lng : undefined}
         deliveryMethod={order.orderType === 'ride' ? 'Ride' : 'Standard'}
         orderId={order._id}
+        isRide={order.orderType === 'ride'}
+        ridePickupLat={order.orderType === 'ride' ? (order.pickupLocation?.lat ?? order.customerLocation?.lat) : undefined}
+        ridePickupLng={order.orderType === 'ride' ? (order.pickupLocation?.lng ?? order.customerLocation?.lng) : undefined}
+        rideDropLat={order.orderType === 'ride' ? (order.dropLocation?.lat ?? order.restaurantLocation?.lat) : undefined}
+        rideDropLng={order.orderType === 'ride' ? (order.dropLocation?.lng ?? order.restaurantLocation?.lng) : undefined}
       />
 
       {/* Review & Suggestion Box */}

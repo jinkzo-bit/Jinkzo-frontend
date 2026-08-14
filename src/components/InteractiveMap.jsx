@@ -11,7 +11,13 @@ export default function InteractiveMap({
   customerLng = null,
   deliveryMethod = 'Standard',
   orderId = null,
-  onRouteInfo = null
+  onRouteInfo = null,
+  // Ride-specific props
+  isRide = false,
+  ridePickupLat = null,
+  ridePickupLng = null,
+  rideDropLat = null,
+  rideDropLng = null,
 }) {
   const [progress, setProgress] = useState(0);
   const [showTraffic, setShowTraffic] = useState(false);
@@ -64,6 +70,11 @@ export default function InteractiveMap({
         orderId={orderId}
         onRouteInfo={onRouteInfo}
         showTraffic={showTraffic}
+        isRide={isRide}
+        ridePickupLat={ridePickupLat}
+        ridePickupLng={ridePickupLng}
+        rideDropLat={rideDropLat}
+        rideDropLng={rideDropLng}
       />
       
       {/* Real-time Status Overlay Badge */}

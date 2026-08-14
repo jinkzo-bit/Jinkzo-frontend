@@ -1825,8 +1825,12 @@ export default function AdminDashboard() {
                               </div>
                               <div className="flex flex-col gap-0.5 mt-1">
                                 <span className="uppercase font-extrabold text-yellow-500">Route</span>
-                                <span className="text-main truncate">From: {order.address?.street || 'Unknown'}</span>
-                                <span className="text-main truncate">To: {order.dropAddress?.street || 'Unknown'}</span>
+                                <span className="text-main truncate">
+                                  From: {order.pickupLocation?.formattedAddress || order.pickupAddress?.street || order.customerLocation?.formattedAddress || 'Pickup'}
+                                </span>
+                                <span className="text-main truncate">
+                                  To: {order.dropLocation?.formattedAddress || order.address?.street || order.restaurantLocation?.formattedAddress || 'Destination'}
+                                </span>
                               </div>
                             </div>
                             
@@ -1899,8 +1903,12 @@ export default function AdminDashboard() {
                         {order.orderType === 'ride' && (
                           <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5 border border-line/30">
                             <span className="text-[9px] uppercase font-extrabold text-muted">Route details</span>
-                            <span className="font-bold text-main truncate">From: {order.pickupAddress?.street || 'Pickup'}</span>
-                            <span className="text-[10px] text-gray-450 font-medium truncate">To: {order.address?.street || 'Destination'}</span>
+                            <span className="font-bold text-main truncate">
+                              From: {order.pickupLocation?.formattedAddress || order.pickupAddress?.street || order.customerLocation?.formattedAddress || 'Pickup'}
+                            </span>
+                            <span className="text-[10px] text-gray-450 font-medium truncate">
+                              To: {order.dropLocation?.formattedAddress || order.address?.street || order.restaurantLocation?.formattedAddress || 'Destination'}
+                            </span>
                           </div>
                         )}
                         <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5 border border-line/30">
