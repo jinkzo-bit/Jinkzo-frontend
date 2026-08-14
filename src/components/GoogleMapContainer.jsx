@@ -105,6 +105,19 @@ const PICKER_SVG = `
   </g>
 </svg>`;
 
+// Drop point marker — checkered flag
+const DROP_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
+  <filter id="dpshadow" x="-30%" y="-10%" width="160%" height="140%">
+    <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="rgba(0,0,0,0.28)" />
+  </filter>
+  <g filter="url(#dpshadow)">
+    <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 34 16 34s16-22.75 16-34C38 9.163 30.837 2 22 2z" fill="#000000"/>
+    <circle cx="22" cy="18" r="9" fill="white"/>
+    <text x="22" y="23" text-anchor="middle" font-size="12" font-family="Arial">&#127937;</text>
+  </g>
+</svg>`;
+
 // Convert SVG string to Google Maps icon object
 const svgToIcon = (svgString, width, height, anchorX, anchorY, rotation = 0) => {
   let finalSvg = svgString;
@@ -143,6 +156,8 @@ export default function GoogleMapContainer({
   ridePickupLng = null,
   rideDropLat = null,
   rideDropLng = null,
+  riderLat = null,
+  riderLng = null,
 }) {
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
@@ -186,7 +201,7 @@ export default function GoogleMapContainer({
     ? (isRideOrder
         ? (isBeforePickup
             ? svgToIcon(PICKUP_SVG, 44, 56, 22, 52)   // ride phase 1: show pickup point
-            : svgToIcon(HOME_SVG,   44, 56, 22, 52))  // ride phase 2: show destination
+            : svgToIcon(DROP_SVG,   44, 56, 22, 52))  // ride phase 2: show destination
         : (isBeforePickup
             ? svgToIcon(RESTAURANT_SVG, 44, 56, 22, 52)  // food before pickup: restaurant
             : svgToIcon(HOME_SVG,       44, 56, 22, 52))) // food after pickup: home
@@ -303,8 +318,17 @@ export default function GoogleMapContainer({
       // For FOOD orders: use restaurantLat/Lng and customerLat/Lng as before.
       let restPos, custPos;
       if (isRideOrder && ridePickupLat != null && ridePickupLng != null && rideDropLat != null && rideDropLng != null) {
-        restPos = { lat: ridePickupLat, lng: ridePickupLng }; // ride pickup
-        custPos = { lat: rideDropLat,   lng: rideDropLng   }; // ride drop
+        const liveRiderPos = (riderLat != null && riderLng != null) ? { lat: riderLat, lng: riderLng } : riderPos;
+        
+        if (['Rider_Assigned', 'Rider_Accepted'].includes(status)) {
+          // Phase 1 (To Pickup): route origin = rider point, destination = pickup point
+          restPos = liveRiderPos || { lat: ridePickupLat, lng: ridePickupLng };
+          custPos = { lat: ridePickupLat, lng: ridePickupLng };
+        } else {
+          // Phase 2 (To Drop): route origin = rider point, destination = drop point
+          restPos = liveRiderPos || { lat: ridePickupLat, lng: ridePickupLng };
+          custPos = { lat: rideDropLat,   lng: rideDropLng   };
+        }
       } else {
         restPos = (restaurantLat && restaurantLng) ? { lat: restaurantLat, lng: restaurantLng } : null;
         custPos = (customerLat  && customerLng)  ? { lat: customerLat,  lng: customerLng  } : null;
@@ -393,7 +417,7 @@ export default function GoogleMapContainer({
     };
 
     drawRoute();
-  }, [isLoaded, mode, restaurantLat, restaurantLng, customerLat, customerLng, restaurantAddress, customerAddress, isRideOrder, ridePickupLat, ridePickupLng, rideDropLat, rideDropLng]);
+  }, [isLoaded, mode, restaurantLat, restaurantLng, customerLat, customerLng, restaurantAddress, customerAddress, isRideOrder, ridePickupLat, ridePickupLng, rideDropLat, rideDropLng, status, riderLat, riderLng]);
 
   // ── Socket.IO Live Driver GPS tracking listener ────────────────────────────
   useEffect(() => {
@@ -437,7 +461,7 @@ export default function GoogleMapContainer({
           const currentLng = oldPos.lng + (newPos.lng - oldPos.lng) * progress;
           setRiderPos({ lat: currentLat, lng: currentLng });
 
-          if (isAutoFollowRef.current && status === 'Out for Delivery' && mapRef.current) {
+          if (isAutoFollowRef.current && ['Out for Delivery', 'Out_for_Delivery', 'Rider_Accepted', 'Rider_At_Pickup', 'Picked_Up'].includes(status) && mapRef.current) {
              mapRef.current.panTo({ lat: currentLat, lng: currentLng });
           }
 
@@ -453,7 +477,7 @@ export default function GoogleMapContainer({
       } else {
         setRiderPos(newPos);
         previousRiderPosRef.current = newPos;
-        if (isAutoFollowRef.current && status === 'Out for Delivery' && mapRef.current) {
+        if (isAutoFollowRef.current && ['Out for Delivery', 'Out_for_Delivery', 'Rider_Accepted', 'Rider_At_Pickup', 'Picked_Up'].includes(status) && mapRef.current) {
           mapRef.current.panTo(newPos);
         }
       }
@@ -491,7 +515,7 @@ export default function GoogleMapContainer({
     if (!hasLiveGPS.current) {
       setRiderPos({ lat, lng });
 
-      if (status === 'Out for Delivery' && mapRef.current) {
+      if (['Out for Delivery', 'Out_for_Delivery', 'Rider_Accepted', 'Rider_At_Pickup', 'Picked_Up'].includes(status) && mapRef.current) {
         mapRef.current.panTo({ lat, lng });
       }
     }

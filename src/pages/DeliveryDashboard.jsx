@@ -380,7 +380,7 @@ export default function DeliveryDashboard() {
 
   // Geolocation and Socket.IO GPS update streaming for Out for Delivery orders
   useEffect(() => {
-    if (!selectedOrder || !['Rider_Accepted', 'Rider_At_Restaurant', 'Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(selectedOrder.status) || !token) return;
+    if (!selectedOrder || !['Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up', 'Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(selectedOrder.status) || !token) return;
 
     const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
     const socket = io(socketHost, {
@@ -396,13 +396,15 @@ export default function DeliveryDashboard() {
     if (navigator.geolocation) {
       watchId = navigator.geolocation.watchPosition(
         (position) => {
-            const { latitude, longitude } = position.coords;
+            const { latitude, longitude, heading, speed } = position.coords;
             console.log('[GPS SOCKET] Dispatching coordinate update:', latitude, longitude);
             setRiderLoc({ lat: latitude, lng: longitude });
             socket.emit('updateLocation', {
               orderId: selectedOrder._id,
               lat: latitude,
-              lng: longitude
+              lng: longitude,
+              heading: heading || 0,
+              speed: speed || 0
             });
         },
         (err) => {
@@ -805,9 +807,22 @@ export default function DeliveryDashboard() {
                         <span>#{order._id.substr(-8).toUpperCase()}</span>
                         <span className={`px-1.5 py-0.5 rounded ${getStatusBadge(order.status)}`}>{order.status}</span>
                       </div>
-                      <p className="text-xs font-bold text-main line-clamp-1">
-                        To: {order.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? (selectedOrderRestaurantName || 'Restaurant') : (order.address?.street || 'Customer Location')}, {order.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? '' : (order.address?.city || '')}
-                      </p>
+                      <div className="flex flex-col gap-1">
+                        {order.orderType === 'ride' ? (
+                          <>
+                            <p className="text-[10px] font-extrabold text-muted truncate">
+                              FR: {order.pickupLocation?.formattedAddress || order.pickupAddress?.street || 'Pickup'}
+                            </p>
+                            <p className="text-xs font-bold text-main truncate">
+                              TO: {order.dropLocation?.formattedAddress || order.address?.street || 'Drop'}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-xs font-bold text-main line-clamp-1">
+                            To: {['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? (selectedOrderRestaurantName || 'Restaurant') : (order.address?.street || 'Customer Location')}, {['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? '' : (order.address?.city || '')}
+                          </p>
+                        )}
+                      </div>
                       <div className="border-t border-line pt-2 flex justify-between items-center text-[10px] font-bold text-muted">
                         <span>Grand Total: ₹{order.total}</span>
                         <span className="text-primary flex items-center">Track <ChevronRight className="w-3 h-3" /></span>
@@ -895,6 +910,11 @@ export default function DeliveryDashboard() {
                           <CheckCircle className="w-4.5 h-4.5" />
                           <span>{getNextRiderAction(selectedOrder.status, selectedOrder.orderType).label}</span>
                         </button>
+                      </div>
+                    ) : ['Delivered', 'Completed'].includes(selectedOrder.status) ? (
+                      <div className="bg-green-50 border border-green-200 text-green-700 text-xs font-bold p-3.5 rounded-xl flex items-center justify-center gap-2">
+                        <CheckCircle className="w-5 h-5" />
+                        <span>{selectedOrder.orderType === 'ride' ? '✅ Ride successfully completed!' : '✅ Delivery successfully completed!'}</span>
                       </div>
                     ) : (
                       <div className="bg-violet-50 border border-violet-100 text-violet-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2 animate-pulse">
@@ -1120,29 +1140,53 @@ export default function DeliveryDashboard() {
               ) : availableOrders.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {availableOrders.map(order => (
-                    <div key={order._id} className="bg-surface border border-line p-5 rounded-3xl shadow-2xs flex flex-col gap-3 justify-between">
+                    <div key={order._id} className={`bg-surface border p-5 rounded-3xl shadow-2xs flex flex-col gap-3 justify-between ${order.orderType === 'ride' ? 'border-yellow-200' : 'border-line'}`}>
                       <div>
                         <div className="flex justify-between items-center text-[9px] font-bold text-muted pb-2 border-b border-line">
-                          <span>#{order._id.substr(-8).toUpperCase()}</span>
-                          <span>₹{order.total} total</span>
+                          <span className={order.orderType === 'ride' ? 'text-yellow-600' : ''}>
+                            {order.orderType === 'ride' ? '🏍️ RIDE REQUEST' : 'FOOD ORDER'} #{order._id.substr(-8).toUpperCase()}
+                          </span>
+                          <span className={order.orderType === 'ride' ? 'text-yellow-700' : ''}>₹{order.total} {order.orderType === 'ride' ? 'fare' : 'total'}</span>
                         </div>
                         <div className="flex flex-col gap-1.5 mt-3 text-xs leading-tight font-bold">
-                          <div className="flex items-center gap-1.5 text-main">
-                            <Store className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                            <span className="truncate">Burger Point</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-muted">
-                            <MapPin className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
-                            <span className="truncate">{order.address?.street || 'Customer Location'}, {order.address?.city || ''}</span>
-                          </div>
+                          {order.orderType === 'ride' ? (
+                            <>
+                              <div className="flex items-center gap-1.5 text-main">
+                                <span className="font-extrabold text-[10px] text-gray-500 w-10">RIDER:</span>
+                                <span className="truncate">{order.customerName || order.user?.name || 'Customer'}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-main">
+                                <span className="font-extrabold text-[10px] text-gray-500 w-10">FROM:</span>
+                                <span className="truncate">{order.pickupLocation?.formattedAddress || order.pickupAddress?.street || 'Pickup Location'}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-muted">
+                                <span className="font-extrabold text-[10px] text-gray-400 w-10">TO:</span>
+                                <span className="truncate">{order.dropLocation?.formattedAddress || order.address?.street || 'Drop Location'}</span>
+                              </div>
+                              <div className="flex justify-between items-center mt-1 text-[10px] text-gray-500">
+                                <span>{order.distance ? `${order.distance} km` : ''}</span>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-1.5 text-main">
+                                <Store className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                                <span className="truncate">{order.restaurant?.name || 'Restaurant'}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-muted">
+                                <MapPin className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                                <span className="truncate">{order.address?.street || 'Customer Location'}, {order.address?.city || ''}</span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                       <button
                         onClick={() => handleAcceptOrder(order._id)}
                         disabled={updatingId === order._id}
-                        className="bg-primary hover:bg-primary-hover text-white text-[10px] font-bold py-2.5 rounded-xl mt-3 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                        className={`${order.orderType === 'ride' ? 'bg-yellow-400 hover:bg-yellow-500 text-black' : 'bg-primary hover:bg-primary-hover text-white'} text-[10px] font-bold py-2.5 rounded-xl mt-3 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50`}
                       >
-                        Accept & Claim Delivery
+                        {order.orderType === 'ride' ? 'Accept & Claim Ride' : 'Accept & Claim Delivery'}
                       </button>
                     </div>
                   ))}

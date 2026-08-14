@@ -18,6 +18,8 @@ export default function InteractiveMap({
   ridePickupLng = null,
   rideDropLat = null,
   rideDropLng = null,
+  riderLat = null,
+  riderLng = null,
 }) {
   const [progress, setProgress] = useState(0);
   const [showTraffic, setShowTraffic] = useState(false);
@@ -75,6 +77,8 @@ export default function InteractiveMap({
         ridePickupLng={ridePickupLng}
         rideDropLat={rideDropLat}
         rideDropLng={rideDropLng}
+        riderLat={riderLat}
+        riderLng={riderLng}
       />
       
       {/* Real-time Status Overlay Badge */}

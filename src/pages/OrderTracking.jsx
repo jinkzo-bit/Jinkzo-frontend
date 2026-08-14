@@ -17,6 +17,7 @@ export default function OrderTracking() {
   const [restaurantAddress, setRestaurantAddress] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [countdown, setCountdown] = useState(30); // minutes
+  const [riderLoc, setRiderLoc] = useState(null); // Socket GPS stream
 
   // Review states
   const [rating, setRating] = useState(0);
@@ -213,6 +214,11 @@ export default function OrderTracking() {
       }
     });
 
+    socket.on('locationUpdated', ({ lat, lng }) => {
+      console.log('[TRACKING SOCKET] Live rider location update:', lat, lng);
+      setRiderLoc({ lat, lng });
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -309,7 +315,7 @@ export default function OrderTracking() {
           : 'bg-surface border-line'
       }`}>
         <div>
-          {order.status === 'Delivered' ? (
+          {['Delivered', 'Completed'].includes(order.status) ? (
             <h2 className={`font-display font-extrabold text-2xl ${order.orderType === 'ride' ? 'text-yellow-750' : 'text-green-700'}`}>
               {order.orderType === 'ride' ? 'Ride Completed! 🎉' : 'Order Delivered! 🎉'}
             </h2>
@@ -323,7 +329,7 @@ export default function OrderTracking() {
           )}
           <p className="text-xs text-muted font-semibold mt-1 flex items-center gap-1.5">
             <span className={`w-2.5 h-2.5 rounded-full ${
-              order.status === 'Delivered' 
+              ['Delivered', 'Completed'].includes(order.status) 
                 ? 'bg-green-500' 
                 : order.orderType === 'ride' 
                 ? 'bg-yellow-500 animate-ping' 
@@ -341,7 +347,7 @@ export default function OrderTracking() {
       </div>
 
       {/* Sibling Orders Selector */}
-      {allOrdersInSession.length > 1 && (
+      {allOrdersInSession.length > 1 && order.orderType !== 'ride' && (
         <div className="bg-surface border border-gray-150 rounded-3xl p-4 flex flex-col gap-2.5 shadow-2xs">
           <span className="text-[9px] text-muted font-extrabold uppercase tracking-wider px-1">
             Track Sibling Kitchens (Placed in Same Order)
@@ -364,7 +370,7 @@ export default function OrderTracking() {
                   <span className={`text-[8px] px-1.5 py-0.5 rounded font-extrabold uppercase ${
                     isCurrent
                       ? 'bg-surface/20 text-white'
-                      : sessionOrder.status === 'Delivered'
+                      : ['Delivered', 'Completed'].includes(sessionOrder.status)
                       ? 'bg-green-50 text-green-700 border border-green-150'
                       : 'bg-violet-50 text-primary border border-violet-150'
                   }`}>
@@ -384,23 +390,27 @@ export default function OrderTracking() {
            We pass them as ridePickupLat/Lng and rideDropLat/Lng so GoogleMapContainer
            can route correctly for each phase without confusing food-order semantics.
       */}
-      <InteractiveMap 
-        status={order.status} 
-        restaurantLat={order.orderType !== 'ride' ? order.restaurantLocation?.lat : undefined}
-        restaurantLng={order.orderType !== 'ride' ? order.restaurantLocation?.lng : undefined}
-        customerLat={order.orderType !== 'ride' ? order.customerLocation?.lat : undefined}
-        customerLng={order.orderType !== 'ride' ? order.customerLocation?.lng : undefined}
-        deliveryMethod={order.orderType === 'ride' ? 'Ride' : 'Standard'}
-        orderId={order._id}
-        isRide={order.orderType === 'ride'}
-        ridePickupLat={order.orderType === 'ride' ? (order.pickupLocation?.lat ?? order.customerLocation?.lat) : undefined}
-        ridePickupLng={order.orderType === 'ride' ? (order.pickupLocation?.lng ?? order.customerLocation?.lng) : undefined}
-        rideDropLat={order.orderType === 'ride' ? (order.dropLocation?.lat ?? order.restaurantLocation?.lat) : undefined}
-        rideDropLng={order.orderType === 'ride' ? (order.dropLocation?.lng ?? order.restaurantLocation?.lng) : undefined}
-      />
+      {!['Delivered', 'Completed'].includes(order.status) && (
+        <InteractiveMap 
+          status={order.status} 
+          restaurantLat={order.orderType !== 'ride' ? order.restaurantLocation?.lat : undefined}
+          restaurantLng={order.orderType !== 'ride' ? order.restaurantLocation?.lng : undefined}
+          customerLat={order.orderType !== 'ride' ? order.customerLocation?.lat : undefined}
+          customerLng={order.orderType !== 'ride' ? order.customerLocation?.lng : undefined}
+          deliveryMethod={order.orderType === 'ride' ? 'Ride' : 'Standard'}
+          orderId={order._id}
+          isRide={order.orderType === 'ride'}
+          ridePickupLat={order.orderType === 'ride' ? (order.pickupLocation?.lat ?? order.customerLocation?.lat) : undefined}
+          ridePickupLng={order.orderType === 'ride' ? (order.pickupLocation?.lng ?? order.customerLocation?.lng) : undefined}
+          rideDropLat={order.orderType === 'ride' ? (order.dropLocation?.lat ?? order.restaurantLocation?.lat) : undefined}
+          rideDropLng={order.orderType === 'ride' ? (order.dropLocation?.lng ?? order.restaurantLocation?.lng) : undefined}
+          riderLat={riderLoc?.lat}
+          riderLng={riderLoc?.lng}
+        />
+      )}
 
       {/* Review & Suggestion Box */}
-      {order.status === 'Delivered' && (
+      {['Delivered', 'Completed'].includes(order.status) && (
         <div className="bg-surface border border-line rounded-3xl p-6 shadow-2xs flex flex-col gap-4 animate-scale-up">
           <div className="flex items-center gap-2 border-b border-line pb-3">
             <span className="text-xl">⭐️</span>
@@ -590,7 +600,7 @@ export default function OrderTracking() {
 
               {/* Call agent buttons — only show when delivery is still in progress */}
               <div className="flex flex-col gap-2">
-                {order.status !== 'Delivered' && (
+                {!['Delivered', 'Completed'].includes(order.status) && (
                 <div className="flex gap-2">
                   <a 
                     href={`tel:${order.deliveryAgent.phone}`}
@@ -606,7 +616,7 @@ export default function OrderTracking() {
                 </div>
                 )}
 
-                {order.status === 'Delivered' && (
+                {['Delivered', 'Completed'].includes(order.status) && (
                   order.riderReview ? (
                     <div className="bg-violet-50/40 border border-violet-100/35 rounded-2xl p-3 text-[11px] font-semibold text-main flex flex-col gap-1.5 mt-1">
                       <div className="flex justify-between items-center">

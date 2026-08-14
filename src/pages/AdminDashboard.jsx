@@ -6,8 +6,9 @@ import {
   ShieldAlert, DollarSign, ShoppingBag, Users, Store, Bike, CheckCircle, Check,
   XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare, 
   AlertCircle, ChevronLeft, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2,
-  Pencil, Plus, UserCircle
+  Pencil, Plus, UserCircle, Activity, FileText, Star, TrendingUp, Search, Menu, Filter, Info, Shield, RefreshCw
 } from 'lucide-react';
+import InteractiveMap from '../components/InteractiveMap';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
@@ -40,6 +41,7 @@ export default function AdminDashboard() {
   const [pendingKyc, setPendingKyc] = useState([]);
   const [isKycLoading, setIsKycLoading] = useState(true);
   const [kycRemarks, setKycRemarks] = useState({});
+  const [liveRiderLocations, setLiveRiderLocations] = useState({});
 
   // User Manager
   const [allUsers, setAllUsers] = useState([]);
@@ -133,10 +135,23 @@ export default function AdminDashboard() {
       withCredentials: true,
       transports: ['websocket', 'polling']
     });
+    
+    socket.on('connect', () => {
+      socket.emit('join', 'admin_room');
+    });
+
     socket.on('orderStatusChanged', () => {
       fetchAllOrders();
       fetchAnalytics();
     });
+
+    socket.on('locationUpdated', ({ orderId, lat, lng }) => {
+      setLiveRiderLocations(prev => ({
+        ...prev,
+        [orderId]: { lat, lng }
+      }));
+    });
+
     const interval = setInterval(() => {
       fetchAllOrders();
       fetchAnalytics();
@@ -1928,6 +1943,23 @@ export default function AdminDashboard() {
                           )}
                         </div>
                       </div>
+
+                      {/* Map Tracking for Active Rides */}
+                      {order.orderType === 'ride' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Pickup', 'Picked_Up', 'Out for Delivery', 'Out_for_Delivery'].includes(order.status) && (
+                        <div className="rounded-2xl overflow-hidden border border-line mt-2">
+                          <InteractiveMap 
+                            status={order.status}
+                            isRide={true}
+                            orderId={order._id}
+                            ridePickupLat={order.pickupLocation?.lat ?? order.customerLocation?.lat}
+                            ridePickupLng={order.pickupLocation?.lng ?? order.customerLocation?.lng}
+                            rideDropLat={order.dropLocation?.lat ?? order.restaurantLocation?.lat}
+                            rideDropLng={order.dropLocation?.lng ?? order.restaurantLocation?.lng}
+                            riderLat={riderLocations[order._id]?.lat}
+                            riderLng={riderLocations[order._id]?.lng}
+                          />
+                        </div>
+                      )}
 
                       {/* Items details */}
                       {order.orderType !== 'ride' && Array.isArray(order.items) && order.items.length > 0 && (

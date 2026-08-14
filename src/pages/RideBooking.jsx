@@ -142,7 +142,11 @@ export default function RideBooking() {
               else if (calculatedDistance <= p.tier5.maxDistanceKm) computedFare = p.tier5.fee;
               else computedFare = p.tier6.fee;
             }
-            setFare(computedFare);
+            let rainSurcharge = 0;
+            if (platformSettings?.surcharges?.rain?.enabled) {
+              rainSurcharge = platformSettings.surcharges.rain.fee || 10;
+            }
+            setFare(computedFare + rainSurcharge);
             setErrorMsg('');
           } else {
             if (currentRequestId !== routeRequestIdRef.current) return;
@@ -605,9 +609,15 @@ export default function RideBooking() {
               <div className="flex justify-between">
                 <span>Distance Pricing Fee</span>
                 <span className="text-main font-bold">
-                  {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : distance === 'error' ? 'Error' : `₹${fare}`)}
+                  {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : distance === 'error' ? 'Error' : `₹${fare - (platformSettings?.surcharges?.rain?.enabled ? (platformSettings.surcharges.rain.fee || 10) : 0)}`)}
                 </span>
               </div>
+              {platformSettings?.surcharges?.rain?.enabled && (
+                <div className="flex justify-between">
+                  <span>Rain Charge</span>
+                  <span className="text-red-500 font-bold">+₹{platformSettings.surcharges.rain.fee || 10}</span>
+                </div>
+              )}
             </div>
 
             {/* Total invoice block */}
