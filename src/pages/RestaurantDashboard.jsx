@@ -186,8 +186,19 @@ export default function RestaurantDashboard() {
       withCredentials: true,
       transports: ['websocket', 'polling']
     });
-    socket.on('orderStatusChanged', () => {
-      fetchOrders();
+    socket.on('orderStatusChanged', (data) => {
+      if (data && data.order) {
+        setOrders(prev => {
+          const exists = prev.find(o => o._id === data.orderId);
+          if (exists) {
+            return prev.map(o => o._id === data.orderId ? { ...o, ...data.order } : o);
+          }
+          fetchOrders();
+          return prev;
+        });
+      } else {
+        fetchOrders();
+      }
       fetchMetrics();
     });
     const interval = setInterval(() => {

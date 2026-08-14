@@ -247,32 +247,37 @@ export default function DeliveryDashboard() {
       const availRes = await fetch(`${API_BASE}/delivery-partner/orders/available`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const availData = await availRes.json();
-      // Guard: only set state if the response is actually an array
-      setAvailableOrders(Array.isArray(availData) ? availData : []);
+      if (availRes.ok) {
+        const availData = await availRes.json();
+        setAvailableOrders(Array.isArray(availData) ? availData : []);
+      }
 
       // 2. Active Run
       const activeRes = await fetch(`${API_BASE}/delivery-partner/orders/active`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const activeData = await activeRes.json();
-      const safeActiveData = Array.isArray(activeData) ? activeData : [];
-      setActiveOrders(safeActiveData);
+      if (activeRes.ok) {
+        const activeData = await activeRes.json();
+        const safeActiveData = Array.isArray(activeData) ? activeData : [];
+        setActiveOrders(safeActiveData);
 
-      // Auto-select active order if selectedOrder is null
-      if (safeActiveData.length > 0 && !selectedOrder) {
-        setSelectedOrder(safeActiveData[0]);
+        // Auto-select active order if selectedOrder is null
+        if (safeActiveData.length > 0 && !selectedOrder) {
+          setSelectedOrder(safeActiveData[0]);
+        }
       }
 
       // 3. Completed history
       const historyRes = await fetch(`${API_BASE}/delivery-partner/orders/history`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const historyData = await historyRes.json();
-      const safeHistoryData = Array.isArray(historyData) ? historyData : [];
-      // Sort by most recently completed first
-      safeHistoryData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setHistoryOrders(safeHistoryData);
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        const safeHistoryData = Array.isArray(historyData) ? historyData : [];
+        // Sort by most recently completed first
+        safeHistoryData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setHistoryOrders(safeHistoryData);
+      }
 
     } catch (err) {
       console.error(err);
@@ -1204,12 +1209,20 @@ export default function DeliveryDashboard() {
                           ) : (
                             <>
                               <div className="flex items-center gap-1.5 text-main">
-                                <Store className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                                <span className="font-extrabold text-[10px] text-gray-500 w-24">CUSTOMER:</span>
+                                <span className="truncate">{order.customerName || order.user?.name || order.userId?.name || 'Customer'}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-main">
+                                <span className="font-extrabold text-[10px] text-gray-500 w-24">RESTAURANT:</span>
                                 <span className="truncate">{order.restaurant?.name || 'Restaurant'}</span>
                               </div>
                               <div className="flex items-center gap-1.5 text-muted">
-                                <MapPin className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                                <span className="font-extrabold text-[10px] text-gray-400 w-24">LOCATION:</span>
                                 <span className="truncate">{order.address?.street || 'Customer Location'}, {order.address?.city || ''}</span>
+                              </div>
+                              <div className="flex justify-between items-center mt-1 text-[10px] text-gray-500">
+                                <span>{order.distance ? `${order.distance} km` : ''}</span>
+                                <span className="font-bold text-green-600">Earning: ₹{order.deliveryFee ? order.deliveryFee + 20 : 40}</span>
                               </div>
                             </>
                           )}

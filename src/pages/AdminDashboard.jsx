@@ -140,8 +140,21 @@ export default function AdminDashboard() {
       socket.emit('join', 'admin_room');
     });
 
-    socket.on('orderStatusChanged', () => {
-      fetchAllOrders();
+    socket.on('orderStatusChanged', (data) => {
+      if (data && data.order) {
+        setAllOrders(prev => {
+          const exists = prev.find(o => o._id === data.orderId);
+          if (exists) {
+            return prev.map(o => o._id === data.orderId ? { ...o, ...data.order } : o);
+          }
+          // If not in our list, it might be a newly created order or we don't have its full payload.
+          // Fetch all to guarantee we have all populated customer/restaurant references.
+          fetchAllOrders();
+          return prev;
+        });
+      } else {
+        fetchAllOrders();
+      }
       fetchAnalytics();
     });
 
@@ -171,12 +184,9 @@ export default function AdminDashboard() {
       if (res.ok) {
         const data = await res.json();
         setAllOrders(Array.isArray(data) ? data : []);
-      } else {
-        setAllOrders([]);
       }
     } catch (err) {
       console.error('Error fetching all orders:', err);
-      setAllOrders([]);
     } finally {
       setIsOrdersLoading(false);
     }
