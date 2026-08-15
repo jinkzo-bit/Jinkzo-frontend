@@ -186,8 +186,8 @@ export default function OrderTracking() {
 
     fetchOrderDetails();
     
-    // Poll every 5 seconds for real-time order status updates
-    const pollInterval = setInterval(fetchOrderDetails, 5000);
+    // Poll every 60 seconds as a fallback, relying primarily on Socket.IO for real-time updates
+    const pollInterval = setInterval(fetchOrderDetails, 60000);
 
     return () => clearInterval(pollInterval);
   }, [id, token, restaurantAddress]);

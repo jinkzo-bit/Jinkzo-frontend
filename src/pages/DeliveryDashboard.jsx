@@ -218,7 +218,7 @@ export default function DeliveryDashboard() {
     const interval = setInterval(() => {
       fetchProfile();
       fetchOrdersData();
-    }, 6000);
+    }, 60000); // 60 seconds fallback polling to prevent 429 API rate limits
 
     return () => clearInterval(interval);
   }, [token, user, navigate]);
@@ -401,16 +401,21 @@ export default function DeliveryDashboard() {
     if (navigator.geolocation) {
       watchId = navigator.geolocation.watchPosition(
         (position) => {
-            const { latitude, longitude, heading, speed } = position.coords;
-            console.log('[GPS SOCKET] Dispatching coordinate update:', latitude, longitude);
-            setRiderLoc({ lat: latitude, lng: longitude });
-            socket.emit('updateLocation', {
-              orderId: selectedOrder._id,
-              lat: latitude,
-              lng: longitude,
-              heading: heading || 0,
-              speed: speed || 0
-            });
+          const { latitude, longitude, heading, speed, accuracy } = position.coords;
+          if (accuracy && accuracy > 80) {
+            console.warn('[GPS SOCKET] Ignored low accuracy point:', accuracy, 'm');
+            return;
+          }
+          console.log('[GPS SOCKET] Dispatching coordinate update:', latitude, longitude, 'accuracy:', accuracy);
+          setRiderLoc({ lat: latitude, lng: longitude });
+          socket.emit('updateLocation', {
+            orderId: selectedOrder._id,
+            lat: latitude,
+            lng: longitude,
+            heading: heading || 0,
+            speed: speed || 0,
+            accuracy: accuracy || 0
+          });
         },
         (err) => {
           console.error('[GPS SOCKET] Geolocation error:', err);
@@ -496,7 +501,11 @@ export default function DeliveryDashboard() {
     }
   };
 
+  const isUpdatingRef = useRef(false);
+
   const handleUpdateStatus = async (orderId, nextStatus) => {
+    if (isUpdatingRef.current) return;
+    isUpdatingRef.current = true;
     setUpdatingId(orderId);
     try {
       const res = await fetch(`${API_BASE}/delivery-partner/orders/${orderId}/status`, {
@@ -521,6 +530,7 @@ export default function DeliveryDashboard() {
       alert(`Error updating status: ${err.message}`);
     } finally {
       setUpdatingId(null);
+      isUpdatingRef.current = false;
     }
   };
 
@@ -822,7 +832,7 @@ export default function DeliveryDashboard() {
                             <div className="flex flex-col gap-1 mt-1 bg-gray-50 p-2 rounded-lg border border-gray-150">
                               <span className="text-[9px] font-extrabold text-gray-500">FROM</span>
                               <span className="text-[10px] font-bold text-main truncate">
-                                {order.pickupLocation?.formattedAddress || order.pickupAddress?.street || 'Pickup'}
+                                {order.pickupLocation?.formattedAddress || order.pickupAddress?.street || order.pickupAddress?.city || (order.pickupLocation?.lat ? `${order.pickupLocation.lat.toFixed(4)}, ${order.pickupLocation.lng.toFixed(4)}` : 'Selected Pickup')}
                               </span>
                               <span className="text-[9px] font-extrabold text-gray-500 mt-0.5">TO</span>
                               <span className="text-[10px] font-bold text-main truncate">
@@ -1200,7 +1210,7 @@ export default function DeliveryDashboard() {
                               </div>
                               <div className="flex items-center gap-1.5 text-main">
                                 <span className="font-extrabold text-[10px] text-gray-500 w-10">FROM:</span>
-                                <span className="truncate">{order.pickupLocation?.formattedAddress || order.pickupAddress?.street || 'Pickup Location'}</span>
+                                <span className="truncate">{order.pickupLocation?.formattedAddress || order.pickupAddress?.street || order.pickupAddress?.city || (order.pickupLocation?.lat ? `${order.pickupLocation.lat.toFixed(4)}, ${order.pickupLocation.lng.toFixed(4)}` : 'Selected Pickup')}</span>
                               </div>
                               <div className="flex items-center gap-1.5 text-muted">
                                 <span className="font-extrabold text-[10px] text-gray-400 w-10">TO:</span>

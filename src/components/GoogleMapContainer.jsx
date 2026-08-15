@@ -22,6 +22,7 @@ const MAP_OPTIONS = {
   fullscreenControl: false,
   clickableIcons: false,
   gestureHandling: 'greedy',
+  rotateControl: true,
   mapTypeId: 'roadmap',
 };
 
@@ -303,6 +304,9 @@ export default function GoogleMapContainer({
   }, [trafficOn]);
 
   // ── Tracking mode ─────────────────────────────────────────────────────────
+  const lastRouteCalcRef = useRef({ lat: null, lng: null, isBeforePickup: null, orderId: null });
+  const isUserInteractingRef = useRef(false);
+
   useEffect(() => {
     if (!isLoaded || mode !== 'tracking') return;
 
@@ -310,23 +314,15 @@ export default function GoogleMapContainer({
     setPickerPos(null);
 
     const drawRoute = async () => {
-      // ── For RIDE orders, use ride-specific pickup/drop coordinates ─────────
-      // Phase 1 (before pickup): route origin = pickup point, destination = pickup point
-      //   (the rider's GPS tracks toward the pickup; we draw pickup↔drop to show full route)
-      // Phase 2 (after pickup): same points, rider GPS is now heading to drop
-      // In both phases the polyline shows the full pickup→drop route.
-      // For FOOD orders: use restaurantLat/Lng and customerLat/Lng as before.
       let restPos, custPos;
+      const currentLivePos = (riderLat != null && riderLng != null) ? { lat: riderLat, lng: riderLng } : riderPos;
+      
       if (isRideOrder && ridePickupLat != null && ridePickupLng != null && rideDropLat != null && rideDropLng != null) {
-        const liveRiderPos = (riderLat != null && riderLng != null) ? { lat: riderLat, lng: riderLng } : riderPos;
-        
-        if (['Rider_Assigned', 'Rider_Accepted'].includes(status)) {
-          // Phase 1 (To Pickup): route origin = rider point, destination = pickup point
-          restPos = liveRiderPos || { lat: ridePickupLat, lng: ridePickupLng };
+        if (isBeforePickup) {
+          restPos = currentLivePos || { lat: ridePickupLat, lng: ridePickupLng };
           custPos = { lat: ridePickupLat, lng: ridePickupLng };
         } else {
-          // Phase 2 (To Drop): route origin = rider point, destination = drop point
-          restPos = liveRiderPos || { lat: ridePickupLat, lng: ridePickupLng };
+          restPos = currentLivePos || { lat: ridePickupLat, lng: ridePickupLng };
           custPos = { lat: rideDropLat,   lng: rideDropLng   };
         }
       } else {
@@ -334,75 +330,55 @@ export default function GoogleMapContainer({
         custPos = (customerLat  && customerLng)  ? { lat: customerLat,  lng: customerLng  } : null;
       }
 
-      if (!restPos || !custPos) {
-        console.warn('[GoogleMapContainer] Missing required coordinates for tracking map.');
-        return;
-      }
+      if (!restPos || !custPos) return;
 
-      // Safe fallback if totally unresolved
       let restLatLng = { lat: restPos.lat, lng: restPos.lng };
       let custLatLng = { lat: custPos.lat, lng: custPos.lng };
 
-      // Avoid drawing extremely short routes (same location)
-      const dist = Math.hypot(restLatLng.lat - custLatLng.lat, restLatLng.lng - custLatLng.lng);
-      if (dist < 0.005) {
-         console.warn('[GoogleMapContainer] Locations are identical, not drawing route.');
+      // Throttle route calculation (only calc if phase changed, order changed, or moved > 150m)
+      const distFromLastCalc = lastRouteCalcRef.current.lat 
+        ? Math.hypot(restLatLng.lat - lastRouteCalcRef.current.lat, restLatLng.lng - lastRouteCalcRef.current.lng) * 111000 // approx meters
+        : 999999;
+      
+      const phaseChanged = lastRouteCalcRef.current.isBeforePickup !== isBeforePickup;
+      const orderChanged = lastRouteCalcRef.current.orderId !== orderId;
+
+      if (!orderChanged && !phaseChanged && distFromLastCalc < 150) {
+        // Just update markers without hitting backend or resetting camera
+        setRestaurantPos(restLatLng);
+        setCustomerPos(custLatLng);
+        return; 
       }
 
+      lastRouteCalcRef.current = { lat: restLatLng.lat, lng: restLatLng.lng, isBeforePickup, orderId };
       setRestaurantPos(restLatLng);
       setCustomerPos(custLatLng);
 
-      // Route calculation via backend proxy (Google Routes API with traffic)
       try {
         const res = await fetch(`${API_BASE}/maps/routes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            origin: restLatLng,
-            destination: custLatLng,
-            travelMode: 'DRIVE',
-          }),
+          body: JSON.stringify({ origin: restLatLng, destination: custLatLng, travelMode: 'DRIVE' }),
         });
         const data = await res.json();
         let routePoints = [];
         if (data.success && data.data) {
-          routePoints = data.data.polyline || [
-            restLatLng,
-            { lat: restLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
-            { lat: custLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
-            custLatLng,
-          ];
-          if (onRouteInfo) {
-            onRouteInfo({
-              distanceKm: data.data.distanceKm,
-              durationMinutes: data.data.durationMinutes,
-            });
-          }
+          routePoints = data.data.polyline || [restLatLng, custLatLng];
+          if (onRouteInfo) onRouteInfo({ distanceKm: data.data.distanceKm, durationMinutes: data.data.durationMinutes });
         } else {
-          routePoints = [
-            restLatLng,
-            { lat: restLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
-            { lat: custLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
-            custLatLng,
-          ];
+          routePoints = [restLatLng, custLatLng];
         }
-
         routePointsRef.current = routePoints;
         setRoutePath(routePoints);
       } catch (err) {
         console.error('[GoogleMapContainer] Route fetch failed:', err);
-        const fallbackPoints = [
-          restLatLng,
-          { lat: restLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
-          { lat: custLatLng.lat, lng: (restLatLng.lng + custLatLng.lng) / 2 },
-          custLatLng,
-        ];
+        const fallbackPoints = [restLatLng, custLatLng];
         routePointsRef.current = fallbackPoints;
         setRoutePath(fallbackPoints);
       }
 
-      // Fit map to both markers
-      if (mapRef.current && window.google) {
+      // ONLY fitBounds if it's a new phase/order or if the user is auto-following
+      if (mapRef.current && window.google && (!isUserInteractingRef.current || phaseChanged || orderChanged)) {
         const bounds = new window.google.maps.LatLngBounds();
         bounds.extend(restLatLng);
         bounds.extend(custLatLng);
@@ -417,7 +393,7 @@ export default function GoogleMapContainer({
     };
 
     drawRoute();
-  }, [isLoaded, mode, restaurantLat, restaurantLng, customerLat, customerLng, restaurantAddress, customerAddress, isRideOrder, ridePickupLat, ridePickupLng, rideDropLat, rideDropLng, status, riderLat, riderLng]);
+  }, [isLoaded, mode, restaurantLat, restaurantLng, customerLat, customerLng, restaurantAddress, customerAddress, isRideOrder, ridePickupLat, ridePickupLng, rideDropLat, rideDropLng, status, riderLat, riderLng, orderId, isBeforePickup]);
 
   // ── Socket.IO Live Driver GPS tracking listener ────────────────────────────
   useEffect(() => {
@@ -432,17 +408,21 @@ export default function GoogleMapContainer({
 
     socket.emit('joinOrder', orderId);
 
-    socket.on('locationUpdated', ({ lat, lng }) => {
-      console.log('[SOCKET] Rider coordinate update:', lat, lng);
+    socket.on('locationUpdated', ({ lat, lng, heading }) => {
+      console.log('[SOCKET] Rider coordinate update:', lat, lng, 'heading:', heading);
       hasLiveGPS.current = true;
       const newPos = { lat, lng };
+
+      if (heading !== null && heading !== undefined && !isNaN(heading)) {
+        setRiderBearing(heading);
+      }
 
       if (previousRiderPosRef.current) {
         const oldPos = previousRiderPosRef.current;
         const dist = Math.hypot(newPos.lat - oldPos.lat, newPos.lng - oldPos.lng);
         
-        // Calculate bearing only if movement is meaningful
-        if (dist > 0.0001) {
+        // Calculate bearing only if movement is meaningful and no valid hardware heading is provided
+        if (dist > 0.0001 && (heading === null || heading === undefined || isNaN(heading))) {
           const dy = newPos.lat - oldPos.lat;
           const dx = Math.cos(Math.PI / 180 * oldPos.lat) * (newPos.lng - oldPos.lng);
           const angle = Math.atan2(dx, dy) * 180 / Math.PI;
@@ -634,6 +614,18 @@ export default function GoogleMapContainer({
           if (mode === 'tracking') {
             isAutoFollowRef.current = false;
             setShowFollowButton(true);
+            isUserInteractingRef.current = true;
+          }
+        }}
+        onZoomChanged={() => {
+          if (mode === 'tracking' && mapRef.current) {
+            // Google Maps initial load fires onZoomChanged.
+            // Only disable auto-follow if user explicitly changed zoom (map bounds are fully loaded)
+            if (mapRef.current.getBounds()) {
+              isAutoFollowRef.current = false;
+              setShowFollowButton(true);
+              isUserInteractingRef.current = true;
+            }
           }
         }}
       >
@@ -774,6 +766,7 @@ export default function GoogleMapContainer({
         <button
           onClick={() => {
             isAutoFollowRef.current = true;
+            isUserInteractingRef.current = false;
             setShowFollowButton(false);
             if (riderPos && mapRef.current) mapRef.current.panTo(riderPos);
           }}
