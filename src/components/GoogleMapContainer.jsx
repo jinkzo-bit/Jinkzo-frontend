@@ -522,18 +522,18 @@ export default function GoogleMapContainer({
     }
   }, [progress, status, mode]);
 
-  // ── Polyline options — Swiggy/Zomato style orange dashed route ───────────────
+  // ── Polyline options — Solid blue route ───────────────
   // Outer glow
   const glowPolylineOptions = {
-    strokeColor: '#FC8019',
-    strokeOpacity: 0.15,
-    strokeWeight: 14,
+    strokeColor: '#1A73E8',
+    strokeOpacity: 0.25,
+    strokeWeight: 12,
     geodesic: true,
     zIndex: 1,
   };
-  // Main solid orange route
+  // Main solid blue route
   const mainPolylineOptions = {
-    strokeColor: '#FC8019',
+    strokeColor: '#1A73E8',
     strokeOpacity: 1,
     strokeWeight: 5,
     geodesic: true,
@@ -665,7 +665,6 @@ export default function GoogleMapContainer({
           <>
             <Polyline path={routePath} options={glowPolylineOptions} />
             <Polyline path={routePath} options={mainPolylineOptions} />
-            <Polyline path={routePath} options={dashedPolylineOptions} />
           </>
         )}
 

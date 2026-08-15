@@ -388,7 +388,7 @@ export default function DeliveryDashboard() {
 
   // Geolocation and Socket.IO GPS update streaming for Out for Delivery orders
   useEffect(() => {
-    if (!selectedOrder || !['Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up', 'Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(selectedOrder.status) || !token) return;
+    if (!selectedOrder || ['Delivered', 'Completed', 'Cancelled', 'Rejected'].includes(selectedOrder.status) || !token) return;
 
     const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
     const socket = io(socketHost, {
@@ -896,7 +896,7 @@ export default function DeliveryDashboard() {
                           </div>
                         ) : (
                           <p className="text-xs font-bold text-main line-clamp-1">
-                            To: {['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? (selectedOrderRestaurantName || 'Restaurant') : (order.address?.street || 'Customer Location')}, {['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? '' : (order.address?.city || '')}
+                            To: {['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? (selectedOrderRestaurantName || 'Restaurant') : (order.customerLocation?.formattedAddress || `${order.address?.street || 'Customer Location'}, ${order.address?.city || ''}`)}
                           </p>
                         )}
                       </div>
@@ -961,7 +961,7 @@ export default function DeliveryDashboard() {
                     )}
 
                     {/* Action buttons */}
-                    {(selectedOrder.status === 'Rider_Assigned' || (selectedOrder.orderType === 'food' && selectedOrder.status === 'Placed' && (selectedOrder.deliveryAgent?.id === user?._id || selectedOrder.deliveryAgent?.phone === user?.phone))) ? (
+                    {(selectedOrder.status === 'Rider_Assigned' || (selectedOrder.orderType === 'food' && selectedOrder.riderStatus === 'Pending' && (selectedOrder.deliveryAgent?.id === user?._id || selectedOrder.deliveryAgent?.phone === user?.phone))) ? (
                       <div className="bg-base border border-gray-150 p-4 rounded-2xl flex flex-col gap-2">
                         <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Milestone Control</span>
                         <div className="flex gap-2">
@@ -1191,7 +1191,7 @@ export default function DeliveryDashboard() {
                                   {selectedOrder.customerName || selectedOrder.user?.name || selectedOrder.userId?.name || 'Customer'}
                                 </h5>
                                 <p className="text-[10px] text-gray-500 font-semibold mt-0.5 max-w-[250px] leading-relaxed">
-                                  {`${selectedOrder.address?.street || 'Customer Location'}, ${selectedOrder.address?.city || ''}, ${selectedOrder.address?.state || ''} - ${selectedOrder.address?.zip || ''}`}
+                                  {selectedOrder.customerLocation?.formattedAddress || `${selectedOrder.address?.street || 'Customer Location'}, ${selectedOrder.address?.city || ''}, ${selectedOrder.address?.state || ''} - ${selectedOrder.address?.zip || ''}`}
                                 </p>
                               </div>
                               <a 
@@ -1282,7 +1282,7 @@ export default function DeliveryDashboard() {
                               </div>
                               <div className="flex items-center gap-1.5 text-muted">
                                 <span className="font-extrabold text-[10px] text-gray-400 w-24">LOCATION:</span>
-                                <span className="truncate">{order.address?.street || 'Customer Location'}, {order.address?.city || ''}</span>
+                                <span className="truncate">{order.customerLocation?.formattedAddress || `${order.address?.street || 'Customer Location'}, ${order.address?.city || ''}`}</span>
                               </div>
                               <div className="flex justify-between items-center mt-1 text-[10px] text-gray-500">
                                 <span>{order.distance ? `${order.distance} km` : ''}</span>
@@ -1375,7 +1375,7 @@ export default function DeliveryDashboard() {
                       <div className="flex justify-between items-center">
                         <div>
                           <span className="font-mono text-[9px] font-bold text-muted">#{order._id.substr(-8).toUpperCase()}</span>
-                          <h4 className="font-bold text-main mt-1">To: {order.address?.street || 'Customer Location'}, {order.address?.city || ''}</h4>
+                          <h4 className="font-bold text-main mt-1">To: {order.customerLocation?.formattedAddress || `${order.address?.street || 'Customer Location'}, ${order.address?.city || ''}`}</h4>
                           <p className="text-[9px] text-muted font-semibold mt-0.5">Delivered on {formatAppDateOnly(order.createdAt)}</p>
                         </div>
                         <div className="text-right flex flex-col items-end gap-1">
