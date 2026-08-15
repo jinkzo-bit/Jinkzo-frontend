@@ -1109,51 +1109,52 @@ export default function DeliveryDashboard() {
                       }
 
                       return (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
-                          <div className={`border ${isBeforePickup ? 'border-primary shadow-xs' : 'border-line'} p-3.5 rounded-2xl flex flex-col justify-between`}>
-                            <div>
-                              <span className="text-[9px] text-muted font-extrabold uppercase">
-                                1. Pickup Kitchen
-                              </span>
-                              <h5 className="font-bold text-main mt-1">
-                                {selectedOrderRestaurantName || 'Restaurant'}
-                              </h5>
-                              <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">
-                                {selectedOrderRestaurantAddress || 'Restaurant Address'}
-                              </p>
-                            </div>
-                            {isBeforePickup && selectedOrderRestaurantPhone && (
-                              <a 
-                                href={`tel:${selectedOrderRestaurantPhone}`}
-                                className="mt-3 bg-violet-100 hover:bg-violet-200 text-violet-700 text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
-                              >
-                                <Phone className="w-3.5 h-3.5" />
-                                <span>Call Restaurant</span>
-                              </a>
-                            )}
-                          </div>
-                          <div className={`border ${!isBeforePickup ? 'border-primary shadow-xs' : 'border-line'} p-3.5 rounded-2xl flex flex-col justify-between`}>
-                            <div>
-                              <span className="text-[9px] text-muted font-extrabold uppercase">
-                                2. Drop Customer
-                              </span>
-                              <h5 className="font-bold text-main mt-1">
-                                {selectedOrder.customerName || selectedOrder.user?.name || selectedOrder.userId?.name || 'Delivery Address'}
-                              </h5>
-                              <p className="text-[10px] text-muted mt-0.5 leading-relaxed font-semibold">
-                                {`${selectedOrder.address?.street || 'Customer Location'}, ${selectedOrder.address?.city || ''}, ${selectedOrder.address?.state || ''} - ${selectedOrder.address?.zip || ''}`}
-                              </p>
-                            </div>
-                            {!isBeforePickup && (
+                        <div className="border border-primary p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+                          {isBeforePickup ? (
+                            <>
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-primary font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                                  <MapPin className="w-3 h-3" /> Pickup Kitchen
+                                </span>
+                                <h5 className="font-bold text-main text-sm">
+                                  {selectedOrderRestaurantName || 'Restaurant'}
+                                </h5>
+                                <p className="text-[10px] text-gray-500 font-semibold mt-0.5 max-w-[250px] leading-relaxed">
+                                  {selectedOrderRestaurantAddress || 'Restaurant Address'}
+                                </p>
+                              </div>
+                              {selectedOrderRestaurantPhone && (
+                                <a 
+                                  href={`tel:${selectedOrderRestaurantPhone}`}
+                                  className="bg-violet-100 hover:bg-violet-200 text-violet-700 text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm shrink-0"
+                                >
+                                  <Phone className="w-4 h-4" />
+                                  <span>Call Restaurant</span>
+                                </a>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] text-primary font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                                  <MapPin className="w-3 h-3" /> Drop Customer
+                                </span>
+                                <h5 className="font-bold text-main text-sm">
+                                  {selectedOrder.customerName || selectedOrder.user?.name || selectedOrder.userId?.name || 'Customer'}
+                                </h5>
+                                <p className="text-[10px] text-gray-500 font-semibold mt-0.5 max-w-[250px] leading-relaxed">
+                                  {`${selectedOrder.address?.street || 'Customer Location'}, ${selectedOrder.address?.city || ''}, ${selectedOrder.address?.state || ''} - ${selectedOrder.address?.zip || ''}`}
+                                </p>
+                              </div>
                               <a 
                                 href={`tel:${selectedOrder.userId?.phone || selectedOrder.customerPhone || selectedOrder.user?.phone}`}
-                                className="mt-3 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                                className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm shrink-0"
                               >
-                                <Phone className="w-3.5 h-3.5" />
-                                <span>Call Customer ({selectedOrder.userId?.phone || selectedOrder.customerPhone || selectedOrder.user?.phone || 'Unknown'})</span>
+                                <Phone className="w-4 h-4" />
+                                <span>Call Customer</span>
                               </a>
-                            )}
-                          </div>
+                            </>
+                          )}
                         </div>
                       );
                     })()}
