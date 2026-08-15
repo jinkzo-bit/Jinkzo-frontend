@@ -856,7 +856,7 @@ export default function DeliveryDashboard() {
                           </div>
                         ) : (
                           <p className="text-xs font-bold text-main line-clamp-1">
-                            To: {['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? (selectedOrderRestaurantName || 'Restaurant') : (order.address?.street || 'Customer Location')}, {['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? '' : (order.address?.city || '')}
+                            To: {['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? (selectedOrderRestaurantName || 'Restaurant') : (order.address?.street || 'Customer Location')}, {['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? '' : (order.address?.city || '')}
                           </p>
                         )}
                       </div>
@@ -1020,7 +1020,7 @@ export default function DeliveryDashboard() {
                           <div className="flex-grow flex flex-col items-center justify-center text-center text-muted gap-1.5 py-6">
                             <span className="text-lg">💬</span>
                             <p className="text-[10px] font-bold text-muted">No messages yet</p>
-                            <p className="text-[9px] max-w-[160px] leading-tight">Send a message to coordinate direction details with the {selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'restaurant' : 'customer'}.</p>
+                            <p className="text-[9px] max-w-[160px] leading-tight">Send a message to coordinate direction details with the {selectedOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'restaurant' : 'customer'}.</p>
                           </div>
                         )}
                       </div>
@@ -1029,7 +1029,7 @@ export default function DeliveryDashboard() {
                       <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-line pt-2 mt-0.5">
                         <input
                           type="text"
-                          placeholder={`Type a message to ${selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'restaurant' : 'customer'}...`}
+                          placeholder={`Type a message to ${selectedOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'restaurant' : 'customer'}...`}
                           value={messageText}
                           onChange={(e) => setMessageText(e.target.value)}
                           className="bg-base border border-line-strong focus:border-primary focus:bg-surface rounded-xl px-3 py-2 text-xs text-main outline-none flex-grow"
