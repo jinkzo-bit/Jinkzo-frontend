@@ -831,7 +831,7 @@ export default function DeliveryDashboard() {
                             </div>
                             {order.distance && (
                               <div className="text-[9px] font-bold text-muted mt-1">
-                                Distance: {(order.distance / 1000).toFixed(2)} km
+                                Distance: {Number(order.distance || 0).toFixed(2)} km
                               </div>
                             )}
                           </div>
@@ -871,22 +871,24 @@ export default function DeliveryDashboard() {
                     </div>
 
                     {/* Real Google Maps tracking map using exact order location snapshots */}
-                    <InteractiveMap 
-                      status={selectedOrder.status} 
-                      restaurantLat={selectedOrder.orderType !== 'ride' ? selectedOrder.restaurantLocation?.lat : undefined}
-                      restaurantLng={selectedOrder.orderType !== 'ride' ? selectedOrder.restaurantLocation?.lng : undefined}
-                      customerLat={selectedOrder.orderType !== 'ride' ? selectedOrder.customerLocation?.lat : undefined}
-                      customerLng={selectedOrder.orderType !== 'ride' ? selectedOrder.customerLocation?.lng : undefined}
-                      deliveryMethod={selectedOrder.orderType === 'ride' ? 'Ride' : 'Standard'}
-                      orderId={selectedOrder._id}
-                      isRide={selectedOrder.orderType === 'ride'}
-                      ridePickupLat={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.lat ?? selectedOrder.customerLocation?.lat) : undefined}
-                      ridePickupLng={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.lng ?? selectedOrder.customerLocation?.lng) : undefined}
-                      rideDropLat={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lat ?? selectedOrder.restaurantLocation?.lat) : undefined}
-                      rideDropLng={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lng ?? selectedOrder.restaurantLocation?.lng) : undefined}
-                      riderLat={selectedOrder.orderType === 'ride' ? riderLoc?.lat : undefined}
-                      riderLng={selectedOrder.orderType === 'ride' ? riderLoc?.lng : undefined}
-                    />
+                    {!['Delivered', 'Completed'].includes(selectedOrder.status) && (
+                      <InteractiveMap 
+                        status={selectedOrder.status} 
+                        restaurantLat={selectedOrder.orderType !== 'ride' ? selectedOrder.restaurantLocation?.lat : undefined}
+                        restaurantLng={selectedOrder.orderType !== 'ride' ? selectedOrder.restaurantLocation?.lng : undefined}
+                        customerLat={selectedOrder.orderType !== 'ride' ? selectedOrder.customerLocation?.lat : undefined}
+                        customerLng={selectedOrder.orderType !== 'ride' ? selectedOrder.customerLocation?.lng : undefined}
+                        deliveryMethod={selectedOrder.orderType === 'ride' ? 'Ride' : 'Standard'}
+                        orderId={selectedOrder._id}
+                        isRide={selectedOrder.orderType === 'ride'}
+                        ridePickupLat={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.lat ?? selectedOrder.customerLocation?.lat) : undefined}
+                        ridePickupLng={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.lng ?? selectedOrder.customerLocation?.lng) : undefined}
+                        rideDropLat={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lat ?? selectedOrder.restaurantLocation?.lat) : undefined}
+                        rideDropLng={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lng ?? selectedOrder.restaurantLocation?.lng) : undefined}
+                        riderLat={selectedOrder.orderType === 'ride' ? riderLoc?.lat : undefined}
+                        riderLng={selectedOrder.orderType === 'ride' ? riderLoc?.lng : undefined}
+                      />
+                    )}
 
                     {/* Driver Instructions */}
                     {selectedOrder.instruction && (

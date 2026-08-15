@@ -61,8 +61,8 @@ const RIDER_SVG = `
   </filter>
   <g filter="url(#rshadow)">
     <circle cx="26" cy="26" r="22" fill="#18181b"/>
-    <circle cx="26" cy="26" r="19" fill="#27272a"/>
-    <path d="M26 12L34 36L26 32L18 36L26 12Z" fill="#FC8019"/>
+    <circle cx="26" cy="26" r="20" fill="white"/>
+    <text x="26" y="34" text-anchor="middle" font-size="22" font-family="Arial">&#127949;</text>
   </g>
 </svg>`;
 
@@ -74,8 +74,8 @@ const RIDE_SVG = `
   </filter>
   <g filter="url(#cshadow)">
     <circle cx="26" cy="26" r="22" fill="#1e40af"/>
-    <circle cx="26" cy="26" r="19" fill="#1d4ed8"/>
-    <path d="M26 12L34 36L26 32L18 36L26 12Z" fill="#60a5fa"/>
+    <circle cx="26" cy="26" r="20" fill="white"/>
+    <text x="26" y="34" text-anchor="middle" font-size="22" font-family="Arial">&#127949;</text>
   </g>
 </svg>`;
 
