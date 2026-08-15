@@ -726,17 +726,17 @@ export default function DeliveryDashboard() {
           <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col justify-between min-h-[100px]">
             <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Wallet Balance</span>
             <div className="flex justify-between items-end mt-2">
-              <span className="text-xl font-black text-main">₹{(riderProfile.deliveryDetails?.walletBalance || 0).toFixed(2)}</span>
+              <span className="text-xl font-black text-main">₹{Number(riderProfile.deliveryDetails?.walletBalance || 0).toFixed(2)}</span>
               <button onClick={() => setActiveSubTab('wallet')} className="text-[10px] font-bold text-primary hover:underline">Cashout</button>
             </div>
           </div>
           <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col justify-between min-h-[100px]">
             <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Total Earnings</span>
-            <span className="text-xl font-black text-main mt-2">₹{(riderProfile.deliveryDetails?.totalEarnings || 0).toFixed(2)}</span>
+            <span className="text-xl font-black text-main mt-2">₹{Number(riderProfile.deliveryDetails?.totalEarnings || 0).toFixed(2)}</span>
           </div>
           <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col justify-between min-h-[100px]">
             <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider flex items-center gap-1"><Heart className="w-3 h-3 text-red-400 fill-red-100" /> Tips Earned</span>
-            <span className="text-xl font-black text-green-600 mt-2">₹{historyOrders.reduce((sum, o) => sum + (o.riderReview?.tipAmount || 0), 0).toFixed(2)}</span>
+            <span className="text-xl font-black text-green-600 mt-2">₹{historyOrders.reduce((sum, o) => sum + (Number(o.riderReview?.tipAmount) || 0), 0).toFixed(2)}</span>
           </div>
         </div>
       )}
@@ -884,6 +884,8 @@ export default function DeliveryDashboard() {
                       ridePickupLng={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.lng ?? selectedOrder.customerLocation?.lng) : undefined}
                       rideDropLat={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lat ?? selectedOrder.restaurantLocation?.lat) : undefined}
                       rideDropLng={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lng ?? selectedOrder.restaurantLocation?.lng) : undefined}
+                      riderLat={selectedOrder.orderType === 'ride' ? riderLoc?.lat : undefined}
+                      riderLng={selectedOrder.orderType === 'ride' ? riderLoc?.lng : undefined}
                     />
 
                     {/* Driver Instructions */}
