@@ -260,8 +260,10 @@ export default function LoginSignup() {
     <div className="max-w-lg mx-auto w-full px-4 py-8 animate-fade-in pb-24 flex flex-col gap-6">
 
       {/* Brand Header */}
-      <div className="flex flex-col items-center gap-1.5 text-center">
-        <span className="w-11 h-11 rounded-2xl bg-primary flex items-center justify-center text-white font-extrabold text-xl shadow-lg shadow-violet-500/20">J</span>
+      <div className="flex flex-col items-center gap-2.5 text-center">
+        <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg shadow-violet-500/20 bg-white border border-gray-100 flex items-center justify-center">
+          <img src="/jinkzo-favicon.jpg" alt="Jinkzo Logo" className="w-full h-full object-cover object-left" />
+        </div>
         <h2 className="font-display font-black text-2xl text-main tracking-tight mt-1">Welcome to Jinkzo</h2>
         <p className="text-xs text-muted font-semibold max-w-[320px]">
           {isLogin ? 'Sign in to access your dashboard' : 'Create a secure profile to unlock partner dashboard'}

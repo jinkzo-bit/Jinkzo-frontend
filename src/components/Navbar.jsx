@@ -28,9 +28,9 @@ export default function Navbar() {
       {/* Brand Logo & Location */}
       <div className="flex items-center gap-6">
         <Link to="/" className="flex items-center gap-1.5 cursor-pointer">
-          <span className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-white font-extrabold text-lg shadow-sm shadow-violet-500/30">
-            Q
-          </span>
+          <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm shadow-violet-500/30 flex items-center justify-center bg-white border border-gray-100">
+            <img src="/jinkzo-favicon.jpg" alt="Jinkzo Logo" className="w-full h-full object-cover object-left" />
+          </div>
           <span className="font-display font-black text-xl text-primary tracking-tight">
             Jinkzo
           </span>
