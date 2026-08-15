@@ -173,6 +173,8 @@ export default function GoogleMapContainer({
   const [restaurantPos, setRestaurantPos] = useState(null);
   const [customerPos, setCustomerPos] = useState(null);
   const [riderPos, setRiderPos] = useState(null);
+  const [routeOrigin, setRouteOrigin] = useState(null);
+  const [routeDestination, setRouteDestination] = useState(null);
   const [routePath, setRoutePath] = useState([]);
   const [activePopup, setActivePopup] = useState(null);
   const [error, setError] = useState(null);
@@ -194,19 +196,13 @@ export default function GoogleMapContainer({
     ? ['Rider_Assigned', 'Rider_Accepted'].includes(status)
     : ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(status);
 
-  // We don't render an origin icon because the rider marker will cover it
-  const restaurantIcon = isLoaded ? { path: 'M0,0' } : undefined;
-  // Destination icon:
-  //   Food — swaps between restaurant pin (before pickup) and home pin (after pickup)
-  //   Ride — swaps between pickup pin (blue person, phase 1) and home/drop pin (phase 2)
+  // Physical markers are always rendered independently
+  const restaurantIcon = isLoaded 
+    ? (isRideOrder ? svgToIcon(PICKUP_SVG, 44, 56, 22, 52) : svgToIcon(RESTAURANT_SVG, 44, 56, 22, 52))
+    : undefined;
+    
   const homeIcon = isLoaded
-    ? (isRideOrder
-        ? (isBeforePickup
-            ? svgToIcon(PICKUP_SVG, 44, 56, 22, 52)   // ride phase 1: show pickup point
-            : svgToIcon(DROP_SVG,   44, 56, 22, 52))  // ride phase 2: show destination
-        : (isBeforePickup
-            ? svgToIcon(RESTAURANT_SVG, 44, 56, 22, 52)  // food before pickup: restaurant
-            : svgToIcon(HOME_SVG,       44, 56, 22, 52))) // food after pickup: home
+    ? (isRideOrder ? svgToIcon(DROP_SVG, 44, 56, 22, 52) : svgToIcon(HOME_SVG, 44, 56, 22, 52))
     : undefined;
 
   const riderIcon      = isLoaded ? svgToIcon(RIDER_SVG, 52, 52, 26, 26, riderBearing)      : undefined;
@@ -315,51 +311,54 @@ export default function GoogleMapContainer({
     setPickerPos(null);
 
     const drawRoute = async () => {
-      let restPos, custPos;
+      let rOrigin, rDest;
       const currentLivePos = (riderLat != null && riderLng != null) ? { lat: riderLat, lng: riderLng } : riderPos;
       
       if (isRideOrder && ridePickupLat != null && ridePickupLng != null && rideDropLat != null && rideDropLng != null) {
         if (isBeforePickup) {
           if (currentLivePos) {
-            restPos = currentLivePos;
-            custPos = { lat: ridePickupLat, lng: ridePickupLng };
+            rOrigin = currentLivePos;
+            rDest = { lat: ridePickupLat, lng: ridePickupLng };
           } else {
             // Safe fallback if GPS is missing: show full route
-            restPos = { lat: ridePickupLat, lng: ridePickupLng };
-            custPos = { lat: rideDropLat,   lng: rideDropLng   };
+            rOrigin = { lat: ridePickupLat, lng: ridePickupLng };
+            rDest = { lat: rideDropLat,   lng: rideDropLng   };
           }
         } else {
-          restPos = currentLivePos || { lat: ridePickupLat, lng: ridePickupLng };
-          custPos = { lat: rideDropLat,   lng: rideDropLng   };
+          rOrigin = currentLivePos || { lat: ridePickupLat, lng: ridePickupLng };
+          rDest = { lat: rideDropLat,   lng: rideDropLng   };
         }
       } else {
         if (restaurantLat && restaurantLng && customerLat && customerLng) {
           if (isBeforePickup) {
-            if (currentLivePos) {
-              restPos = currentLivePos;
-              custPos = { lat: restaurantLat, lng: restaurantLng };
-            } else {
-              restPos = { lat: restaurantLat, lng: restaurantLng };
-              custPos = { lat: customerLat, lng: customerLng };
-            }
+            rOrigin = currentLivePos || { lat: restaurantLat, lng: restaurantLng };
+            rDest = { lat: restaurantLat, lng: restaurantLng };
           } else {
-            restPos = currentLivePos || { lat: restaurantLat, lng: restaurantLng };
-            custPos = { lat: customerLat, lng: customerLng };
+            rOrigin = currentLivePos || { lat: restaurantLat, lng: restaurantLng };
+            rDest = { lat: customerLat, lng: customerLng };
           }
         } else {
-          restPos = null;
-          custPos = null;
+          rOrigin = null;
+          rDest = null;
         }
       }
 
-      if (!restPos || !custPos) return;
+      // Always set the physical markers accurately to their absolute props independently
+      if (restaurantLat && restaurantLng) setRestaurantPos({ lat: restaurantLat, lng: restaurantLng });
+      if (customerLat && customerLng) setCustomerPos({ lat: customerLat, lng: customerLng });
+      if (isRideOrder) {
+        if (ridePickupLat && ridePickupLng) setRestaurantPos({ lat: ridePickupLat, lng: ridePickupLng });
+        if (rideDropLat && rideDropLng) setCustomerPos({ lat: rideDropLat, lng: rideDropLng });
+      }
 
-      let restLatLng = { lat: restPos.lat, lng: restPos.lng };
-      let custLatLng = { lat: custPos.lat, lng: custPos.lng };
+      if (!rOrigin || !rDest) return;
+
+      let originLatLng = { lat: rOrigin.lat, lng: rOrigin.lng };
+      let destLatLng = { lat: rDest.lat, lng: rDest.lng };
 
       // Throttle route calculation (only calc if phase changed, order changed, or moved > 150m)
       const distFromLastCalc = lastRouteCalcRef.current.lat 
-        ? Math.hypot(restLatLng.lat - lastRouteCalcRef.current.lat, restLatLng.lng - lastRouteCalcRef.current.lng) * 111000 // approx meters
+        ? Math.hypot(originLatLng.lat - lastRouteCalcRef.current.lat, originLatLng.lng - lastRouteCalcRef.current.lng) * 111000 // approx meters
         : 999999;
       
       const phaseChanged = lastRouteCalcRef.current.isBeforePickup !== isBeforePickup;
@@ -367,34 +366,34 @@ export default function GoogleMapContainer({
 
       if (!orderChanged && !phaseChanged && distFromLastCalc < 150) {
         // Just update markers without hitting backend or resetting camera
-        setRestaurantPos(restLatLng);
-        setCustomerPos(custLatLng);
+        setRouteOrigin(originLatLng);
+        setRouteDestination(destLatLng);
         return; 
       }
 
-      lastRouteCalcRef.current = { lat: restLatLng.lat, lng: restLatLng.lng, isBeforePickup, orderId };
-      setRestaurantPos(restLatLng);
-      setCustomerPos(custLatLng);
+      lastRouteCalcRef.current = { lat: originLatLng.lat, lng: originLatLng.lng, isBeforePickup, orderId };
+      setRouteOrigin(originLatLng);
+      setRouteDestination(destLatLng);
 
       try {
         const res = await fetch(`${API_BASE}/maps/routes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ origin: restLatLng, destination: custLatLng, travelMode: 'DRIVE' }),
+          body: JSON.stringify({ origin: originLatLng, destination: destLatLng, travelMode: 'DRIVE' }),
         });
         const data = await res.json();
         let routePoints = [];
         if (data.success && data.data) {
-          routePoints = data.data.polyline || [restLatLng, custLatLng];
+          routePoints = data.data.polyline || [originLatLng, destLatLng];
           if (onRouteInfo) onRouteInfo({ distanceKm: data.data.distanceKm, durationMinutes: data.data.durationMinutes });
         } else {
-          routePoints = [restLatLng, custLatLng];
+          routePoints = [originLatLng, destLatLng];
         }
         routePointsRef.current = routePoints;
         setRoutePath(routePoints);
       } catch (err) {
         console.error('[GoogleMapContainer] Route fetch failed:', err);
-        const fallbackPoints = [restLatLng, custLatLng];
+        const fallbackPoints = [originLatLng, destLatLng];
         routePointsRef.current = fallbackPoints;
         setRoutePath(fallbackPoints);
       }
@@ -402,8 +401,8 @@ export default function GoogleMapContainer({
       // ONLY fitBounds if it's a new phase/order or if the user is auto-following
       if (mapRef.current && window.google && (!isUserInteractingRef.current || phaseChanged || orderChanged)) {
         const bounds = new window.google.maps.LatLngBounds();
-        bounds.extend(restLatLng);
-        bounds.extend(custLatLng);
+        bounds.extend(originLatLng);
+        bounds.extend(destLatLng);
         mapRef.current.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
         
         window.google.maps.event.addListenerOnce(mapRef.current, 'idle', () => {
@@ -701,7 +700,7 @@ export default function GoogleMapContainer({
           <Marker
             position={customerPos}
             icon={homeIcon}
-            title={isRideOrder ? (isBeforePickup ? 'Pickup Point' : 'Drop Location') : 'Delivery Address'}
+            title={isRideOrder ? 'Drop Location' : 'Delivery Address'}
             zIndex={10}
             onClick={() => setActivePopup(activePopup === 'customer' ? null : 'customer')}
           >
@@ -715,9 +714,7 @@ export default function GoogleMapContainer({
                   padding: '2px 4px',
                   whiteSpace: 'nowrap',
                 }}>
-                  {isRideOrder
-                    ? (isBeforePickup ? '📍\u00a0Pickup Point' : '🏁\u00a0Drop Location')
-                    : '🏠\u00a0Delivery Address'}
+                  {isRideOrder ? '🏁\u00a0Drop Location' : '🏠\u00a0Delivery Address'}
                 </div>
               </InfoWindow>
             )}

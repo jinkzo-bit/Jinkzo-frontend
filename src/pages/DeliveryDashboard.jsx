@@ -143,6 +143,9 @@ export default function DeliveryDashboard() {
 
   // Status progression action triggers
   const [updatingId, setUpdatingId] = useState(null);
+  const [rejectingOrderId, setRejectingOrderId] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [customRejectionReason, setCustomRejectionReason] = useState('');
 
   // Withdrawal Requests
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -534,6 +537,43 @@ export default function DeliveryDashboard() {
     }
   };
 
+  const handleRejectOrder = async () => {
+    if (!rejectingOrderId) return;
+    try {
+      setUpdatingId(rejectingOrderId);
+      const res = await fetch(`${API_BASE}/orders/${rejectingOrderId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ 
+          status: 'Rider_Rejected',
+          rejectionReason: rejectionReason === 'Other' ? customRejectionReason : rejectionReason
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRejectingOrderId(null);
+        setRejectionReason('');
+        setCustomRejectionReason('');
+        setActiveOrders(prev => prev.filter(o => o._id !== rejectingOrderId));
+        if (selectedOrder && selectedOrder._id === rejectingOrderId) {
+          setSelectedOrder(null);
+        }
+        await fetchOrdersData();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.message || 'Failed to reject order');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error rejecting order');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleWithdrawalRequest = async (e) => {
     e.preventDefault();
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) return;
@@ -921,7 +961,7 @@ export default function DeliveryDashboard() {
                     )}
 
                     {/* Action buttons */}
-                    {selectedOrder.status === 'Rider_Assigned' ? (
+                    {(selectedOrder.status === 'Rider_Assigned' || (selectedOrder.orderType === 'food' && selectedOrder.status === 'Placed' && (selectedOrder.deliveryAgent?.id === user?._id || selectedOrder.deliveryAgent?.phone === user?.phone))) ? (
                       <div className="bg-base border border-gray-150 p-4 rounded-2xl flex flex-col gap-2">
                         <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Milestone Control</span>
                         <div className="flex gap-2">
@@ -934,7 +974,7 @@ export default function DeliveryDashboard() {
                             <span>{selectedOrder.orderType === 'ride' ? 'ACCEPT RIDE' : 'ACCEPT ORDER'}</span>
                           </button>
                           <button
-                            onClick={() => handleUpdateStatus(selectedOrder._id, 'Rider_Rejected')}
+                            onClick={() => { setRejectingOrderId(selectedOrder._id); setRejectionReason(''); setCustomRejectionReason(''); }}
                             disabled={updatingId === selectedOrder._id}
                             className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                           >
@@ -1502,6 +1542,55 @@ export default function DeliveryDashboard() {
               className="py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer">
               Delete My Account
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* RIDER REJECTION MODAL */}
+      {rejectingOrderId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-base w-full max-w-sm rounded-3xl p-6 shadow-2xl relative">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-display font-black text-lg text-main">Select Reason</h3>
+              <button onClick={() => setRejectingOrderId(null)} className="text-muted hover:text-main cursor-pointer">✕</button>
+            </div>
+            <div className="flex flex-col gap-3">
+              <p className="text-[11px] font-semibold text-gray-500 mb-2">Please tell us why you are unable to complete this request.</p>
+              <select 
+                value={rejectionReason} 
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="w-full bg-surface border border-line p-3.5 rounded-xl text-sm font-bold text-main focus:outline-none focus:border-primary transition-colors appearance-none"
+              >
+                <option value="" disabled>Select a reason...</option>
+                <option value="Too far">Too far</option>
+                <option value="Vehicle issue">Vehicle issue</option>
+                <option value="Personal emergency">Personal emergency</option>
+                <option value="Unable to complete">Unable to complete</option>
+                <option value="Wrong assignment">Wrong assignment</option>
+                <option value="Other">Other</option>
+              </select>
+              
+              {rejectionReason === 'Other' && (
+                <textarea
+                  placeholder="Please specify (optional)"
+                  value={customRejectionReason}
+                  onChange={(e) => setCustomRejectionReason(e.target.value)}
+                  className="w-full bg-surface border border-line p-3.5 rounded-xl text-sm font-semibold text-main focus:outline-none focus:border-primary transition-colors mt-2 resize-none min-h-[80px]"
+                />
+              )}
+              
+              <div className="flex gap-3 mt-4">
+                <button type="button" onClick={() => setRejectingOrderId(null)} className="flex-1 py-3 border border-line-strong text-xs font-bold text-main rounded-xl hover:bg-base cursor-pointer">Cancel</button>
+                <button 
+                  type="button" 
+                  disabled={!rejectionReason} 
+                  onClick={handleRejectOrder}
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50 transition-colors"
+                >
+                  Confirm Reject
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

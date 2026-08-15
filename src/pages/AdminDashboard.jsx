@@ -1944,8 +1944,8 @@ export default function AdminDashboard() {
                             <>
                               <span className="font-bold text-main">{order.deliveryAgent.name}</span>
                               <span className="text-[10px] text-muted font-medium">{order.deliveryAgent.phone}</span>
-                              {order.deliveryAgent.rating !== undefined && (
-                                <span className="text-[9px] text-yellow-500 font-bold">★ {order.deliveryAgent.rating.toFixed(1)}</span>
+                              {order.deliveryAgent.rating != null && Number.isFinite(Number(order.deliveryAgent.rating)) && (
+                                <span className="text-[9px] text-yellow-500 font-bold">★ {Number(order.deliveryAgent.rating).toFixed(1)}</span>
                               )}
                             </>
                           ) : (
