@@ -24,6 +24,7 @@ const MAP_OPTIONS = {
   gestureHandling: 'greedy',
   rotateControl: true,
   mapTypeId: 'roadmap',
+  mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID',
 };
 
 // ── SVG marker builders (Swiggy/Zomato style pin markers) ────────────────────
@@ -191,7 +192,7 @@ export default function GoogleMapContainer({
   // Ride: before pickup = Rider_Assigned, Rider_Accepted (Rider_At_Restaurant is food-only)
   const isBeforePickup = isRideOrder
     ? ['Rider_Assigned', 'Rider_Accepted'].includes(status)
-    : ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(status);
+    : ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(status);
 
   // We don't render an origin icon because the rider marker will cover it
   const restaurantIcon = isLoaded ? { path: 'M0,0' } : undefined;
@@ -319,15 +320,36 @@ export default function GoogleMapContainer({
       
       if (isRideOrder && ridePickupLat != null && ridePickupLng != null && rideDropLat != null && rideDropLng != null) {
         if (isBeforePickup) {
-          restPos = currentLivePos || { lat: ridePickupLat, lng: ridePickupLng };
-          custPos = { lat: ridePickupLat, lng: ridePickupLng };
+          if (currentLivePos) {
+            restPos = currentLivePos;
+            custPos = { lat: ridePickupLat, lng: ridePickupLng };
+          } else {
+            // Safe fallback if GPS is missing: show full route
+            restPos = { lat: ridePickupLat, lng: ridePickupLng };
+            custPos = { lat: rideDropLat,   lng: rideDropLng   };
+          }
         } else {
           restPos = currentLivePos || { lat: ridePickupLat, lng: ridePickupLng };
           custPos = { lat: rideDropLat,   lng: rideDropLng   };
         }
       } else {
-        restPos = (restaurantLat && restaurantLng) ? { lat: restaurantLat, lng: restaurantLng } : null;
-        custPos = (customerLat  && customerLng)  ? { lat: customerLat,  lng: customerLng  } : null;
+        if (restaurantLat && restaurantLng && customerLat && customerLng) {
+          if (isBeforePickup) {
+            if (currentLivePos) {
+              restPos = currentLivePos;
+              custPos = { lat: restaurantLat, lng: restaurantLng };
+            } else {
+              restPos = { lat: restaurantLat, lng: restaurantLng };
+              custPos = { lat: customerLat, lng: customerLng };
+            }
+          } else {
+            restPos = currentLivePos || { lat: restaurantLat, lng: restaurantLng };
+            custPos = { lat: customerLat, lng: customerLng };
+          }
+        } else {
+          restPos = null;
+          custPos = null;
+        }
       }
 
       if (!restPos || !custPos) return;

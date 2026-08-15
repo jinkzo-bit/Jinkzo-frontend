@@ -180,7 +180,7 @@ export default function DeliveryDashboard() {
 
     setIsSending(true);
     try {
-      const isBeforePickup = selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
+      const isBeforePickup = selectedOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
       const res = await fetch(`${API_BASE}/orders/${selectedOrder._id}/messages`, {
         method: 'POST',
         headers: {
@@ -626,6 +626,7 @@ export default function DeliveryDashboard() {
     // Note: Rider_Assigned is handled by a custom Accept/Reject UI, so no single action here
     if (status === 'Rider_Accepted') return { next: 'Rider_At_Restaurant', label: 'Reached Restaurant' };
     if (status === 'Rider_At_Restaurant') return { next: 'Picked_Up', label: 'Pick Order' };
+    if (status === 'Ready_for_Pickup') return { next: 'Picked_Up', label: 'Pick Up Order' };
     if (status === 'Picked_Up') return { next: 'Out_for_Delivery', label: 'Start Delivery' };
     if (status === 'Out_for_Delivery') return { next: 'Rider_At_Customer', label: 'Reached Customer' };
     if (status === 'Rider_At_Customer') return { next: 'Delivered', label: 'Delivered' };
@@ -961,7 +962,7 @@ export default function DeliveryDashboard() {
                     {selectedOrder.status !== 'Delivered' && (
                     <div className="rounded-2xl p-4 border border-gray-150 flex flex-col gap-3 bg-surface mt-1">
                       <h4 className="font-display font-extrabold text-xs text-gray-805 uppercase tracking-wider pb-1 border-b border-line flex items-center justify-between">
-                        <span>{selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'Live Chat with Restaurant' : 'Live Chat with Customer'}</span>
+                        <span>{selectedOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'Live Chat with Restaurant' : 'Live Chat with Customer'}</span>
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                       </h4>
 
@@ -970,7 +971,7 @@ export default function DeliveryDashboard() {
                         {selectedOrder.messages && selectedOrder.messages.length > 0 ? (
                           selectedOrder.messages
                             .filter(msg => {
-                              const isBeforePickup = selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
+                              const isBeforePickup = selectedOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
                               if (isBeforePickup) {
                                 // Before pickup: Only show restaurant messages or rider messages targeted at restaurant
                                 return msg.sender === 'restaurant' || msg.sender === 'system' || (msg.sender === 'rider' && msg.target !== 'customer');
@@ -1080,7 +1081,7 @@ export default function DeliveryDashboard() {
                         );
                       }
 
-                      const isBeforePickup = selectedOrder.orderType === 'food' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
+                      const isBeforePickup = selectedOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
                       
                       if (selectedOrder.orderType === 'ride') {
                         return (
