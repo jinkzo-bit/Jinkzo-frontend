@@ -622,19 +622,27 @@ export default function DeliveryDashboard() {
       return null;
     }
 
-    // New Food/Hybrid Assignment States
-    // Note: Rider_Assigned is handled by a custom Accept/Reject UI, so no single action here
-    if (status === 'Rider_Accepted') return { next: 'Rider_At_Restaurant', label: 'Reached Restaurant' };
-    if (status === 'Rider_At_Restaurant') return { next: 'Picked_Up', label: 'Pick Order' };
-    if (status === 'Ready_for_Pickup') return { next: 'Picked_Up', label: 'Pick Up Order' };
-    if (status === 'Picked_Up') return { next: 'Out_for_Delivery', label: 'Start Delivery' };
-    if (status === 'Out_for_Delivery') return { next: 'Rider_At_Customer', label: 'Reached Customer' };
-    if (status === 'Rider_At_Customer') return { next: 'Delivered', label: 'Delivered' };
+    // Food/Parcel Orders
+    // Before reaching restaurant
+    if (['Rider_Accepted', 'Placed', 'Accepted', 'Confirmed', 'Preparing'].includes(status)) {
+      return { next: 'Rider_At_Restaurant', label: 'Reached Restaurant' };
+    }
+    
+    // At restaurant waiting for food, or food is ready
+    if (['Rider_At_Restaurant', 'Ready_for_Pickup'].includes(status)) {
+      return { next: 'Picked_Up', label: 'Pick Up Order' };
+    }
 
-    // Legacy fallback
-    if (status === 'Confirmed') return { next: 'Preparing', label: 'Arrive at Restaurant' };
-    if (status === 'Preparing') return { next: 'Out for Delivery', label: 'Pick Up & Start Run' };
-    if (status === 'Out for Delivery') return { next: 'Delivered', label: 'Mark as Delivered' };
+    // After pickup
+    if (status === 'Picked_Up') {
+      return { next: 'Out_for_Delivery', label: 'Start Delivery' };
+    }
+    if (['Out_for_Delivery', 'Out for Delivery'].includes(status)) {
+      return { next: 'Rider_At_Customer', label: 'Reached Customer' };
+    }
+    if (status === 'Rider_At_Customer') {
+      return { next: 'Delivered', label: 'Mark as Delivered' };
+    }
 
     return null;
   };
@@ -896,8 +904,8 @@ export default function DeliveryDashboard() {
                         ridePickupLng={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.lng ?? selectedOrder.customerLocation?.lng) : undefined}
                         rideDropLat={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lat ?? selectedOrder.restaurantLocation?.lat) : undefined}
                         rideDropLng={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lng ?? selectedOrder.restaurantLocation?.lng) : undefined}
-                        riderLat={selectedOrder.orderType === 'ride' ? riderLoc?.lat : undefined}
-                        riderLng={selectedOrder.orderType === 'ride' ? riderLoc?.lng : undefined}
+                        riderLat={riderLoc?.lat}
+                        riderLng={riderLoc?.lng}
                       />
                     )}
 

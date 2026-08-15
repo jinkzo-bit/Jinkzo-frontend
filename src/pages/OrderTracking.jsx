@@ -593,7 +593,7 @@ export default function OrderTracking() {
                   <h4 className="text-sm font-bold text-gray-755">{order.deliveryAgent.name}</h4>
                   <div className="flex items-center gap-1 text-[10px] text-muted font-bold">
                     <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
-                    <span>{order.deliveryAgent.rating.toFixed(1)} Rating</span>
+                    <span>{(order.deliveryAgent.rating || 5.0).toFixed(1)} Rating</span>
                   </div>
                 </div>
               </div>
