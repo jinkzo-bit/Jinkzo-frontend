@@ -386,9 +386,14 @@ export default function DeliveryDashboard() {
     }
   };
 
-  // Geolocation and Socket.IO GPS update streaming for Out for Delivery orders
+  const [gpsStatus, setGpsStatus] = useState('locating'); // 'live' | 'locating' | 'unavailable'
+
+  // Geolocation and Socket.IO GPS update streaming for active dispatches
   useEffect(() => {
-    if (!selectedOrder || ['Delivered', 'Completed', 'Cancelled', 'Rejected'].includes(selectedOrder.status) || !token) return;
+    if (!selectedOrder || ['Delivered', 'Completed', 'Cancelled', 'Rejected'].includes(selectedOrder.status) || !token) {
+      setGpsStatus('unavailable');
+      return;
+    }
 
     const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
     const socket = io(socketHost, {
@@ -402,15 +407,39 @@ export default function DeliveryDashboard() {
 
     let watchId;
     if (navigator.geolocation) {
+      setGpsStatus('locating');
+
+      // Immediate one-time fix on order select so the rider marker appears instantly
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, heading, speed, accuracy } = position.coords;
+          if (accuracy && accuracy > 500) {
+            console.warn('[GPS SOCKET] Ignored initial low accuracy point:', accuracy, 'm');
+            return;
+          }
+          console.log('[GPS SOCKET] Immediate initial location:', latitude, longitude);
+          setRiderLoc({ lat: latitude, lng: longitude, heading, speed, accuracy });
+          setGpsStatus('live');
+        },
+        (err) => {
+          console.warn('[GPS SOCKET] Initial getCurrentPosition warning:', err.message);
+          // Do not fail hard on initial timeout; watchPosition will continue trying
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+      );
+
+      // Continuous GPS tracking
       watchId = navigator.geolocation.watchPosition(
         (position) => {
           const { latitude, longitude, heading, speed, accuracy } = position.coords;
-          if (accuracy && accuracy > 80) {
+          if (accuracy && accuracy > 350) {
             console.warn('[GPS SOCKET] Ignored low accuracy point:', accuracy, 'm');
             return;
           }
           console.log('[GPS SOCKET] Dispatching coordinate update:', latitude, longitude, 'accuracy:', accuracy);
-          setRiderLoc({ lat: latitude, lng: longitude });
+          setRiderLoc({ lat: latitude, lng: longitude, heading, speed, accuracy });
+          setGpsStatus('live');
+
           socket.emit('updateLocation', {
             orderId: selectedOrder._id,
             lat: latitude,
@@ -422,11 +451,15 @@ export default function DeliveryDashboard() {
         },
         (err) => {
           console.error('[GPS SOCKET] Geolocation error:', err);
+          if (err.code === err.PERMISSION_DENIED) {
+            setGpsStatus('unavailable');
+          }
         },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
       );
     } else {
       console.warn('[GPS SOCKET] Geolocation is not supported by this browser.');
+      setGpsStatus('unavailable');
     }
 
     return () => {
@@ -933,8 +966,12 @@ export default function DeliveryDashboard() {
                     {!['Delivered', 'Completed'].includes(selectedOrder.status) && (
                       <InteractiveMap 
                         status={selectedOrder.status} 
+                        restaurantName={selectedOrder.orderType === 'ride' ? 'Pickup Point' : (selectedOrderRestaurantName || 'Restaurant')}
+                        restaurantAddress={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.formattedAddress || selectedOrder.pickupAddress?.street || '') : (selectedOrder.restaurantLocation?.formattedAddress || '')}
                         restaurantLat={selectedOrder.orderType !== 'ride' ? selectedOrder.restaurantLocation?.lat : undefined}
                         restaurantLng={selectedOrder.orderType !== 'ride' ? selectedOrder.restaurantLocation?.lng : undefined}
+                        customerName={selectedOrder.customerName || selectedOrder.user?.name || selectedOrder.userId?.name || 'Customer'}
+                        customerAddress={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.formattedAddress || selectedOrder.address?.street || '') : (selectedOrder.customerLocation?.formattedAddress || selectedOrder.address?.street || '')}
                         customerLat={selectedOrder.orderType !== 'ride' ? selectedOrder.customerLocation?.lat : undefined}
                         customerLng={selectedOrder.orderType !== 'ride' ? selectedOrder.customerLocation?.lng : undefined}
                         deliveryMethod={selectedOrder.orderType === 'ride' ? 'Ride' : 'Standard'}
@@ -946,6 +983,7 @@ export default function DeliveryDashboard() {
                         rideDropLng={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lng ?? selectedOrder.restaurantLocation?.lng) : undefined}
                         riderLat={riderLoc?.lat}
                         riderLng={riderLoc?.lng}
+                        gpsStatus={gpsStatus}
                       />
                     )}
 

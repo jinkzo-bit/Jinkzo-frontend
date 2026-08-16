@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MapPin, Loader, Layers } from 'lucide-react';
+import { MapPin, Loader, Layers, Crosshair } from 'lucide-react';
 import { useJsApiLoader, GoogleMap, Marker, Polyline, InfoWindow } from '@react-google-maps/api';
 import { io } from 'socket.io-client';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
@@ -13,7 +13,6 @@ const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api'
 const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 
 // ── Map base options ──────────────────────────────────────────────────────────
-// ── Swiggy/Zomato style clean map — minimal, light, food-delivery feel ────────
 const MAP_OPTIONS = {
   disableDefaultUI: true,
   zoomControl: false,
@@ -27,9 +26,9 @@ const MAP_OPTIONS = {
   mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID',
 };
 
-// ── SVG marker builders (Swiggy/Zomato style pin markers) ────────────────────
+// ── SVG marker builders ───────────────────────────────────────────────────────
 
-// Restaurant marker — orange pin with fork & knife
+// Restaurant marker — Orange pin with fork & knife
 const RESTAURANT_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
   <filter id="shadow" x="-30%" y="-10%" width="160%" height="140%">
@@ -42,46 +41,47 @@ const RESTAURANT_SVG = `
   </g>
 </svg>`;
 
-// Home / customer marker — green pin with house
+// Home / customer marker — Red pin with house
 const HOME_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
   <filter id="shadow" x="-30%" y="-10%" width="160%" height="140%">
     <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="rgba(0,0,0,0.28)" />
   </filter>
   <g filter="url(#shadow)">
-    <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 34 16 34s16-22.75 16-34C38 9.163 30.837 2 22 2z" fill="#3d9b2a"/>
+    <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 34 16 34s16-22.75 16-34C38 9.163 30.837 2 22 2z" fill="#DC2626"/>
     <circle cx="22" cy="18" r="9" fill="white"/>
     <text x="22" y="23" text-anchor="middle" font-size="12" font-family="Arial">&#127968;</text>
   </g>
 </svg>`;
 
-// Rider / scooter marker — red circle
+// Rider / scooter marker — Green circular badge with motorcycle
 const RIDER_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52">
   <filter id="rshadow" x="-30%" y="-10%" width="160%" height="140%">
     <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="rgba(0,0,0,0.32)" />
   </filter>
   <g filter="url(#rshadow)">
-    <circle cx="26" cy="26" r="22" fill="#18181b"/>
-    <circle cx="26" cy="26" r="20" fill="white"/>
-    <text x="26" y="34" text-anchor="middle" font-size="22" font-family="Arial">&#127949;</text>
+    <circle cx="26" cy="26" r="22" fill="#16A34A"/>
+    <circle cx="26" cy="26" r="19" fill="#15803D"/>
+    <circle cx="26" cy="26" r="15" fill="white"/>
+    <text x="26" y="32" text-anchor="middle" font-size="16" font-family="Arial">&#127949;</text>
   </g>
 </svg>`;
 
-// Ride marker — blue circle with car
+// Ride marker — Blue circle with vehicle
 const RIDE_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52">
   <filter id="cshadow" x="-30%" y="-10%" width="160%" height="140%">
     <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="rgba(0,0,0,0.32)" />
   </filter>
   <g filter="url(#cshadow)">
-    <circle cx="26" cy="26" r="22" fill="#1e40af"/>
+    <circle cx="26" cy="26" r="22" fill="#1E40AF"/>
     <circle cx="26" cy="26" r="20" fill="white"/>
     <text x="26" y="34" text-anchor="middle" font-size="22" font-family="Arial">&#127949;</text>
   </g>
 </svg>`;
 
-// Pickup point marker — blue pin with person icon (for ride pickup location)
+// Pickup point marker — Blue pin with person icon (for ride pickup)
 const PICKUP_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
   <filter id="pkshadow" x="-30%" y="-10%" width="160%" height="140%">
@@ -107,7 +107,7 @@ const PICKER_SVG = `
   </g>
 </svg>`;
 
-// Drop point marker — checkered flag
+// Drop point marker — Checkered flag
 const DROP_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
   <filter id="dpshadow" x="-30%" y="-10%" width="160%" height="140%">
@@ -133,14 +133,14 @@ const svgToIcon = (svgString, width, height, anchorX, anchorY, rotation = 0) => 
   };
 };
 
-
-
 // ── Component ───────────────────────────────────────────────────────────────
 export default function GoogleMapContainer({
   mode = 'tracking',        // 'tracking' | 'picker'
+  restaurantName = '',
   restaurantAddress = '',
   restaurantLat = null,
   restaurantLng = null,
+  customerName = '',
   customerAddress = '',
   customerLat = null,
   customerLng = null,
@@ -151,52 +151,47 @@ export default function GoogleMapContainer({
   deliveryMethod = 'Standard',
   orderId = null,
   onRouteInfo = null,
-  showTraffic = false,      // traffic layer toggle
   // Ride-specific props (ride orders only; food orders leave these undefined/null)
   isRide = false,
   ridePickupLat = null,
   ridePickupLng = null,
   rideDropLat = null,
   rideDropLng = null,
+  ridePickupAddress = '',
+  rideDropAddress = '',
   riderLat = null,
   riderLng = null,
+  gpsStatus = 'locating',   // 'live' | 'locating' | 'unavailable'
 }) {
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const mapRef = useRef(null);
-  const routePointsRef = useRef([]);
   const trafficLayerRef = useRef(null);
-  const hasLiveGPS = useRef(false);
+  const isAutoFollowRef = useRef(true);
+  const isUserInteractingRef = useRef(false);
+  const previousRiderPosRef = useRef(null);
+  const hasFitBoundsInitialRef = useRef(false);
 
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
   const [pickerPos, setPickerPos] = useState(null);
   const [restaurantPos, setRestaurantPos] = useState(null);
   const [customerPos, setCustomerPos] = useState(null);
   const [riderPos, setRiderPos] = useState(null);
-  const [routeOrigin, setRouteOrigin] = useState(null);
-  const [routeDestination, setRouteDestination] = useState(null);
-  const [routePath, setRoutePath] = useState([]);
+  
+  // Dual routes state
+  const [route1Path, setRoute1Path] = useState([]); // Rider -> Restaurant (Blue)
+  const [route2Path, setRoute2Path] = useState([]); // Restaurant -> Customer (Green)
+  const [route1Info, setRoute1Info] = useState({ distanceKm: null, durationMinutes: null });
+  const [route2Info, setRoute2Info] = useState({ distanceKm: null, durationMinutes: null });
+
   const [activePopup, setActivePopup] = useState(null);
   const [error, setError] = useState(null);
   const [trafficOn, setTrafficOn] = useState(false);
   const [riderBearing, setRiderBearing] = useState(0);
-  const [showFollowButton, setShowFollowButton] = useState(false);
-  
-  const isAutoFollowRef = useRef(true);
-  const animationFrameRef = useRef(null);
-  const previousRiderPosRef = useRef(null);
 
-  // ── Build SVG icon objects once Maps API is loaded ─────────────────────────
   const isRideOrder = isRide || deliveryMethod === 'Ride';
 
-  // isBeforePickup: determines whether the route target is the origin (restaurant/pickup)
-  // Food: before pickup = Rider_Assigned, Rider_Accepted, Rider_At_Restaurant
-  // Ride: before pickup = Rider_Assigned, Rider_Accepted (Rider_At_Restaurant is food-only)
-  const isBeforePickup = isRideOrder
-    ? ['Rider_Assigned', 'Rider_Accepted'].includes(status)
-    : ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(status);
-
-  // Physical markers are always rendered independently
+  // ── Build SVG icons ────────────────────────────────────────────────────────
   const restaurantIcon = isLoaded 
     ? (isRideOrder ? svgToIcon(PICKUP_SVG, 44, 56, 22, 52) : svgToIcon(RESTAURANT_SVG, 44, 56, 22, 52))
     : undefined;
@@ -205,9 +200,9 @@ export default function GoogleMapContainer({
     ? (isRideOrder ? svgToIcon(DROP_SVG, 44, 56, 22, 52) : svgToIcon(HOME_SVG, 44, 56, 22, 52))
     : undefined;
 
-  const riderIcon      = isLoaded ? svgToIcon(RIDER_SVG, 52, 52, 26, 26, riderBearing)      : undefined;
-  const rideIcon       = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26, riderBearing)       : undefined;
-  const pickerIcon     = isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50)     : undefined;
+  const riderIcon  = isLoaded ? svgToIcon(RIDER_SVG, 52, 52, 26, 26, riderBearing)  : undefined;
+  const rideIcon   = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26, riderBearing)   : undefined;
+  const pickerIcon = isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50) : undefined;
 
   // ── Map load callback ──────────────────────────────────────────────────────
   const onMapLoad = useCallback((map) => {
@@ -232,14 +227,14 @@ export default function GoogleMapContainer({
     setRestaurantPos(null);
     setCustomerPos(null);
     setRiderPos(null);
-    setRoutePath([]);
+    setRoute1Path([]);
+    setRoute2Path([]);
 
     const placeOrMovePicker = (lat, lng) => {
       setPickerPos({ lat, lng });
       setMapCenter({ lat, lng });
     };
 
-    // Geocode initial address or use default
     if (initialAddress) {
       if (initialAddress.lat && initialAddress.lng) {
         placeOrMovePicker(initialAddress.lat, initialAddress.lng);
@@ -261,7 +256,6 @@ export default function GoogleMapContainer({
     }
   }, [isLoaded, mode, initialAddress]);
 
-  // ── Picker — handle marker drag ────────────────────────────────────────────
   const handlePickerDragEnd = useCallback(async (e) => {
     const lat = e.latLng.lat();
     const lng = e.latLng.lng();
@@ -275,7 +269,6 @@ export default function GoogleMapContainer({
     }
   }, [onAddressSelect]);
 
-  // ── Picker — handle map click ──────────────────────────────────────────────
   const handlePickerMapClick = useCallback(async (e) => {
     if (mode !== 'picker') return;
     const lat = e.latLng.lat();
@@ -300,123 +293,183 @@ export default function GoogleMapContainer({
     }
   }, [trafficOn]);
 
-  // ── Tracking mode ─────────────────────────────────────────────────────────
-  const lastRouteCalcRef = useRef({ lat: null, lng: null, isBeforePickup: null, orderId: null });
-  const isUserInteractingRef = useRef(false);
-
+  // ── Update Physical Markers (Independent Coordinates) ──────────────────────
   useEffect(() => {
     if (!isLoaded || mode !== 'tracking') return;
 
-    // Clear picker state
-    setPickerPos(null);
+    // Restaurant / Pickup point
+    const rLat = isRideOrder ? (ridePickupLat ?? customerLat) : restaurantLat;
+    const rLng = isRideOrder ? (ridePickupLng ?? customerLng) : restaurantLng;
+    if (rLat != null && rLng != null && Number.isFinite(Number(rLat)) && Number(rLat) !== 0) {
+      setRestaurantPos({ lat: Number(rLat), lng: Number(rLng) });
+    } else {
+      setRestaurantPos(null);
+    }
 
-    const drawRoute = async () => {
-      let rOrigin, rDest;
-      const currentLivePos = (riderLat != null && riderLng != null) ? { lat: riderLat, lng: riderLng } : riderPos;
-      
-      if (isRideOrder && ridePickupLat != null && ridePickupLng != null && rideDropLat != null && rideDropLng != null) {
-        if (isBeforePickup) {
-          if (currentLivePos) {
-            rOrigin = currentLivePos;
-            rDest = { lat: ridePickupLat, lng: ridePickupLng };
-          } else {
-            // Safe fallback if GPS is missing: show full route
-            rOrigin = { lat: ridePickupLat, lng: ridePickupLng };
-            rDest = { lat: rideDropLat,   lng: rideDropLng   };
-          }
-        } else {
-          rOrigin = currentLivePos || { lat: ridePickupLat, lng: ridePickupLng };
-          rDest = { lat: rideDropLat,   lng: rideDropLng   };
+    // Customer / Drop point
+    const cLat = isRideOrder ? (rideDropLat ?? restaurantLat) : customerLat;
+    const cLng = isRideOrder ? (rideDropLng ?? restaurantLng) : customerLng;
+    if (cLat != null && cLng != null && Number.isFinite(Number(cLat)) && Number(cLat) !== 0) {
+      setCustomerPos({ lat: Number(cLat), lng: Number(cLng) });
+    } else {
+      setCustomerPos(null);
+    }
+
+    // Real Rider GPS (NO fallback to restaurant or customer)
+    if (riderLat != null && riderLng != null && Number.isFinite(Number(riderLat)) && Number(riderLat) !== 0) {
+      const newPos = { lat: Number(riderLat), lng: Number(riderLng) };
+      setRiderPos(newPos);
+
+      // Bearing calculation
+      if (previousRiderPosRef.current) {
+        const oldPos = previousRiderPosRef.current;
+        const dist = Math.hypot(newPos.lat - oldPos.lat, newPos.lng - oldPos.lng);
+        if (dist > 0.00005) {
+          const dy = newPos.lat - oldPos.lat;
+          const dx = Math.cos(Math.PI / 180 * oldPos.lat) * (newPos.lng - oldPos.lng);
+          const angle = Math.atan2(dx, dy) * 180 / Math.PI;
+          setRiderBearing(angle);
         }
-      } else {
-        if (restaurantLat && restaurantLng && customerLat && customerLng) {
-          if (isBeforePickup) {
-            rOrigin = currentLivePos || { lat: restaurantLat, lng: restaurantLng };
-            rDest = { lat: restaurantLat, lng: restaurantLng };
-          } else {
-            rOrigin = currentLivePos || { lat: restaurantLat, lng: restaurantLng };
-            rDest = { lat: customerLat, lng: customerLng };
-          }
-        } else {
-          rOrigin = null;
-          rDest = null;
+      }
+      previousRiderPosRef.current = newPos;
+
+      if (isAutoFollowRef.current && mapRef.current && !isUserInteractingRef.current) {
+        mapRef.current.panTo(newPos);
+      }
+    }
+  }, [isLoaded, mode, restaurantLat, restaurantLng, customerLat, customerLng, ridePickupLat, ridePickupLng, rideDropLat, rideDropLng, riderLat, riderLng, isRideOrder]);
+
+  // ── Auto-fit Camera on Mount or Order Change ───────────────────────────────
+  useEffect(() => {
+    if (!isLoaded || mode !== 'tracking' || !mapRef.current || !window.google) return;
+    if (hasFitBoundsInitialRef.current && isUserInteractingRef.current) return;
+
+    const bounds = new window.google.maps.LatLngBounds();
+    let count = 0;
+
+    if (restaurantPos) {
+      bounds.extend(restaurantPos);
+      count++;
+    }
+    if (customerPos) {
+      bounds.extend(customerPos);
+      count++;
+    }
+    if (riderPos) {
+      bounds.extend(riderPos);
+      count++;
+    }
+
+    if (count > 0) {
+      mapRef.current.fitBounds(bounds, { top: 50, right: 50, bottom: 85, left: 50 });
+      window.google.maps.event.addListenerOnce(mapRef.current, 'idle', () => {
+        if (mapRef.current && mapRef.current.getZoom() > 17) {
+          mapRef.current.setZoom(17);
         }
-      }
+      });
+      hasFitBoundsInitialRef.current = true;
+    }
+  }, [isLoaded, mode, orderId, restaurantPos, customerPos]);
 
-      // Always set the physical markers accurately to their absolute props independently
-      if (restaurantLat && restaurantLng) setRestaurantPos({ lat: restaurantLat, lng: restaurantLng });
-      if (customerLat && customerLng) setCustomerPos({ lat: customerLat, lng: customerLng });
-      if (isRideOrder) {
-        if (ridePickupLat && ridePickupLng) setRestaurantPos({ lat: ridePickupLat, lng: ridePickupLng });
-        if (rideDropLat && rideDropLng) setCustomerPos({ lat: rideDropLat, lng: rideDropLng });
-      }
+  // ── Route 1: Dynamic Road Route (Rider GPS -> Restaurant/Pickup) ─────────────
+  const lastRoute1CalcRef = useRef({ lat: null, lng: null, orderId: null });
 
-      if (!rOrigin || !rDest) return;
+  useEffect(() => {
+    if (!isLoaded || mode !== 'tracking') return;
+    if (!riderPos || !restaurantPos) {
+      setRoute1Path([]);
+      setRoute1Info({ distanceKm: null, durationMinutes: null });
+      return;
+    }
 
-      let originLatLng = { lat: rOrigin.lat, lng: rOrigin.lng };
-      let destLatLng = { lat: rDest.lat, lng: rDest.lng };
+    const distFromLastCalc = lastRoute1CalcRef.current.lat 
+      ? Math.hypot(riderPos.lat - lastRoute1CalcRef.current.lat, riderPos.lng - lastRoute1CalcRef.current.lng) * 111000
+      : 999999;
 
-      // Throttle route calculation (only calc if phase changed, order changed, or moved > 150m)
-      const distFromLastCalc = lastRouteCalcRef.current.lat 
-        ? Math.hypot(originLatLng.lat - lastRouteCalcRef.current.lat, originLatLng.lng - lastRouteCalcRef.current.lng) * 111000 // approx meters
-        : 999999;
-      
-      const phaseChanged = lastRouteCalcRef.current.isBeforePickup !== isBeforePickup;
-      const orderChanged = lastRouteCalcRef.current.orderId !== orderId;
+    const orderChanged = lastRoute1CalcRef.current.orderId !== orderId;
 
-      if (!orderChanged && !phaseChanged && distFromLastCalc < 150) {
-        // Just update markers without hitting backend or resetting camera
-        setRouteOrigin(originLatLng);
-        setRouteDestination(destLatLng);
-        return; 
-      }
+    // Throttle: only recalculate Route 1 if rider moved > 100 meters or on order change
+    if (!orderChanged && distFromLastCalc < 100) {
+      return;
+    }
 
-      lastRouteCalcRef.current = { lat: originLatLng.lat, lng: originLatLng.lng, isBeforePickup, orderId };
-      setRouteOrigin(originLatLng);
-      setRouteDestination(destLatLng);
+    lastRoute1CalcRef.current = { lat: riderPos.lat, lng: riderPos.lng, orderId };
 
+    const fetchRoute1 = async () => {
       try {
         const res = await fetch(`${API_BASE}/maps/routes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ origin: originLatLng, destination: destLatLng, travelMode: 'DRIVE' }),
+          body: JSON.stringify({ origin: riderPos, destination: restaurantPos, travelMode: 'DRIVE' }),
         });
         const data = await res.json();
-        let routePoints = [];
         if (data.success && data.data) {
-          routePoints = data.data.polyline || [originLatLng, destLatLng];
-          if (onRouteInfo) onRouteInfo({ distanceKm: data.data.distanceKm, durationMinutes: data.data.durationMinutes });
+          setRoute1Path(data.data.polyline || [riderPos, restaurantPos]);
+          setRoute1Info({ distanceKm: data.data.distanceKm, durationMinutes: data.data.durationMinutes });
+          if (onRouteInfo) onRouteInfo({ route1: data.data });
         } else {
-          routePoints = [originLatLng, destLatLng];
+          setRoute1Path([riderPos, restaurantPos]);
         }
-        routePointsRef.current = routePoints;
-        setRoutePath(routePoints);
       } catch (err) {
-        console.error('[GoogleMapContainer] Route fetch failed:', err);
-        const fallbackPoints = [originLatLng, destLatLng];
-        routePointsRef.current = fallbackPoints;
-        setRoutePath(fallbackPoints);
-      }
-
-      // ONLY fitBounds if it's a new phase/order or if the user is auto-following
-      if (mapRef.current && window.google && (!isUserInteractingRef.current || phaseChanged || orderChanged)) {
-        const bounds = new window.google.maps.LatLngBounds();
-        bounds.extend(originLatLng);
-        bounds.extend(destLatLng);
-        mapRef.current.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
-        
-        window.google.maps.event.addListenerOnce(mapRef.current, 'idle', () => {
-          if (mapRef.current.getZoom() > 17) {
-            mapRef.current.setZoom(17);
-          }
-        });
+        console.error('[GoogleMapContainer] Route 1 fetch failed:', err);
+        setRoute1Path([riderPos, restaurantPos]);
       }
     };
 
-    drawRoute();
-  }, [isLoaded, mode, restaurantLat, restaurantLng, customerLat, customerLng, restaurantAddress, customerAddress, isRideOrder, ridePickupLat, ridePickupLng, rideDropLat, rideDropLng, status, riderLat, riderLng, orderId, isBeforePickup]);
+    fetchRoute1();
+  }, [isLoaded, mode, riderPos, restaurantPos, orderId, onRouteInfo]);
 
-  // ── Socket.IO Live Driver GPS tracking listener ────────────────────────────
+  // ── Route 2: Static Road Route (Restaurant/Pickup -> Customer/Drop) ─────────
+  const lastRoute2CalcRef = useRef({ restLat: null, custLat: null, orderId: null });
+
+  useEffect(() => {
+    if (!isLoaded || mode !== 'tracking') return;
+    if (!restaurantPos || !customerPos) {
+      setRoute2Path([]);
+      setRoute2Info({ distanceKm: null, durationMinutes: null });
+      return;
+    }
+
+    const isSameCoords = 
+      lastRoute2CalcRef.current.restLat === restaurantPos.lat &&
+      lastRoute2CalcRef.current.custLat === customerPos.lat &&
+      lastRoute2CalcRef.current.orderId === orderId;
+
+    if (isSameCoords) return;
+
+    lastRoute2CalcRef.current = {
+      restLat: restaurantPos.lat,
+      restLng: restaurantPos.lng,
+      custLat: customerPos.lat,
+      custLng: customerPos.lng,
+      orderId
+    };
+
+    const fetchRoute2 = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/maps/routes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ origin: restaurantPos, destination: customerPos, travelMode: 'DRIVE' }),
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          setRoute2Path(data.data.polyline || [restaurantPos, customerPos]);
+          setRoute2Info({ distanceKm: data.data.distanceKm, durationMinutes: data.data.durationMinutes });
+          if (onRouteInfo) onRouteInfo({ route2: data.data });
+        } else {
+          setRoute2Path([restaurantPos, customerPos]);
+        }
+      } catch (err) {
+        console.error('[GoogleMapContainer] Route 2 fetch failed:', err);
+        setRoute2Path([restaurantPos, customerPos]);
+      }
+    };
+
+    fetchRoute2();
+  }, [isLoaded, mode, restaurantPos, customerPos, orderId, onRouteInfo]);
+
+  // ── Socket.IO Live location subscriber (for secondary sync) ────────────────
   useEffect(() => {
     if (!isLoaded || !orderId || mode !== 'tracking') return;
 
@@ -430,418 +483,423 @@ export default function GoogleMapContainer({
     socket.emit('joinOrder', orderId);
 
     socket.on('locationUpdated', ({ lat, lng, heading }) => {
-      console.log('[SOCKET] Rider coordinate update:', lat, lng, 'heading:', heading);
-      hasLiveGPS.current = true;
-      const newPos = { lat, lng };
-
-      if (heading !== null && heading !== undefined && !isNaN(heading)) {
-        setRiderBearing(heading);
-      }
-
-      if (previousRiderPosRef.current) {
-        const oldPos = previousRiderPosRef.current;
-        const dist = Math.hypot(newPos.lat - oldPos.lat, newPos.lng - oldPos.lng);
-        
-        // Calculate bearing only if movement is meaningful and no valid hardware heading is provided
-        if (dist > 0.0001 && (heading === null || heading === undefined || isNaN(heading))) {
-          const dy = newPos.lat - oldPos.lat;
-          const dx = Math.cos(Math.PI / 180 * oldPos.lat) * (newPos.lng - oldPos.lng);
-          const angle = Math.atan2(dx, dy) * 180 / Math.PI;
-          setRiderBearing(angle);
-        }
-
-        const startTime = performance.now();
-        const duration = 1000;
-        
-        const animate = (time) => {
-          let elapsed = time - startTime;
-          let progress = Math.min(elapsed / duration, 1);
-          progress = 1 - Math.pow(1 - progress, 3); // ease-out cubic
-
-          const currentLat = oldPos.lat + (newPos.lat - oldPos.lat) * progress;
-          const currentLng = oldPos.lng + (newPos.lng - oldPos.lng) * progress;
-          setRiderPos({ lat: currentLat, lng: currentLng });
-
-          if (isAutoFollowRef.current && ['Out for Delivery', 'Out_for_Delivery', 'Rider_Accepted', 'Rider_At_Pickup', 'Picked_Up'].includes(status) && mapRef.current) {
-             mapRef.current.panTo({ lat: currentLat, lng: currentLng });
-          }
-
-          if (progress < 1) {
-             animationFrameRef.current = requestAnimationFrame(animate);
-          } else {
-             previousRiderPosRef.current = newPos;
-          }
-        };
-
-        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = requestAnimationFrame(animate);
-      } else {
+      if (lat != null && lng != null && Number.isFinite(Number(lat)) && Number(lat) !== 0) {
+        const newPos = { lat: Number(lat), lng: Number(lng) };
         setRiderPos(newPos);
-        previousRiderPosRef.current = newPos;
-        if (isAutoFollowRef.current && ['Out for Delivery', 'Out_for_Delivery', 'Rider_Accepted', 'Rider_At_Pickup', 'Picked_Up'].includes(status) && mapRef.current) {
+        if (heading != null && !isNaN(heading)) setRiderBearing(heading);
+        if (isAutoFollowRef.current && mapRef.current && !isUserInteractingRef.current) {
           mapRef.current.panTo(newPos);
         }
       }
     });
 
     return () => {
-      hasLiveGPS.current = false;
       socket.disconnect();
     };
-  }, [isLoaded, orderId, mode, status]);
+  }, [isLoaded, orderId, mode]);
 
-  // ── Update simulated rider position when progress changes ──────────────────
-  useEffect(() => {
-    if (mode !== 'tracking') return;
-    const points = routePointsRef.current;
-    if (!points || points.length < 2) return;
-
-    // Interpolate position along the route (simulated rider fallback if no live GPS)
-    const totalSegments = points.length - 1;
-    const rawIndex = progress * totalSegments;
-    const segIndex = Math.min(Math.floor(rawIndex), totalSegments - 1);
-    const segProgress = rawIndex - segIndex;
-
-    const p1 = points[segIndex];
-    const p2 = points[Math.min(segIndex + 1, totalSegments)];
-
-    const lat1 = typeof p1.lat === 'function' ? p1.lat() : p1.lat;
-    const lng1 = typeof p1.lng === 'function' ? p1.lng() : p1.lng;
-    const lat2 = typeof p2.lat === 'function' ? p2.lat() : p2.lat;
-    const lng2 = typeof p2.lng === 'function' ? p2.lng() : p2.lng;
-
-    const lat = lat1 + (lat2 - lat1) * segProgress;
-    const lng = lng1 + (lng2 - lng1) * segProgress;
-
-    if (!hasLiveGPS.current) {
-      setRiderPos({ lat, lng });
-
-      if (['Out for Delivery', 'Out_for_Delivery', 'Rider_Accepted', 'Rider_At_Pickup', 'Picked_Up'].includes(status) && mapRef.current) {
-        mapRef.current.panTo({ lat, lng });
-      }
-    }
-  }, [progress, status, mode]);
-
-  // ── Polyline options — Solid blue route ───────────────
-  // Outer glow
-  const glowPolylineOptions = {
+  // ── Polyline Options ───────────────────────────────────────────────────────
+  // Route 1 (Rider -> Restaurant) — Blue (#1A73E8)
+  const route1GlowOptions = {
     strokeColor: '#1A73E8',
+    strokeOpacity: 0.25,
+    strokeWeight: 12,
+    geodesic: true,
+    zIndex: 2,
+  };
+  const route1MainOptions = {
+    strokeColor: '#1A73E8',
+    strokeOpacity: 1,
+    strokeWeight: 5,
+    geodesic: true,
+    zIndex: 3,
+  };
+
+  // Route 2 (Restaurant -> Customer) — Green (#16A34A)
+  const route2GlowOptions = {
+    strokeColor: '#16A34A',
     strokeOpacity: 0.25,
     strokeWeight: 12,
     geodesic: true,
     zIndex: 1,
   };
-  // Main solid blue route
-  const mainPolylineOptions = {
-    strokeColor: '#1A73E8',
+  const route2MainOptions = {
+    strokeColor: '#16A34A',
     strokeOpacity: 1,
     strokeWeight: 5,
     geodesic: true,
     zIndex: 2,
   };
-  // White dashed overlay
-  const dashedPolylineOptions = {
-    strokeColor: '#FFFFFF',
-    strokeOpacity: 0,
-    strokeWeight: 4,
-    geodesic: true,
-    zIndex: 3,
-    icons: [
-      {
-        icon: {
-          path: 'M 0,-1 0,1',
-          strokeOpacity: 0.9,
-          strokeColor: '#FFFFFF',
-          strokeWeight: 3,
-          scale: 4,
-        },
-        offset: '0',
-        repeat: '18px',
-      },
-    ],
-  };
 
-  // ── Render: load error ─────────────────────────────────────────────────────
+  // Compute Total Distance & ETA
+  const totalDistanceKm = (route1Info.distanceKm || 0) + (route2Info.distanceKm || 0);
+  const totalDurationMinutes = (route1Info.durationMinutes || 0) + (route2Info.durationMinutes || 0);
+
+  // ── Render: Error / Loading ────────────────────────────────────────────────
   if (loadError || error) {
     return (
-      <div className="w-full h-full min-h-[200px] bg-red-50 flex items-center justify-center flex-col gap-2 rounded-2xl border border-red-100 text-red-500 p-4">
+      <div className="w-full h-full min-h-[280px] bg-red-50 flex items-center justify-center flex-col gap-2 rounded-2xl border border-red-100 text-red-500 p-4">
         <MapPin className="w-6 h-6" />
         <span className="text-xs font-bold text-center">{error || 'Failed to load Google Maps.'}</span>
       </div>
     );
   }
 
-  // ── Render: loading ────────────────────────────────────────────────────────
   if (!isLoaded) {
     return (
-      <div className="w-full h-full min-h-[200px] bg-base flex items-center justify-center flex-col gap-2 rounded-2xl border border-line">
+      <div className="w-full h-full min-h-[280px] bg-base flex items-center justify-center flex-col gap-2 rounded-2xl border border-line">
         <Loader className="w-8 h-8 text-primary animate-spin" />
-        <span className="text-xs text-muted font-bold">Loading Map...</span>
+        <span className="text-xs text-muted font-bold">Loading Map & Routes...</span>
       </div>
     );
   }
 
-  // ── Picker mode marker icon ────────────────────────────────────────────────
-  const pickerIconDef = isLoaded && window.google ? {
-    path: window.google.maps.SymbolPath.CIRCLE,
-    scale: 10,
-    fillColor: '#FF5A00',
-    fillOpacity: 1,
-    strokeColor: '#FFFFFF',
-    strokeWeight: 2.5,
-  } : undefined;
-
-  // ── Restaurant marker icon ─────────────────────────────────────────────────
-  const restaurantIconDef = isLoaded && window.google ? {
-    path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-    scale: 8,
-    fillColor: '#18181b',
-    fillOpacity: 1,
-    strokeColor: '#FFFFFF',
-    strokeWeight: 2,
-  } : undefined;
-
-  // ── Customer marker icon ───────────────────────────────────────────────────
-  const customerIconDef = isLoaded && window.google ? {
-    path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-    scale: 8,
-    fillColor: '#18181b',
-    fillOpacity: 1,
-    strokeColor: '#FFFFFF',
-    strokeWeight: 2,
-  } : undefined;
-
-  // ── Rider marker icon ──────────────────────────────────────────────────────
-  const riderIconDef = isLoaded && window.google ? {
-    path: window.google.maps.SymbolPath.CIRCLE,
-    scale: 11,
-    fillColor: '#e11d48',
-    fillOpacity: 1,
-    strokeColor: '#FFFFFF',
-    strokeWeight: 2.5,
-  } : undefined;
-
   return (
-    <div className="w-full h-full relative rounded-2xl overflow-hidden border border-line shadow-inner">
-      <GoogleMap
-        mapContainerStyle={MAP_CONTAINER_STYLE}
-        center={mapCenter}
-        zoom={15}
-        options={MAP_OPTIONS}
-        onLoad={onMapLoad}
-        onUnmount={onMapUnmount}
-        onClick={mode === 'picker' ? handlePickerMapClick : undefined}
-        onDragStart={() => {
-          if (mode === 'tracking') {
-            isAutoFollowRef.current = false;
-            setShowFollowButton(true);
-            isUserInteractingRef.current = true;
-          }
-        }}
-        onZoomChanged={() => {
-          if (mode === 'tracking' && mapRef.current) {
-            // Google Maps initial load fires onZoomChanged.
-            // Only disable auto-follow if user explicitly changed zoom (map bounds are fully loaded)
-            if (mapRef.current.getBounds()) {
+    <div className="w-full h-full relative rounded-2xl overflow-hidden border border-line shadow-inner flex flex-col justify-between">
+      <div className="w-full h-full relative flex-1">
+        <GoogleMap
+          mapContainerStyle={MAP_CONTAINER_STYLE}
+          center={mapCenter}
+          zoom={15}
+          options={MAP_OPTIONS}
+          onLoad={onMapLoad}
+          onUnmount={onMapUnmount}
+          onClick={mode === 'picker' ? handlePickerMapClick : undefined}
+          onDragStart={() => {
+            if (mode === 'tracking') {
               isAutoFollowRef.current = false;
-              setShowFollowButton(true);
               isUserInteractingRef.current = true;
             }
-          }
-        }}
-      >
-        {/* ── PICKER MODE MARKER ── */}
-        {mode === 'picker' && pickerPos && (
-          <Marker
-            position={pickerPos}
-            draggable={true}
-            onDragEnd={handlePickerDragEnd}
-            icon={pickerIcon}
-          />
-        )}
-
-        {/* ── TRACKING MODE: Route polylines (glow + solid + dashed) ── */}
-        {mode === 'tracking' && routePath.length > 1 && (
-          <>
-            <Polyline path={routePath} options={glowPolylineOptions} />
-            <Polyline path={routePath} options={mainPolylineOptions} />
-          </>
-        )}
-
-        {/* ── TRACKING MODE: Restaurant marker ── */}
-        {mode === 'tracking' && restaurantPos && (
-          <Marker
-            position={restaurantPos}
-            icon={restaurantIcon}
-            title={isRideOrder ? 'Pickup Point' : 'Restaurant'}
-            zIndex={10}
-            onClick={() => setActivePopup(activePopup === 'restaurant' ? null : 'restaurant')}
-          >
-            {activePopup === 'restaurant' && (
-              <InfoWindow onCloseClick={() => setActivePopup(null)}>
-                <div style={{
-                  fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  color: '#1a1a1a',
-                  padding: '2px 4px',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {isRideOrder ? '📍\u00a0Pickup Point' : '🍽️\u00a0Restaurant · Kitchen'}
-                </div>
-              </InfoWindow>
-            )}
-          </Marker>
-        )}
-
-        {/* ── TRACKING MODE: Customer marker ── */}
-        {mode === 'tracking' && customerPos && (
-          <Marker
-            position={customerPos}
-            icon={homeIcon}
-            title={isRideOrder ? 'Drop Location' : 'Delivery Address'}
-            zIndex={10}
-            onClick={() => setActivePopup(activePopup === 'customer' ? null : 'customer')}
-          >
-            {activePopup === 'customer' && (
-              <InfoWindow onCloseClick={() => setActivePopup(null)}>
-                <div style={{
-                  fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  color: '#1a1a1a',
-                  padding: '2px 4px',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {isRideOrder ? '🏁\u00a0Drop Location' : '🏠\u00a0Delivery Address'}
-                </div>
-              </InfoWindow>
-            )}
-          </Marker>
-        )}
-
-        {/* ── TRACKING MODE: Rider marker ── */}
-        {mode === 'tracking' && riderPos && (
-          <Marker
-            position={riderPos}
-            icon={deliveryMethod === 'Ride' ? rideIcon : riderIcon}
-            title={deliveryMethod === 'Ride' ? 'Ride Captain' : 'Delivery Rider'}
-            zIndex={20}
-            onClick={() => setActivePopup(activePopup === 'rider' ? null : 'rider')}
-          >
-            {activePopup === 'rider' && (
-              <InfoWindow onCloseClick={() => setActivePopup(null)}>
-                <div style={{
-                  fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  color: '#1a1a1a',
-                  padding: '2px 4px',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {deliveryMethod === 'Ride' ? '🚗 Ride Captain' : '🛵 Delivery Rider'}
-                </div>
-              </InfoWindow>
-            )}
-          </Marker>
-        )}
-      </GoogleMap>
-
-      {/* ── Custom Zoom Controls (Swiggy/Zomato style — bottom right) ── */}
-      <div style={{ position: 'absolute', bottom: 24, right: 16, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <button
-          onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || 15) + 1)}
-          style={{
-            width: 36, height: 36,
-            background: 'white',
-            border: '1px solid #e5e7eb',
-            borderRadius: 8,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', fontSize: 20, color: '#374151', fontWeight: 700,
-            userSelect: 'none',
           }}
-          title="Zoom in"
-        >+</button>
-        <button
-          onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || 15) - 1)}
-          style={{
-            width: 36, height: 36,
-            background: 'white',
-            border: '1px solid #e5e7eb',
-            borderRadius: 8,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', fontSize: 20, color: '#374151', fontWeight: 700,
-            userSelect: 'none',
+          onZoomChanged={() => {
+            if (mode === 'tracking' && mapRef.current && mapRef.current.getBounds()) {
+              isAutoFollowRef.current = false;
+              isUserInteractingRef.current = true;
+            }
           }}
-          title="Zoom out"
-        >−</button>
-      </div>
-
-      {/* ── Follow Rider Toggle (Tracking Mode) ── */}
-      {mode === 'tracking' && showFollowButton && (
-        <button
-          onClick={() => {
-            isAutoFollowRef.current = true;
-            isUserInteractingRef.current = false;
-            setShowFollowButton(false);
-            if (riderPos && mapRef.current) mapRef.current.panTo(riderPos);
-          }}
-          style={{
-            position: 'absolute',
-            top: 12,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 20,
-            background: '#18181b',
-            color: 'white',
-            border: 'none',
-            borderRadius: 20,
-            padding: '8px 16px',
-            fontSize: 12,
-            fontWeight: 700,
-            fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
-            display: 'flex', alignItems: 'center', gap: 6,
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-            transition: 'all 0.18s ease',
-          }}
-          title="Follow Rider"
         >
-          <MapPin style={{ width: 14, height: 14 }} />
-          Follow Rider
-        </button>
-      )}
+          {/* ── PICKER MODE MARKER ── */}
+          {mode === 'picker' && pickerPos && (
+            <Marker
+              position={pickerPos}
+              draggable={true}
+              onDragEnd={handlePickerDragEnd}
+              icon={pickerIcon}
+            />
+          )}
 
-      {/* ── Traffic Layer Toggle (Tracking Mode) ── */}
-      {mode === 'tracking' && (
-        <button
-          onClick={() => setTrafficOn(prev => !prev)}
-          style={{
+          {/* ── TRACKING MODE: Route 1 (Rider -> Restaurant in Blue) ── */}
+          {mode === 'tracking' && route1Path.length > 1 && (
+            <>
+              <Polyline path={route1Path} options={route1GlowOptions} />
+              <Polyline path={route1Path} options={route1MainOptions} />
+            </>
+          )}
+
+          {/* ── TRACKING MODE: Route 2 (Restaurant -> Customer in Green) ── */}
+          {mode === 'tracking' && route2Path.length > 1 && (
+            <>
+              <Polyline path={route2Path} options={route2GlowOptions} />
+              <Polyline path={route2Path} options={route2MainOptions} />
+            </>
+          )}
+
+          {/* ── TRACKING MODE: Restaurant Marker ── */}
+          {mode === 'tracking' && restaurantPos && (
+            <Marker
+              position={restaurantPos}
+              icon={restaurantIcon}
+              title={isRideOrder ? 'Pickup Point' : 'Restaurant Location'}
+              zIndex={10}
+              onClick={() => setActivePopup(activePopup === 'restaurant' ? null : 'restaurant')}
+            >
+              {activePopup === 'restaurant' && (
+                <InfoWindow onCloseClick={() => setActivePopup(null)}>
+                  <div style={{
+                    fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+                    fontSize: '12px',
+                    color: '#1a1a1a',
+                    padding: '2px 4px',
+                  }}>
+                    <div style={{ fontWeight: '800', color: '#EA580C' }}>
+                      {isRideOrder ? '📍 Pickup Point' : '🍽️ Restaurant Location'}
+                    </div>
+                    <div style={{ fontWeight: '600', marginTop: '2px' }}>
+                      {restaurantName || (isRideOrder ? 'Pickup Location' : 'Restaurant')}
+                    </div>
+                    {route1Info.durationMinutes != null && (
+                      <div style={{ fontSize: '11px', color: '#1A73E8', fontWeight: '700', marginTop: '2px' }}>
+                        ETA: {route1Info.durationMinutes} min ({route1Info.distanceKm} km)
+                      </div>
+                    )}
+                  </div>
+                </InfoWindow>
+              )}
+            </Marker>
+          )}
+
+          {/* ── TRACKING MODE: Customer Marker ── */}
+          {mode === 'tracking' && customerPos && (
+            <Marker
+              position={customerPos}
+              icon={homeIcon}
+              title={isRideOrder ? 'Drop Location' : 'Customer Location'}
+              zIndex={10}
+              onClick={() => setActivePopup(activePopup === 'customer' ? null : 'customer')}
+            >
+              {activePopup === 'customer' && (
+                <InfoWindow onCloseClick={() => setActivePopup(null)}>
+                  <div style={{
+                    fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+                    fontSize: '12px',
+                    color: '#1a1a1a',
+                    padding: '2px 4px',
+                  }}>
+                    <div style={{ fontWeight: '800', color: '#DC2626' }}>
+                      {isRideOrder ? '🏁 Drop Location' : '🏠 Customer Location'}
+                    </div>
+                    <div style={{ fontWeight: '600', marginTop: '2px', maxWidth: '200px' }}>
+                      {customerAddress || customerName || 'Delivery Address'}
+                    </div>
+                    {route2Info.durationMinutes != null && (
+                      <div style={{ fontSize: '11px', color: '#16A34A', fontWeight: '700', marginTop: '2px' }}>
+                        ETA: {route2Info.durationMinutes} min ({route2Info.distanceKm} km)
+                      </div>
+                    )}
+                  </div>
+                </InfoWindow>
+              )}
+            </Marker>
+          )}
+
+          {/* ── TRACKING MODE: Rider Marker (Real GPS Only) ── */}
+          {mode === 'tracking' && riderPos && (
+            <Marker
+              position={riderPos}
+              icon={isRideOrder ? rideIcon : riderIcon}
+              title="Rider Location"
+              zIndex={25}
+              onClick={() => setActivePopup(activePopup === 'rider' ? null : 'rider')}
+            >
+              {activePopup === 'rider' && (
+                <InfoWindow onCloseClick={() => setActivePopup(null)}>
+                  <div style={{
+                    fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+                    fontSize: '12px',
+                    color: '#1a1a1a',
+                    padding: '2px 4px',
+                  }}>
+                    <div style={{ fontWeight: '800', color: '#16A34A' }}>
+                      🛵 Rider Location
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#4B5563', fontWeight: '700', marginTop: '2px' }}>
+                      ● Live GPS Active
+                    </div>
+                  </div>
+                </InfoWindow>
+              )}
+            </Marker>
+          )}
+        </GoogleMap>
+
+        {/* ── Top-Right: Traffic Toggle Button ── */}
+        {mode === 'tracking' && (
+          <button
+            onClick={() => setTrafficOn(prev => !prev)}
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              zIndex: 20,
+              background: trafficOn ? '#FC8019' : 'rgba(255, 255, 255, 0.95)',
+              color: trafficOn ? '#FFFFFF' : '#374151',
+              border: '1px solid rgba(229, 231, 235, 0.8)',
+              borderRadius: 8,
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 700,
+              fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+              backdropFilter: 'blur(4px)',
+              transition: 'all 0.15s ease',
+              userSelect: 'none',
+            }}
+            title="Toggle traffic layer"
+          >
+            <Layers style={{ width: 14, height: 14 }} />
+            Traffic
+          </button>
+        )}
+
+        {/* ── Right-Side: Map Controls (+, -, Follow Rider) ── */}
+        {mode === 'tracking' && (
+          <div style={{
             position: 'absolute',
-            top: 12,
+            bottom: 72,
             right: 12,
             zIndex: 20,
-            background: trafficOn ? '#FC8019' : 'white',
-            color: trafficOn ? 'white' : '#374151',
-            border: '1px solid #e5e7eb',
-            borderRadius: 8,
-            padding: '6px 12px',
-            fontSize: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}>
+            {/* Zoom In */}
+            <button
+              onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || 15) + 1)}
+              style={{
+                width: 34,
+                height: 34,
+                background: 'rgba(255, 255, 255, 0.95)',
+                border: '1px solid rgba(229, 231, 235, 0.8)',
+                borderRadius: 8,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                fontSize: 18,
+                color: '#374151',
+                fontWeight: 800,
+                userSelect: 'none',
+              }}
+              title="Zoom in"
+            >+</button>
+
+            {/* Zoom Out */}
+            <button
+              onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || 15) - 1)}
+              style={{
+                width: 34,
+                height: 34,
+                background: 'rgba(255, 255, 255, 0.95)',
+                border: '1px solid rgba(229, 231, 235, 0.8)',
+                borderRadius: 8,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                fontSize: 18,
+                color: '#374151',
+                fontWeight: 800,
+                userSelect: 'none',
+              }}
+              title="Zoom out"
+            >−</button>
+
+            {/* Center on Rider / Follow Rider */}
+            <button
+              onClick={() => {
+                isAutoFollowRef.current = true;
+                isUserInteractingRef.current = false;
+                if (riderPos && mapRef.current) {
+                  mapRef.current.panTo(riderPos);
+                  mapRef.current.setZoom(16);
+                }
+              }}
+              style={{
+                width: 34,
+                height: 34,
+                background: isAutoFollowRef.current && !isUserInteractingRef.current ? '#16A34A' : 'rgba(255, 255, 255, 0.95)',
+                color: isAutoFollowRef.current && !isUserInteractingRef.current ? '#FFFFFF' : '#374151',
+                border: '1px solid rgba(229, 231, 235, 0.8)',
+                borderRadius: 8,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+              title="Follow Rider / Center on live position"
+            >
+              <Crosshair style={{ width: 16, height: 16 }} />
+            </button>
+          </div>
+        )}
+
+        {/* ── Top-Left: Live GPS Status Badge ── */}
+        {mode === 'tracking' && (
+          <div style={{
+            position: 'absolute',
+            top: 12,
+            left: 12,
+            zIndex: 20,
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(6px)',
+            border: '1px solid rgba(229, 231, 235, 0.8)',
+            borderRadius: 20,
+            padding: '5px 12px',
+            fontSize: 11,
             fontWeight: 700,
             fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
-            display: 'flex', alignItems: 'center', gap: 6,
-            cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.13)',
-            transition: 'all 0.18s ease',
-            userSelect: 'none',
-          }}
-          title="Toggle traffic layer"
-        >
-          <Layers style={{ width: 14, height: 14 }} />
-          Traffic
-        </button>
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          }}>
+            {gpsStatus === 'live' && riderPos ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-gray-800">Rider Position: <span className="text-green-600 font-extrabold">Live</span></span>
+              </>
+            ) : gpsStatus === 'locating' ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                <span className="text-gray-800">Rider Position: <span className="text-amber-600 font-extrabold">Locating...</span></span>
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-gray-800">Rider Position: <span className="text-red-500 font-extrabold">Location unavailable</span></span>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Bottom Route Info Summary Bar ── */}
+      {mode === 'tracking' && (
+        <div className="bg-surface/95 backdrop-blur-md border-t border-line px-4 py-2.5 z-20 flex items-center justify-between shadow-sm text-xs font-semibold">
+          {/* Leg 1: Rider -> Restaurant */}
+          <div className="flex items-center gap-2">
+            <span className="w-3.5 h-1.5 bg-[#1A73E8] rounded-full inline-block flex-shrink-0" />
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-muted font-bold">
+                {isRideOrder ? 'Rider → Pickup' : 'Rider → Restaurant'}
+              </div>
+              <div className="text-[11px] font-black text-main leading-tight">
+                {route1Info.distanceKm != null ? `${route1Info.distanceKm} km • ${route1Info.durationMinutes} min` : (riderPos ? 'Calculating...' : 'GPS Pending')}
+              </div>
+            </div>
+          </div>
+
+          {/* Leg 2: Restaurant -> Customer */}
+          <div className="flex items-center gap-2">
+            <span className="w-3.5 h-1.5 bg-[#16A34A] rounded-full inline-block flex-shrink-0" />
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-muted font-bold">
+                {isRideOrder ? 'Pickup → Drop' : 'Restaurant → Customer'}
+              </div>
+              <div className="text-[11px] font-black text-main leading-tight">
+                {route2Info.distanceKm != null ? `${route2Info.distanceKm} km • ${route2Info.durationMinutes} min` : 'Calculating...'}
+              </div>
+            </div>
+          </div>
+
+          {/* Total Distance & Total ETA */}
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-muted font-bold text-right">
+              Total Distance
+            </div>
+            <div className="text-[11px] font-black text-main leading-tight text-right">
+              {totalDistanceKm > 0 ? `${totalDistanceKm.toFixed(1)} km • ${totalDurationMinutes} min` : '--'}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

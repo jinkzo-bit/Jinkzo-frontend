@@ -3,9 +3,11 @@ import GoogleMapContainer from './GoogleMapContainer';
 
 export default function InteractiveMap({ 
   status, 
+  restaurantName = '',
   restaurantAddress = '', 
   restaurantLat = null,
   restaurantLng = null,
+  customerName = '',
   customerAddress = '',
   customerLat = null,
   customerLng = null,
@@ -18,11 +20,13 @@ export default function InteractiveMap({
   ridePickupLng = null,
   rideDropLat = null,
   rideDropLng = null,
+  ridePickupAddress = '',
+  rideDropAddress = '',
   riderLat = null,
   riderLng = null,
+  gpsStatus = 'locating',
 }) {
   const [progress, setProgress] = useState(0);
-  const [showTraffic, setShowTraffic] = useState(false);
 
   useEffect(() => {
     // Map order status to progress percentage
@@ -57,12 +61,14 @@ export default function InteractiveMap({
   }, [status]);
 
   return (
-    <div className="relative w-full h-[280px] bg-sky-50 rounded-2xl overflow-hidden border border-sky-100/50 shadow-inner">
+    <div className="relative w-full h-[380px] bg-sky-50 rounded-2xl overflow-hidden border border-sky-100/50 shadow-inner">
       <GoogleMapContainer 
         mode="tracking"
+        restaurantName={restaurantName}
         restaurantAddress={restaurantAddress}
         restaurantLat={restaurantLat}
         restaurantLng={restaurantLng}
+        customerName={customerName}
         customerAddress={customerAddress}
         customerLat={customerLat}
         customerLng={customerLng}
@@ -71,31 +77,17 @@ export default function InteractiveMap({
         deliveryMethod={deliveryMethod}
         orderId={orderId}
         onRouteInfo={onRouteInfo}
-        showTraffic={showTraffic}
         isRide={isRide}
         ridePickupLat={ridePickupLat}
         ridePickupLng={ridePickupLng}
         rideDropLat={rideDropLat}
         rideDropLng={rideDropLng}
+        ridePickupAddress={ridePickupAddress}
+        rideDropAddress={rideDropAddress}
         riderLat={riderLat}
         riderLng={riderLng}
+        gpsStatus={gpsStatus}
       />
-      
-      {/* Real-time Status Overlay Badge */}
-      <div className="absolute bottom-4 left-4 bg-surface/95 px-3 py-1.5 rounded-full shadow-md text-xs font-semibold flex items-center gap-1.5 border border-line glass">
-        <span className={`w-2.5 h-2.5 rounded-full ${status === 'Delivered' ? 'bg-green-500' : 'bg-primary animate-ping'}`} />
-        <span className="text-main">Rider Position: {Math.round(progress * 100)}%</span>
-      </div>
-      
-      {/* Traffic Toggle */}
-      <button
-        onClick={() => setShowTraffic(prev => !prev)}
-        className="absolute bottom-4 right-4 bg-surface/95 backdrop-blur-sm border border-line px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-md hover:bg-surface transition-colors cursor-pointer"
-        title="Toggle traffic layer"
-      >
-        <span className={`w-2.5 h-2.5 rounded-full ${showTraffic ? 'bg-green-500' : 'bg-gray-400'}`} />
-        <span className="text-main">Traffic</span>
-      </button>
     </div>
   );
 }
