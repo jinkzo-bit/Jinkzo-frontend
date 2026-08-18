@@ -1,102 +1,33 @@
 import { API_BASE } from '../config/api';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Search, MapPin, Sparkles, ChevronRight, Bike } from 'lucide-react';
+import { ChevronRight, MapPin, ChevronDown } from 'lucide-react';
 import RestaurantCard from '../components/RestaurantCard';
-
-// Cuisine lists with premium Unsplash images
-const cuisines = [
-  { name: 'Biryani', image: 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?auto=format&fit=crop&w=120&h=120&q=80', tag: 'Biryani' },
-  { name: 'Burgers', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=120&h=120&q=80', tag: 'Burgers' },
-  { name: 'Pizza', image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=120&h=120&q=80', tag: 'Pizza' },
-  { name: 'Sushi', image: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=120&h=120&q=80', tag: 'Sushi' },
-  { name: 'Salads', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=120&h=120&q=80', tag: 'Healthy' },
-  { name: 'Dosa', image: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?auto=format&fit=crop&w=120&h=120&q=80', tag: 'South Indian' },
-  { name: 'Desserts', image: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=120&h=120&q=80', tag: 'Desserts' },
-  { name: 'Noodles', image: 'https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&w=120&h=120&q=80', tag: 'Noodles' }
-];
+import GlobalSearchBar from '../components/GlobalSearchBar';
+import ServiceCard from '../components/ServiceCard';
+import { useAuthStore } from '../store/authStore';
 
 export default function Home() {
+  const { user } = useAuthStore();
   const [restaurants, setRestaurants] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [foodAvailable, setFoodAvailable] = useState(true);
   const [rideAvailable, setRideAvailable] = useState(true);
   const [banners, setBanners] = useState([]);
   const [currentBannerIdx, setCurrentBannerIdx] = useState(0);
-  // NEW STATE FOR SEARCH SUGGESTIONS
-  const [suggestions, setSuggestions] = useState([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const debounceTimeout = useRef(null);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const [isFocused, setIsFocused] = useState(false);
-  const inputRef = useRef(null);
 
   const navigate = useNavigate();
 
-  // SEARCH SUGGESTIONS LOGIC
-  const fetchSuggestions = async (query) => {
-    if (!query.trim()) {
-      setSuggestions([]);
-      return;
+  // Dynamic user address selection (reused from auth store)
+  const getDeliveryLocation = () => {
+    if (user && Array.isArray(user.addresses) && user.addresses.length > 0) {
+      const def = user.addresses.find(a => a.isDefault);
+      if (def) return `${def.street || ''}, ${def.city || ''}`.replace(/^, /, '').trim() || def.city || "Nandikotkur, AP";
+      const first = user.addresses[0];
+      return `${first.street || ''}, ${first.city || ''}`.replace(/^, /, '').trim() || first.city || "Nandikotkur, AP";
     }
-    setSuggestionsLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/search/suggestions?q=${encodeURIComponent(query)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSuggestions(data.suggestions || []);
-      } else {
-        setSuggestions([]);
-      }
-    } catch (err) {
-      console.error('Error fetching suggestions:', err);
-      setSuggestions([]);
-    } finally {
-      setSuggestionsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (debounceTimeout.current) {
-        clearTimeout(debounceTimeout.current);
-      }
-    };
-  }, []);
-
-  const handleInputChange = (e) => {
-    const value = e.target.value;
-    setSearchQuery(value);
-    setIsFocused(true);
-
-    if (debounceTimeout.current) {
-      clearTimeout(debounceTimeout.current);
-    }
-
-    debounceTimeout.current = setTimeout(() => {
-      fetchSuggestions(value);
-    }, 300);
-  };
-
-  const handleSelectSuggestion = (suggestion) => {
-    const text = typeof suggestion === 'object' && suggestion !== null ? (suggestion.text || suggestion.name || '') : String(suggestion || '');
-    setSearchQuery(text);
-    setSuggestions([]);
-    setIsFocused(false);
-    setActiveIndex(-1);
-    if (text.trim()) {
-      navigate(`/restaurants?search=${encodeURIComponent(text.trim())}`);
-    }
-  };
-
-  const handleBlur = () => {
-    // Hide suggestions on blur after a delay to allow click events
-    setTimeout(() => {
-      setIsFocused(false);
-      setSuggestions([]);
-    }, 200);
+    return "Nandikotkur, AP";
   };
 
   useEffect(() => {
@@ -142,7 +73,6 @@ export default function Home() {
         if (res.ok) {
           const data = await res.json();
           setTotalCount(data.length);
-          // Show top 6 on Home page
           setRestaurants(data.slice(0, 6));
         }
       } catch (err) {
@@ -155,212 +85,236 @@ export default function Home() {
     fetchRestaurants();
   }, []);
 
-  const submitSearch = () => {
-    if (searchQuery.trim()) {
-      navigate(`/restaurants?search=${encodeURIComponent(searchQuery)}`);
-    } else {
-      navigate('/restaurants');
+  const services = [
+    {
+      title: 'Food',
+      description: 'Delicious meals from top restaurants',
+      image: '/services/food.jpg',
+      icon: '🍔',
+      to: '/restaurants',
+      arrowBgClass: 'bg-purple-100',
+      arrowColorClass: 'text-purple-600',
+      isAvailable: foodAvailable
+    },
+    {
+      title: 'Ride & Courier',
+      description: 'Quick rides and courier service',
+      image: '/services/ride.jpg',
+      icon: '🏍️',
+      to: '/ride',
+      arrowBgClass: 'bg-orange-100',
+      arrowColorClass: 'text-orange-600',
+      isAvailable: rideAvailable
+    },
+    {
+      title: 'Grocery',
+      description: 'Daily essentials delivered fast',
+      image: '/services/grocery.jpg',
+      icon: '🛒',
+      to: '/customer/grocery',
+      arrowBgClass: 'bg-green-100',
+      arrowColorClass: 'text-green-600',
+      isAvailable: true
+    },
+    {
+      title: 'Hot & Cool',
+      description: 'Refreshing drinks, ice creams & more',
+      image: '/services/hot-cool.jpg',
+      icon: '🥤',
+      to: '/customer/hot-cool',
+      arrowBgClass: 'bg-blue-100',
+      arrowColorClass: 'text-blue-600',
+      isAvailable: true
+    },
+    {
+      title: 'Veg & Fruits',
+      description: 'Fresh vegetables and fruits',
+      image: '/services/veg-fruits.jpg',
+      icon: '🥬',
+      to: '/customer/veg-fruits',
+      arrowBgClass: 'bg-emerald-100',
+      arrowColorClass: 'text-emerald-600',
+      isAvailable: true
+    },
+    {
+      title: 'Meat',
+      description: 'Fresh meat, chicken, fish & eggs',
+      image: '/services/meat.jpg',
+      icon: '🥩',
+      to: '/customer/meat',
+      arrowBgClass: 'bg-rose-100',
+      arrowColorClass: 'text-rose-600',
+      isAvailable: true
     }
-  };
+  ];
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    submitSearch();
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (!isFocused) return;
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setActiveIndex(prev => {
-          if (prev >= suggestions.length - 1) return 0;
-          return prev + 1;
-        });
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setActiveIndex(prev => {
-          if (prev <= 0) return suggestions.length - 1;
-          return prev - 1;
-        });
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (activeIndex >= 0 && activeIndex < suggestions.length) {
-          handleSelectSuggestion(suggestions[activeIndex]);
-          setActiveIndex(-1);
-        } else {
-          // Submit the form
-          submitSearch();
-        }
-      } else if (e.key === 'Escape') {
-        setSuggestions([]);
-        setActiveIndex(-1);
-        setIsFocused(false);
-        inputRef.current?.blur();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isFocused, suggestions, activeIndex, submitSearch]);
-
-  useEffect(() => {
-    if (activeIndex >= suggestions.length) {
-      setActiveIndex(-1);
-    }
-  }, [suggestions.length, activeIndex]);
   return (
-    <div className="flex flex-col gap-8 pb-24 max-w-7xl mx-auto px-4 md:px-8 w-full animate-fade-in">
-      
-      {/* Mobile Location detection bar */}
-      <div className="flex lg:hidden items-center gap-1.5 p-3 mt-2 bg-surface rounded-xl shadow-xs border border-line">
-        <MapPin className="w-4 h-4 text-primary" />
-        <span className="text-xs font-semibold text-main truncate">
-          
-Nandikotkur, AP
-        </span>
+    <div 
+      className="customer-home-canvas min-h-screen w-full relative pb-24 px-3.5 sm:px-6 md:px-8 overflow-x-hidden"
+      style={{
+        background: 'linear-gradient(180deg, #FCE8F3 0%, #F3E8FF 16%, #EBE5FE 32%, #FFE8D6 52%, #FDE4F2 72%, #E3F2FE 88%, #F7E8FF 100%)'
+      }}
+    >
+      {/* ── AMBIENT PASTEL GLOW ORBS ────────────────────────────────────────── */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute -top-12 -left-12 w-80 h-80 rounded-full bg-[#E9C6FF]/40 blur-[90px]" />
+        <div className="absolute top-16 -right-12 w-80 h-80 rounded-full bg-[#F7C8E0]/40 blur-[90px]" />
+        <div className="absolute top-[380px] -left-16 w-80 h-80 rounded-full bg-[#FFE0C2]/45 blur-[90px]" />
+        <div className="absolute top-[580px] -right-16 w-80 h-80 rounded-full bg-[#FFD6E8]/40 blur-[90px]" />
+        <div className="absolute top-[850px] left-8 w-80 h-80 rounded-full bg-[#DDF4FF]/45 blur-[90px]" />
+        <div className="absolute bottom-10 right-8 w-96 h-96 rounded-full bg-[#DCCBFF]/40 blur-[100px]" />
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mt-6 md:mt-8">
-        <Link 
-          to="/restaurants"
-          className="bg-white/90 backdrop-blur-md p-5 rounded-3xl border border-white/50 shadow-sm transition-all hover:shadow-md hover:scale-[1.01] duration-300 flex items-center justify-between gap-4 cursor-pointer"
-        >
-          <div className="flex flex-col gap-1 w-full">
-            <span className="text-[10px] text-primary font-black uppercase tracking-wider">Food</span>
-            <h3 className="font-display font-black text-sm md:text-base text-main leading-tight">Order Food</h3>
-            <div className="flex items-center gap-1 mt-1 flex-wrap">
-              <span className={`w-1.5 h-1.5 rounded-full ${foodAvailable ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
-              <span className={`text-[9px] font-bold ${foodAvailable ? 'text-green-600' : 'text-red-500'}`}>
-                {foodAvailable ? 'Food delivery partners are available' : 'Food delivery partners not available'}
-              </span>
-            </div>
-          </div>
-          <div className="w-11 h-11 bg-primary/10 rounded-2xl flex items-center justify-center text-primary flex-shrink-0">
-            <Sparkles className="w-5.5 h-5.5 fill-primary" />
-          </div>
-        </Link>
+      {/* ── MAIN CONTENT CONTAINER (FLOATING OVER COLORFUL CANVAS) ──────────── */}
+      <div className="max-w-7xl mx-auto flex flex-col gap-4 sm:gap-5 w-full relative z-10 pt-1">
 
-        <Link 
-          to="/ride"
-          className="bg-white/90 backdrop-blur-md p-5 rounded-3xl border border-white/50 shadow-sm transition-all hover:shadow-md hover:scale-[1.01] duration-300 flex items-center justify-between gap-4 cursor-pointer"
-        >
-          <div className="flex flex-col gap-1 w-full">
-            <span className="text-[10px] text-yellow-600 font-black uppercase tracking-wider font-extrabold">Ride & Courier</span>
-            <h3 className="font-display font-black text-sm md:text-base text-main leading-tight">Book Ride</h3>
-            <div className="flex items-center gap-1 mt-1 flex-wrap">
-              <span className={`w-1.5 h-1.5 rounded-full ${rideAvailable ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
-              <span className={`text-[9px] font-bold ${rideAvailable ? 'text-yellow-600' : 'text-red-500'}`}>
-                {rideAvailable ? 'Riders are available' : 'Riders not available'}
-              </span>
-            </div>
-          </div>
-          <div className="w-11 h-11 bg-yellow-400/20 rounded-2xl flex items-center justify-center text-yellow-600 flex-shrink-0">
-            <Bike className="w-5.5 h-5.5 fill-yellow-600" />
-          </div>
-        </Link>
-      </div>
-
-      {/* Hero Banner Section */}
-      <section className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#6b21a8] to-[#db2777] text-white py-10 md:py-14 px-6 md:px-12 flex flex-col md:flex-row justify-between items-center shadow-[0_10px_40px_rgba(219,39,119,0.3)] min-h-[340px]">
-        
-        {/* Background Curve (Orange) */}
-        <div className="absolute right-[-20%] top-[-50%] w-[800px] h-[800px] rounded-full bg-[#f97316] opacity-90 blur-[2px] pointer-events-none"></div>
-
-        {/* Left Content */}
-        <div className="flex flex-col gap-4 max-w-lg z-20">
-          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm text-white font-bold text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-full w-max shadow-sm">
-            <Sparkles className="w-3.5 h-3.5 fill-white" />
-            WEEKEND BONANZA - FREE DELIVERY!
-          </div>
-          
-          <h1 className="font-display font-extrabold text-4xl md:text-5xl tracking-tight leading-tight mt-2 flex flex-col items-start">
-            <span>Hungry? Grab your</span>
-            <div className="relative inline-block mt-1">
-              <span className="text-[#fde047]">Jinkzo</span> now!
-              {/* Wavy Underline SVG */}
-              <svg className="absolute left-0 -bottom-2 w-full h-3 text-[#fde047]" preserveAspectRatio="none" viewBox="0 0 100 20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M0 10 Q 12.5 0, 25 10 T 50 10 T 75 10 T 100 10"></path>
-              </svg>
-            </div>
-          </h1>
-          
-          <p className="text-sm md:text-base text-white/90 leading-relaxed font-medium mb-2 mt-4">
-            Explore 100+ top restaurants near you delivering piping hot, fresh meals within 25 minutes. Free delivery on orders over ₹200.
-          </p>
-
-          <Link to="/restaurants" className="bg-[#fde047] hover:bg-[#facc15] text-gray-900 font-extrabold px-7 py-3.5 rounded-xl w-max flex items-center gap-2 shadow-xl shadow-yellow-500/20 transition-transform active:scale-95 cursor-pointer mt-2">
-            Order Food Now
-            <ChevronRight className="w-4 h-4 font-bold" />
-          </Link>
-        </div>
-
-        {/* Right Content - Animated Plate & Floating Elements */}
-        <div className="absolute right-[-15%] md:right-[-5%] top-1/2 -translate-y-1/2 w-[400px] md:w-[500px] z-10 pointer-events-none opacity-40 md:opacity-100 flex items-center justify-center">
-          
-          {/* Main Plate Image */}
-          <div className="relative animate-float-slow w-full h-full drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-            <img src="https://images.unsplash.com/photo-1633945274405-b6c8069047b0?auto=format&fit=crop&w=800&q=80" alt="Biryani Plate" className="w-full h-full object-contain rounded-full" />
-          </div>
-
-          {/* Floating Ingredients */}
-          <div className="absolute top-10 left-10 text-4xl animate-float drop-shadow-md">🌿</div>
-          <div className="absolute top-20 right-20 text-3xl animate-float-delayed drop-shadow-md">🌶️</div>
-          <div className="absolute bottom-10 left-20 text-4xl animate-spin-slow drop-shadow-md">🧅</div>
-          <div className="absolute bottom-20 right-10 text-3xl animate-float drop-shadow-md">🍅</div>
-          <div className="absolute top-1/2 left-0 -translate-x-full text-5xl animate-float-delayed drop-shadow-md opacity-80">🌶️</div>
-        </div>
-
-        {/* Dots Pagination Simulator */}
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-2 z-20">
-          <div className="w-6 h-1.5 bg-white rounded-full"></div>
-          <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
-          <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
-          <div className="w-1.5 h-1.5 bg-white/50 rounded-full"></div>
-        </div>
-      </section>
-
-
-
-      {/* Top Restaurants Grid */}
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div className="flex flex-col">
-            <h2 className="font-display font-extrabold text-2xl text-[#1e1b4b] leading-tight flex items-center gap-3">
-              Top Restaurants Near You
-              {!isLoading && (
-                <span className="text-[10px] bg-purple-100/80 text-purple-700 font-extrabold px-3 py-1 rounded-md tracking-wider">
-                  {totalCount} Available
-                </span> 
-              )}
-            </h2>
-            <p className="text-xs text-gray-500 font-semibold mt-1">Handpicked premium dining places with fastest delivery times</p>
-          </div>
+        {/* ── DELIVER TO LOCATION COMPACT BADGE ─────────────────────────── */}
+        <div className="flex items-center justify-between px-1">
           <Link 
-            to="/restaurants" 
-            className="flex items-center text-sm font-bold text-primary hover:underline gap-0.5 cursor-pointer"
+            to={user ? "/profile" : "/login"}
+            className="flex items-center gap-1.5 text-xs sm:text-sm group cursor-pointer"
           >
-            <span>See all</span>
-            <ChevronRight className="w-4 h-4" />
+            <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center text-primary flex-shrink-0">
+              <MapPin className="w-3.5 h-3.5 text-primary stroke-[2.5]" />
+            </div>
+            <span className="text-slate-500 font-semibold text-[11px] sm:text-xs">Deliver to</span>
+            <span className="font-display font-black text-[#1E1B4B] group-hover:text-primary transition-colors truncate max-w-[210px] sm:max-w-sm">
+              {getDeliveryLocation()}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-primary stroke-[2.5] flex-shrink-0 transition-transform group-hover:translate-y-0.5" />
           </Link>
         </div>
 
-        {/* Grid Feed */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {isLoading ? (
-            // Skeletons
-            Array(6).fill(null).map((_, i) => (
-              <RestaurantCard key={i} isLoading={true} />
-            ))
-          ) : (
-            restaurants.map((restaurant) => (
-              <RestaurantCard key={restaurant._id} restaurant={restaurant} isLoading={false} />
-            ))
-          )}
+        {/* ── SEARCH BAR ─────────────────────────────────────────────────── */}
+        <GlobalSearchBar placeholder="Search for food, groceries, items..." />
+
+        {/* ── HERO BANNER SECTION ────────────────────────────────────────── */}
+        <div className="flex flex-col gap-2.5">
+          <section className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 text-white p-5 sm:p-7 md:p-8 flex flex-col justify-between shadow-[0_10px_30px_rgba(124,58,237,0.25)] min-h-[190px] sm:min-h-[220px]">
+            
+            {/* Background Glows */}
+            <div className="absolute -right-8 -top-8 w-44 h-44 bg-white/15 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -left-8 -bottom-8 w-44 h-44 bg-fuchsia-400/25 rounded-full blur-2xl pointer-events-none" />
+            
+            {/* Floating food badges */}
+            <div className="absolute top-4 right-[42%] sm:right-[38%] w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-sm animate-float hidden xs:flex">
+              🍔
+            </div>
+            <div className="absolute top-6 right-8 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-sm animate-float-delayed hidden xs:flex">
+              🥤
+            </div>
+            <div className="absolute bottom-6 right-4 w-7 h-7 rounded-full bg-white/90 shadow-md flex items-center justify-center text-xs animate-float hidden xs:flex">
+              🥩
+            </div>
+
+            {/* Left Content */}
+            <div className="flex flex-col justify-center gap-1.5 z-10 w-full max-w-[210px] sm:max-w-xs md:max-w-sm">
+              <h1 className="font-display font-black text-2xl sm:text-3xl md:text-4xl tracking-tight leading-tight drop-shadow-xs">
+                Fast Delivery,<br />
+                <span className="text-yellow-300 drop-shadow-sm">Happy You!</span>
+              </h1>
+              <p className="text-[11px] sm:text-xs md:text-sm text-white/95 font-semibold leading-snug mt-1">
+                Food, groceries, meat, fruits &amp; more delivered fast!
+              </p>
+              <Link 
+                to="/restaurants" 
+                className="bg-white text-primary hover:bg-gray-50 active:scale-95 font-black text-xs px-4.5 py-2 sm:px-5 sm:py-2.5 rounded-full w-max shadow-md mt-2.5 transition-all flex items-center gap-1 cursor-pointer"
+              >
+                Order Now <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
+              </Link>
+            </div>
+
+            {/* 3D Scooter Artwork Image */}
+            <div className="absolute right-[-10px] sm:right-2 bottom-0 top-0 flex items-center justify-end pointer-events-none z-0 w-[55%] sm:w-[50%] max-w-[280px]">
+              <img 
+                src="/services/hero-scooter.jpg" 
+                alt="Jinkzo Delivery" 
+                className="w-full h-full object-contain object-right-bottom drop-shadow-2xl opacity-95 transition-transform duration-500 hover:scale-105"
+              />
+            </div>
+          </section>
+
+          {/* Carousel Pagination Dots */}
+          <div className="flex items-center justify-center gap-1.5 pt-0.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-primary shadow-xs transition-all" />
+            <span className="w-2 h-2 rounded-full bg-purple-200 transition-all" />
+            <span className="w-2 h-2 rounded-full bg-purple-200 transition-all" />
+          </div>
         </div>
-      </section>
+
+        {/* ── OUR SERVICES SECTION (2-COLUMN GRID) ────────────────────────── */}
+        <section className="flex flex-col gap-3 mt-1 bg-transparent">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="font-display font-black text-lg sm:text-xl text-[#1E1B4B] leading-tight tracking-tight">
+              Our Services
+            </h2>
+            <Link 
+              to="/customer/services" 
+              className="flex items-center text-xs font-black text-primary hover:underline gap-0.5"
+            >
+              See All <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 md:gap-4 bg-transparent">
+            {services.map((svc, idx) => (
+              <ServiceCard 
+                key={idx} 
+                title={svc.title}
+                description={svc.description}
+                image={svc.image}
+                icon={svc.icon}
+                to={svc.to}
+                arrowBgClass={svc.arrowBgClass}
+                arrowColorClass={svc.arrowColorClass}
+                isAvailable={svc.isAvailable}
+              />
+            ))}
+          </div>
+        </section>
+
+        {/* ── POPULAR NEAR YOU SECTION ───────────────────────────────────── */}
+        <section className="flex flex-col gap-3 mt-2 bg-transparent">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex flex-col">
+              <h2 className="font-display font-black text-lg sm:text-xl text-[#1E1B4B] leading-tight tracking-tight flex items-center gap-2">
+                Popular Near You
+                {!isLoading && totalCount > 0 && (
+                  <span className="text-[9px] bg-purple-100 text-purple-700 font-extrabold px-2 py-0.5 rounded-full">
+                    {totalCount} Places
+                  </span> 
+                )}
+              </h2>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 font-bold mt-0.5">
+                Top-rated restaurants and stores
+              </p>
+            </div>
+            <Link 
+              to="/restaurants" 
+              className="flex items-center text-xs font-black text-primary hover:underline gap-0.5"
+            >
+              See all <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 bg-transparent">
+            {isLoading ? (
+              Array(4).fill(null).map((_, i) => (
+                <RestaurantCard key={i} isLoading={true} />
+              ))
+            ) : restaurants.length > 0 ? (
+              restaurants.map((restaurant) => (
+                <RestaurantCard key={restaurant._id} restaurant={restaurant} isLoading={false} />
+              ))
+            ) : (
+              <div className="col-span-full bg-white/90 rounded-3xl p-8 text-center border border-white/80 shadow-xs">
+                <p className="text-xs font-bold text-slate-500">No restaurants currently available in this area.</p>
+              </div>
+            )}
+          </div>
+        </section>
+
+      </div>
     </div>
   );
 }
