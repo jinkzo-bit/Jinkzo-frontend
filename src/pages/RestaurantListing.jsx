@@ -424,39 +424,41 @@ export default function RestaurantListing() {
         </div>
 
         {/* Right Section: Vertically Stacked Controls (Pure Veg + Sort by) */}
-        <div className="flex flex-row lg:flex-col items-stretch justify-end gap-3 flex-shrink-0 pt-3 lg:pt-0 lg:pl-6 border-t lg:border-t-0 lg:border-l border-line">
+        {activeDashboard !== 'meat' && (
+          <div className="flex flex-row lg:flex-col items-stretch justify-end gap-3 flex-shrink-0 pt-3 lg:pt-0 lg:pl-6 border-t lg:border-t-0 lg:border-l border-line">
 
-          {/* Pure Veg Toggle */}
-          <button
-            onClick={handleVegToggle}
-            className={`flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 rounded-2xl border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-              isPureVeg
-                ? 'bg-green-50 dark:bg-green-950/40 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 font-extrabold'
-                : 'bg-base dark:bg-[#1C2233] border-line text-muted hover:border-line-strong'
-            }`}
-          >
-            <span className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${isPureVeg ? 'border-green-600 dark:border-green-400' : 'border-gray-400'}`}>
-              {isPureVeg && <span className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-xs" />}
-            </span>
-            <span>Pure Veg</span>
-          </button>
-
-          {/* Sort Selector */}
-          <div className="flex items-center gap-2 text-muted border border-line bg-base dark:bg-[#1C2233] rounded-2xl px-3.5 py-2.5 text-xs font-bold shadow-2xs">
-            <ArrowUpDown className="w-4 h-4 text-muted flex-shrink-0" />
-            <select
-              value={activeSort}
-              onChange={handleSortChange}
-              className="bg-transparent outline-none border-none text-main dark:text-white cursor-pointer text-xs font-bold pr-1 w-full"
+            {/* Pure Veg Toggle */}
+            <button
+              onClick={handleVegToggle}
+              className={`flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 rounded-2xl border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                isPureVeg
+                  ? 'bg-green-50 dark:bg-green-950/40 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 font-extrabold'
+                  : 'bg-base dark:bg-[#1C2233] border-line text-muted hover:border-line-strong'
+              }`}
             >
-              <option value="rating" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Rating (High to Low)</option>
-              <option value="deliveryTime" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Delivery Time</option>
-              <option value="costAsc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Price (Low to High)</option>
-              <option value="costDesc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Price (High to Low)</option>
-            </select>
-          </div>
+              <span className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${isPureVeg ? 'border-green-600 dark:border-green-400' : 'border-gray-400'}`}>
+                {isPureVeg && <span className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-xs" />}
+              </span>
+              <span>Pure Veg</span>
+            </button>
 
-        </div>
+            {/* Sort Selector */}
+            <div className="flex items-center gap-2 text-muted border border-line bg-base dark:bg-[#1C2233] rounded-2xl px-3.5 py-2.5 text-xs font-bold shadow-2xs">
+              <ArrowUpDown className="w-4 h-4 text-muted flex-shrink-0" />
+              <select
+                value={activeSort}
+                onChange={handleSortChange}
+                className="bg-transparent outline-none border-none text-main dark:text-white cursor-pointer text-xs font-bold pr-1 w-full"
+              >
+                <option value="rating" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Rating (High to Low)</option>
+                <option value="deliveryTime" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Delivery Time</option>
+                <option value="costAsc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Price (Low to High)</option>
+                <option value="costDesc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Price (High to Low)</option>
+              </select>
+            </div>
+
+          </div>
+        )}
       </section>
 
       {/* ─── RESTAURANTS & DISHES GRID SECTION ─── */}

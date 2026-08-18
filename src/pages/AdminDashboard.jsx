@@ -99,10 +99,44 @@ export default function AdminDashboard() {
   // Banners Management
   const [banners, setBanners] = useState([]);
   const [isBannersLoading, setIsBannersLoading] = useState(true);
-  const [newBannerFile, setNewBannerFile] = useState(null);
-  const [newBannerTitle, setNewBannerTitle] = useState('');
-  const [newBannerLink, setNewBannerLink] = useState('');
-  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+
+  // Add Banner Modal & Form State
+  const [showAddBannerModal, setShowAddBannerModal] = useState(false);
+  const [addBannerForm, setAddBannerForm] = useState({
+    title: '',
+    subtitle: '',
+    buttonText: 'Order Now',
+    link: '/restaurants',
+    displayOrder: 1,
+    isActive: true,
+    imageUrl: ''
+  });
+  const [addBannerFile, setAddBannerFile] = useState(null);
+  const [isAddingBanner, setIsAddingBanner] = useState(false);
+  const [addBannerError, setAddBannerError] = useState('');
+
+  // Edit Banner Modal & Form State
+  const [showEditBannerModal, setShowEditBannerModal] = useState(false);
+  const [editBannerForm, setEditBannerForm] = useState({
+    _id: '',
+    title: '',
+    subtitle: '',
+    buttonText: 'Order Now',
+    link: '/restaurants',
+    displayOrder: 1,
+    isActive: true,
+    imageUrl: ''
+  });
+  const [editBannerFile, setEditBannerFile] = useState(null);
+  const [isEditingBanner, setIsEditingBanner] = useState(false);
+  const [editBannerError, setEditBannerError] = useState('');
+
+  // Delete Banner Confirmation Modal
+  const [deleteBannerModal, setDeleteBannerModal] = useState({
+    isOpen: false,
+    banner: null
+  });
+  const [isDeletingBanner, setIsDeletingBanner] = useState(false);
 
   // Orders Pipeline sub-tabs and Date filtering
   const [orderPipelineTab, setOrderPipelineTab] = useState('new'); // 'new', 'ongoing', 'completed'
@@ -889,28 +923,128 @@ export default function AdminDashboard() {
 
   const handleAddBanner = async (e) => {
     e.preventDefault();
-    if (!newBannerFile) return alert('Please select an image file');
+    setAddBannerError('');
 
-    setIsUploadingBanner(true);
+    if (!addBannerFile && !addBannerForm.imageUrl) {
+      setAddBannerError('Please upload an image file or provide an Image URL.');
+      return;
+    }
+    if (!addBannerForm.title.trim()) {
+      setAddBannerError('Please enter a banner title.');
+      return;
+    }
+
+    setIsAddingBanner(true);
     try {
-      const uploadedImageUrl = await uploadFileToBackend(newBannerFile);
+      let finalImageUrl = addBannerForm.imageUrl;
+      if (addBannerFile) {
+        finalImageUrl = await uploadFileToBackend(addBannerFile);
+      }
 
       const res = await fetch(`${API_BASE}/admin/banners`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ imageUrl: uploadedImageUrl, title: newBannerTitle, link: newBannerLink })
+        body: JSON.stringify({
+          imageUrl: finalImageUrl,
+          title: addBannerForm.title.trim(),
+          subtitle: addBannerForm.subtitle.trim(),
+          buttonText: addBannerForm.buttonText.trim() || 'Order Now',
+          link: addBannerForm.link.trim() || '/restaurants',
+          displayOrder: Number(addBannerForm.displayOrder) || (banners.length + 1),
+          isActive: addBannerForm.isActive,
+          active: addBannerForm.isActive
+        })
       });
-      if (res.ok) {
-        setNewBannerFile(null);
-        setNewBannerTitle('');
-        setNewBannerLink('');
-        fetchBanners();
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'Failed to create banner');
       }
+
+      setShowAddBannerModal(false);
+      setAddBannerForm({
+        title: '',
+        subtitle: '',
+        buttonText: 'Order Now',
+        link: '/restaurants',
+        displayOrder: banners.length + 2,
+        isActive: true,
+        imageUrl: ''
+      });
+      setAddBannerFile(null);
+      fetchBanners();
     } catch (err) {
       console.error(err);
-      alert(err.message || 'Failed to upload banner');
+      setAddBannerError(err.message || 'Failed to create banner');
     } finally {
-      setIsUploadingBanner(false);
+      setIsAddingBanner(false);
+    }
+  };
+
+  const handleOpenEditBanner = (banner) => {
+    setEditBannerForm({
+      _id: banner._id,
+      title: banner.title || '',
+      subtitle: banner.subtitle || '',
+      buttonText: banner.buttonText || 'Order Now',
+      link: banner.link || '/restaurants',
+      displayOrder: banner.displayOrder !== undefined ? banner.displayOrder : 1,
+      isActive: banner.isActive !== false && banner.active !== false,
+      imageUrl: banner.imageUrl || ''
+    });
+    setEditBannerFile(null);
+    setEditBannerError('');
+    setShowEditBannerModal(true);
+  };
+
+  const handleEditBanner = async (e) => {
+    e.preventDefault();
+    setEditBannerError('');
+
+    if (!editBannerFile && !editBannerForm.imageUrl) {
+      setEditBannerError('Please upload an image file or provide an Image URL.');
+      return;
+    }
+    if (!editBannerForm.title.trim()) {
+      setEditBannerError('Please enter a banner title.');
+      return;
+    }
+
+    setIsEditingBanner(true);
+    try {
+      let finalImageUrl = editBannerForm.imageUrl;
+      if (editBannerFile) {
+        finalImageUrl = await uploadFileToBackend(editBannerFile);
+      }
+
+      const res = await fetch(`${API_BASE}/admin/banners/${editBannerForm._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          imageUrl: finalImageUrl,
+          title: editBannerForm.title.trim(),
+          subtitle: editBannerForm.subtitle.trim(),
+          buttonText: editBannerForm.buttonText.trim() || 'Order Now',
+          link: editBannerForm.link.trim() || '/restaurants',
+          displayOrder: Number(editBannerForm.displayOrder) || 1,
+          isActive: editBannerForm.isActive,
+          active: editBannerForm.isActive
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'Failed to update banner');
+      }
+
+      setShowEditBannerModal(false);
+      setEditBannerFile(null);
+      fetchBanners();
+    } catch (err) {
+      console.error(err);
+      setEditBannerError(err.message || 'Failed to update banner');
+    } finally {
+      setIsEditingBanner(false);
     }
   };
 
@@ -926,15 +1060,21 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteBanner = async (id) => {
+  const handleDeleteBanner = async (banner) => {
+    setIsDeletingBanner(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/banners/${id}`, {
+      const res = await fetch(`${API_BASE}/admin/banners/${banner._id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) fetchBanners();
+      if (res.ok) {
+        setDeleteBannerModal({ isOpen: false, banner: null });
+        fetchBanners();
+      }
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsDeletingBanner(false);
     }
   };
 
@@ -2715,111 +2855,188 @@ export default function AdminDashboard() {
 
           {/* PROMO BANNERS TAB */}
           {activeSubTab === 'banners' && (
-            <div className="flex flex-col gap-6">
-              <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Dynamic Promo Banners</h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-                {/* Uploader Form */}
-                <div className="md:col-span-1 flex flex-col gap-4">
-                  <h4 className="text-xs font-bold text-main">Add New Banner</h4>
-                  <form onSubmit={handleAddBanner} className="bg-surface border border-line p-5 rounded-3xl shadow-2xs flex flex-col gap-4">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Banner Image File</label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        required
-                        onChange={(e) => setNewBannerFile(e.target.files[0])}
-                        className="bg-base border border-line-strong rounded-xl px-3 py-2 text-xs text-main outline-none w-full font-medium"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Title / Alt Text</label>
-                      <input
-                        type="text"
-                        required
-                        value={newBannerTitle}
-                        onChange={(e) => setNewBannerTitle(e.target.value)}
-                        placeholder="Weekend Bonanza..."
-                        className="bg-base border border-line-strong rounded-xl px-3 py-2 text-xs text-main outline-none w-full font-medium"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Redirect Link (Optional)</label>
-                      <input
-                        type="text"
-                        value={newBannerLink}
-                        onChange={(e) => setNewBannerLink(e.target.value)}
-                        placeholder="/restaurants"
-                        className="bg-base border border-line-strong rounded-xl px-3 py-2 text-xs text-main outline-none w-full font-medium"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={isUploadingBanner}
-                      className="bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3 rounded-xl shadow-md disabled:opacity-50 mt-1 cursor-pointer"
-                    >
-                      {isUploadingBanner ? 'Adding...' : 'Publish Banner'}
-                    </button>
-                  </form>
+            <div className="flex flex-col gap-6 animate-fade-in">
+              {/* Header with Title & Add Banner Button */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
+                <div className="flex flex-col gap-1">
+                  <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2">
+                    <ImagePlus className="w-5 h-5 text-primary" />
+                    Homepage Carousel & Promo Banners
+                  </h3>
+                  <p className="text-xs text-muted font-medium">
+                    Configure customer homepage hero carousel slides, auto-advance sequence, and advertisement status.
+                  </p>
                 </div>
-
-                {/* Active Banners Feed */}
-                <div className="md:col-span-2 flex flex-col gap-4">
-                  <h4 className="text-xs font-bold text-main flex items-center justify-between">
-                    Live Banners Feed
-                    <span className="bg-violet-50 text-primary px-2 py-0.5 rounded-md text-[10px]">{banners.length} Total</span>
-                  </h4>
-
-                  {isBannersLoading ? (
-                    <div className="bg-surface rounded-3xl p-8 border border-line flex items-center justify-center">
-                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    </div>
-                  ) : banners.length > 0 ? (
-                    <div className="flex flex-col gap-4">
-                      {banners.map(banner => (
-                        <div key={banner._id} className="bg-surface border border-line rounded-2xl p-4 flex flex-col sm:flex-row gap-4 shadow-xs items-center">
-                          <div className="w-full sm:w-48 h-24 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 relative">
-                            <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover" />
-                            {!banner.active && (
-                              <div className="absolute inset-0 bg-surface/60 backdrop-blur-[2px] flex items-center justify-center">
-                                <span className="bg-red-50 text-red-600 font-bold text-[10px] px-2 py-0.5 rounded-full border border-red-100 uppercase tracking-wider">Hidden</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex flex-col flex-grow gap-1 w-full">
-                            <h5 className="font-bold text-main text-sm line-clamp-1">{banner.title}</h5>
-                            <p className="text-[10px] text-muted font-semibold mb-2">Link: {banner.link}</p>
-                            <div className="flex gap-2 mt-auto">
-                              <button
-                                onClick={() => handleToggleBanner(banner._id)}
-                                className={`text-[10px] font-bold px-3 py-1.5 rounded-lg flex-1 border transition-colors cursor-pointer ${
-                                  banner.active ? 'bg-violet-50 border-violet-100 text-violet-700 hover:bg-violet-100' : 'bg-green-50 border-green-100 text-green-700 hover:bg-green-100'
-                                }`}
-                              >
-                                {banner.active ? 'Hide Banner' : 'Show Banner'}
-                              </button>
-                              <button
-                                onClick={() => handleDeleteBanner(banner._id)}
-                                className="text-[10px] font-bold px-3 py-1.5 rounded-lg flex-1 bg-red-50 border border-red-100 text-red-600 hover:bg-red-100 transition-colors cursor-pointer"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="bg-surface rounded-3xl p-10 text-center border border-line shadow-2xs">
-                      <ImagePlus className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                      <h4 className="font-display font-extrabold text-sm text-main">No banners active</h4>
-                      <p className="text-xs text-muted font-semibold mt-1 max-w-xs mx-auto">Upload beautiful promotional images to attract customers on the Home page.</p>
-                    </div>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAddBannerForm({
+                      title: '',
+                      subtitle: '',
+                      buttonText: 'Order Now',
+                      link: '/restaurants',
+                      displayOrder: banners.length + 1,
+                      isActive: true,
+                      imageUrl: ''
+                    });
+                    setAddBannerFile(null);
+                    setAddBannerError('');
+                    setShowAddBannerModal(true);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-2xl text-xs font-bold shadow-md shadow-primary/20 transition-all active:scale-95 cursor-pointer self-start sm:self-auto"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add New Banner</span>
+                </button>
               </div>
+
+              {/* Banners Table & Cards */}
+              {isBannersLoading ? (
+                <div className="bg-surface rounded-3xl p-12 border border-line flex flex-col items-center justify-center gap-3">
+                  <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+                  <span className="text-xs font-bold text-muted">Loading promo banners...</span>
+                </div>
+              ) : banners.length > 0 ? (
+                <div className="bg-surface border border-line rounded-3xl overflow-hidden shadow-2xs">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-line bg-base/50 text-[10px] uppercase font-extrabold tracking-wider text-muted">
+                          <th className="py-3.5 px-4">Preview & Title</th>
+                          <th className="py-3.5 px-4">CTA Button & Link</th>
+                          <th className="py-3.5 px-4 text-center">Order</th>
+                          <th className="py-3.5 px-4 text-center">Status</th>
+                          <th className="py-3.5 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line text-xs font-medium">
+                        {banners.map((b, idx) => {
+                          const isActive = b.isActive !== false && b.active !== false;
+                          return (
+                            <tr key={b._id || idx} className="hover:bg-base/30 transition-colors">
+                              {/* Preview & Title */}
+                              <td className="py-3.5 px-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-20 h-12 rounded-xl overflow-hidden bg-base border border-line flex-shrink-0 relative">
+                                    <img
+                                      src={b.imageUrl}
+                                      alt={b.title}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        e.target.src = '/assets/hero_delivery_banner.jpg';
+                                      }}
+                                    />
+                                    {!isActive && (
+                                      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center">
+                                        <span className="text-[9px] font-black text-white/90 uppercase tracking-wider">Hidden</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col min-w-0 max-w-[220px]">
+                                    <span className="font-bold text-main truncate text-xs">{b.title}</span>
+                                    {b.subtitle && (
+                                      <span className="text-[11px] text-muted truncate">{b.subtitle}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* CTA Button & Link */}
+                              <td className="py-3.5 px-4">
+                                <div className="flex flex-col gap-1">
+                                  <span className="inline-flex items-center self-start bg-primary/10 text-primary border border-primary/20 font-bold text-[10px] px-2.5 py-0.5 rounded-full">
+                                    {b.buttonText || 'Order Now'}
+                                  </span>
+                                  <span className="text-[10px] text-muted font-mono truncate max-w-[160px]">
+                                    {b.link || '/restaurants'}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Order */}
+                              <td className="py-3.5 px-4 text-center">
+                                <span className="inline-block bg-base border border-line-strong px-2.5 py-1 rounded-xl text-xs font-bold text-main">
+                                  #{b.displayOrder !== undefined ? b.displayOrder : idx + 1}
+                                </span>
+                              </td>
+
+                              {/* Status Toggle */}
+                              <td className="py-3.5 px-4 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleBanner(b._id)}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer border ${
+                                    isActive
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 hover:bg-emerald-100'
+                                      : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 hover:bg-gray-200'
+                                  }`}
+                                  title={isActive ? 'Click to disable' : 'Click to enable'}
+                                >
+                                  <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
+                                  <span>{isActive ? 'Live on Home' : 'Disabled'}</span>
+                                </button>
+                              </td>
+
+                              {/* Actions */}
+                              <td className="py-3.5 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditBanner(b)}
+                                    className="p-2 text-muted hover:text-primary hover:bg-primary/10 rounded-xl transition-colors cursor-pointer"
+                                    title="Edit Banner"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteBannerModal({ isOpen: true, banner: b })}
+                                    className="p-2 text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-colors cursor-pointer"
+                                    title="Delete Banner"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-surface rounded-3xl p-10 text-center border border-line shadow-2xs flex flex-col items-center gap-3">
+                  <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                    <ImagePlus className="w-7 h-7" />
+                  </div>
+                  <h4 className="font-display font-extrabold text-base text-main">No Custom Banners Configured</h4>
+                  <p className="text-xs text-muted font-medium max-w-sm">
+                    Default system banners are currently active on the customer homepage. Upload custom advertisements to highlight seasonal campaigns and offers.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddBannerForm({
+                        title: '',
+                        subtitle: '',
+                        buttonText: 'Order Now',
+                        link: '/restaurants',
+                        displayOrder: 1,
+                        isActive: true,
+                        imageUrl: ''
+                      });
+                      setAddBannerFile(null);
+                      setAddBannerError('');
+                      setShowAddBannerModal(true);
+                    }}
+                    className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-2xl text-xs font-bold shadow-md shadow-primary/20 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Create First Banner</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -3501,6 +3718,411 @@ export default function AdminDashboard() {
                 className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50"
               >
                 {isDeletingCategory ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADD PROMO BANNER MODAL ────────────────────────────────────── */}
+      {showAddBannerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2">
+                <ImagePlus className="w-4 h-4 text-primary" />
+                Add New Promo Banner
+              </h3>
+              <button onClick={() => setShowAddBannerModal(false)} className="text-muted hover:text-main cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {addBannerError && (
+              <p className="text-[11px] font-bold text-red-500 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-3 py-2 rounded-xl">
+                {addBannerError}
+              </p>
+            )}
+
+            <form onSubmit={handleAddBanner} className="flex flex-col gap-3.5">
+              {/* Title */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Banner Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Hot Deals On Your Favorite Food"
+                  value={addBannerForm.title}
+                  onChange={(e) => setAddBannerForm({ ...addBannerForm, title: e.target.value })}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                />
+              </div>
+
+              {/* Subtitle */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Subtitle / Description
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Enjoy up to 50% discount from top restaurants"
+                  value={addBannerForm.subtitle}
+                  onChange={(e) => setAddBannerForm({ ...addBannerForm, subtitle: e.target.value })}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-medium outline-none focus:border-primary w-full"
+                />
+              </div>
+
+              {/* CTA Button Text & Destination Link */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Button Text
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Order Now"
+                    value={addBannerForm.buttonText}
+                    onChange={(e) => setAddBannerForm({ ...addBannerForm, buttonText: e.target.value })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Destination Link
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="/restaurants"
+                    value={addBannerForm.link}
+                    onChange={(e) => setAddBannerForm({ ...addBannerForm, link: e.target.value })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-mono outline-none focus:border-primary w-full"
+                  />
+                </div>
+              </div>
+
+              {/* Display Order & Status */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Display Order
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="1"
+                    value={addBannerForm.displayOrder}
+                    onChange={(e) => setAddBannerForm({ ...addBannerForm, displayOrder: e.target.value })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Status
+                  </label>
+                  <select
+                    value={addBannerForm.isActive ? 'active' : 'inactive'}
+                    onChange={(e) => setAddBannerForm({ ...addBannerForm, isActive: e.target.value === 'active' })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-bold outline-none focus:border-primary w-full cursor-pointer"
+                  >
+                    <option value="active">Active (Live on Home)</option>
+                    <option value="inactive">Inactive (Hidden/Draft)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Banner Image Upload / URL */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Banner Artwork Image *
+                </label>
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setAddBannerFile(e.target.files[0])}
+                    className="text-xs text-muted file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-bold text-muted">OR</span>
+                    <input
+                      type="url"
+                      placeholder="Image URL (e.g. /assets/cat_food.jpg or https://...)"
+                      value={addBannerForm.imageUrl}
+                      onChange={(e) => setAddBannerForm({ ...addBannerForm, imageUrl: e.target.value })}
+                      className="bg-base border border-line-strong rounded-xl px-3 py-1.5 text-xs text-main font-medium outline-none focus:border-primary flex-1"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview Box */}
+              <div className="flex flex-col gap-1 mt-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Live Carousel Preview
+                </label>
+                <div className="rounded-2xl p-4 bg-gradient-to-r from-[#6B11A9] via-[#85169E] to-[#F43F5E] text-white flex items-center justify-between shadow-inner">
+                  <div className="flex flex-col gap-1 max-w-[65%]">
+                    <span className="font-black text-sm text-[#FFD700] leading-tight line-clamp-1">
+                      {addBannerForm.title || 'Banner Title Preview'}
+                    </span>
+                    <span className="text-[10px] text-white/90 font-medium leading-tight line-clamp-2">
+                      {addBannerForm.subtitle || 'Fresh, reliable deliveries straight to your doorstep!'}
+                    </span>
+                    <span className="mt-1 inline-block bg-[#FFD700] text-gray-900 text-[10px] font-black px-3 py-1 rounded-full self-start shadow-xs">
+                      {addBannerForm.buttonText || 'Order Now'}
+                    </span>
+                  </div>
+                  <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 flex items-center justify-center">
+                    {addBannerFile ? (
+                      <img src={URL.createObjectURL(addBannerFile)} alt="Preview" className="w-full h-full object-cover" />
+                    ) : addBannerForm.imageUrl ? (
+                      <img src={addBannerForm.imageUrl} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/assets/hero_delivery_banner.jpg'; }} />
+                    ) : (
+                      <ImagePlus className="w-6 h-6 text-white/50" />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 mt-2 pt-2 border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setShowAddBannerModal(false)}
+                  className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAddingBanner}
+                  className="flex-1 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isAddingBanner ? 'Uploading & Saving...' : 'Publish Banner'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT PROMO BANNER MODAL ─────────────────────────────────────── */}
+      {showEditBannerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-lg p-6 flex flex-col gap-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-primary" />
+                Edit Promo Banner
+              </h3>
+              <button onClick={() => setShowEditBannerModal(false)} className="text-muted hover:text-main cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {editBannerError && (
+              <p className="text-[11px] font-bold text-red-500 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-3 py-2 rounded-xl">
+                {editBannerError}
+              </p>
+            )}
+
+            <form onSubmit={handleEditBanner} className="flex flex-col gap-3.5">
+              {/* Title */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Banner Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editBannerForm.title}
+                  onChange={(e) => setEditBannerForm({ ...editBannerForm, title: e.target.value })}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                />
+              </div>
+
+              {/* Subtitle */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Subtitle / Description
+                </label>
+                <input
+                  type="text"
+                  value={editBannerForm.subtitle}
+                  onChange={(e) => setEditBannerForm({ ...editBannerForm, subtitle: e.target.value })}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-medium outline-none focus:border-primary w-full"
+                />
+              </div>
+
+              {/* CTA Button Text & Destination Link */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Button Text
+                  </label>
+                  <input
+                    type="text"
+                    value={editBannerForm.buttonText}
+                    onChange={(e) => setEditBannerForm({ ...editBannerForm, buttonText: e.target.value })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Destination Link
+                  </label>
+                  <input
+                    type="text"
+                    value={editBannerForm.link}
+                    onChange={(e) => setEditBannerForm({ ...editBannerForm, link: e.target.value })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-mono outline-none focus:border-primary w-full"
+                  />
+                </div>
+              </div>
+
+              {/* Display Order & Status */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Display Order
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editBannerForm.displayOrder}
+                    onChange={(e) => setEditBannerForm({ ...editBannerForm, displayOrder: e.target.value })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Status
+                  </label>
+                  <select
+                    value={editBannerForm.isActive ? 'active' : 'inactive'}
+                    onChange={(e) => setEditBannerForm({ ...editBannerForm, isActive: e.target.value === 'active' })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2 text-xs text-main font-bold outline-none focus:border-primary w-full cursor-pointer"
+                  >
+                    <option value="active">Active (Live on Home)</option>
+                    <option value="inactive">Inactive (Hidden/Draft)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Banner Image Upload / URL */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Banner Artwork Image
+                </label>
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setEditBannerFile(e.target.files[0])}
+                    className="text-xs text-muted file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-bold text-muted">OR</span>
+                    <input
+                      type="url"
+                      placeholder="Image URL"
+                      value={editBannerForm.imageUrl}
+                      onChange={(e) => setEditBannerForm({ ...editBannerForm, imageUrl: e.target.value })}
+                      className="bg-base border border-line-strong rounded-xl px-3 py-1.5 text-xs text-main font-medium outline-none focus:border-primary flex-1"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview Box */}
+              <div className="flex flex-col gap-1 mt-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Live Carousel Preview
+                </label>
+                <div className="rounded-2xl p-4 bg-gradient-to-r from-[#6B11A9] via-[#85169E] to-[#F43F5E] text-white flex items-center justify-between shadow-inner">
+                  <div className="flex flex-col gap-1 max-w-[65%]">
+                    <span className="font-black text-sm text-[#FFD700] leading-tight line-clamp-1">
+                      {editBannerForm.title || 'Banner Title'}
+                    </span>
+                    <span className="text-[10px] text-white/90 font-medium leading-tight line-clamp-2">
+                      {editBannerForm.subtitle || 'Fresh, reliable deliveries straight to your doorstep!'}
+                    </span>
+                    <span className="mt-1 inline-block bg-[#FFD700] text-gray-900 text-[10px] font-black px-3 py-1 rounded-full self-start shadow-xs">
+                      {editBannerForm.buttonText || 'Order Now'}
+                    </span>
+                  </div>
+                  <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 flex items-center justify-center">
+                    {editBannerFile ? (
+                      <img src={URL.createObjectURL(editBannerFile)} alt="Preview" className="w-full h-full object-cover" />
+                    ) : editBannerForm.imageUrl ? (
+                      <img src={editBannerForm.imageUrl} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/assets/hero_delivery_banner.jpg'; }} />
+                    ) : (
+                      <ImagePlus className="w-6 h-6 text-white/50" />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 mt-2 pt-2 border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setShowEditBannerModal(false)}
+                  className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isEditingBanner}
+                  className="flex-1 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isEditingBanner ? 'Updating...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE PROMO BANNER CONFIRMATION MODAL ──────────────────────── */}
+      {deleteBannerModal.isOpen && deleteBannerModal.banner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 dark:bg-red-950/40 text-red-600 flex items-center justify-center mx-auto border border-red-100 dark:border-red-900">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <h3 className="font-display font-extrabold text-base text-main">
+                Delete Banner?
+              </h3>
+              <p className="text-xs text-muted">
+                Are you sure you want to remove <span className="font-bold text-main">"{deleteBannerModal.banner.title}"</span> from the carousel?
+              </p>
+            </div>
+
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteBannerModal({ isOpen: false, banner: null })}
+                className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingBanner}
+                onClick={() => handleDeleteBanner(deleteBannerModal.banner)}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingBanner ? 'Deleting...' : 'Delete Banner'}
               </button>
             </div>
           </div>
