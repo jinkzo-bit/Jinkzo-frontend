@@ -15,9 +15,6 @@ import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import OrderTracking from './pages/OrderTracking';
 import Profile from './pages/Profile';
-import Orders from './pages/Orders';
-import Wallet from './pages/Wallet';
-import Favourites from './pages/Favourites';
 import LoginSignup from './pages/LoginSignup';
 import ForgotPassword from './pages/ForgotPassword';
 import DeliveryPortal from './pages/DeliveryPortal';
@@ -25,13 +22,6 @@ import RestaurantDashboard from './pages/RestaurantDashboard';
 import DeliveryDashboard from './pages/DeliveryDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import RideBooking from './pages/RideBooking';
-
-// New Super-App Pages
-import AllServices from './pages/customer/AllServices';
-import Grocery from './pages/customer/Grocery';
-import HotCool from './pages/customer/HotCool';
-import VegFruits from './pages/customer/VegFruits';
-import Meat from './pages/customer/Meat';
 
 import { useAuthStore } from './store/authStore';
 import { useCartStore } from './store/cartStore';
@@ -108,24 +98,6 @@ export default function App() {
                   <Profile />
                 </ProtectedRoute>
               } />
-              <Route path="/orders" element={
-                <ProtectedRoute>
-                  <Orders />
-                </ProtectedRoute>
-              } />
-              <Route path="/wallet" element={
-                <ProtectedRoute>
-                  <Wallet />
-                </ProtectedRoute>
-              } />
-              <Route path="/favourites" element={<Favourites />} />
-              
-              {/* Super-App Services */}
-              <Route path="/customer/services" element={<AllServices />} />
-              <Route path="/customer/grocery" element={<Grocery />} />
-              <Route path="/customer/hot-cool" element={<HotCool />} />
-              <Route path="/customer/veg-fruits" element={<VegFruits />} />
-              <Route path="/customer/meat" element={<Meat />} />
               <Route path="/login" element={<LoginSignup />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/delivery" element={<DeliveryPortal />} />
