@@ -2,11 +2,12 @@ import { API_BASE } from '../config/api';
 import { io } from 'socket.io-client';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
+import {
   ShieldAlert, DollarSign, ShoppingBag, Users, Store, Bike, CheckCircle, Check,
-  XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare, 
+  XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare,
   AlertCircle, ChevronLeft, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2,
-  Pencil, Plus, UserCircle, Activity, FileText, Star, TrendingUp, Search, Menu, Filter, Info, Shield, RefreshCw
+  Pencil, Plus, UserCircle, Activity, FileText, Star, TrendingUp, Search, Menu, Filter, Info, Shield, RefreshCw,
+  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical
 } from 'lucide-react';
 import InteractiveMap from '../components/InteractiveMap';
 import { useAuthStore } from '../store/authStore';
@@ -112,6 +113,25 @@ export default function AdminDashboard() {
   const [appliedDateFilter, setAppliedDateFilter] = useState({ type: 'all', start: '', end: '' });
   const [calendarViewDate, setCalendarViewDate] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; });
 
+  // Category Management
+  const [categoriesList, setCategoriesList] = useState([]);
+  const [selectedCategoryService, setSelectedCategoryService] = useState('food');
+  const [isCategoriesLoading, setIsCategoriesLoading] = useState(true);
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [addCategoryForm, setAddCategoryForm] = useState({ name: '', image: '', dashboardType: 'food', displayOrder: '', isActive: true });
+  const [addCategoryFile, setAddCategoryFile] = useState(null);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [addCategoryError, setAddCategoryError] = useState('');
+
+  const [showEditCategoryModal, setShowEditCategoryModal] = useState(false);
+  const [editCategoryForm, setEditCategoryForm] = useState({ _id: '', name: '', image: '', dashboardType: 'food', displayOrder: 1, isActive: true });
+  const [editCategoryFile, setEditCategoryFile] = useState(null);
+  const [isEditingCategory, setIsEditingCategory] = useState(false);
+  const [editCategoryError, setEditCategoryError] = useState('');
+
+  const [deleteCategoryModal, setDeleteCategoryModal] = useState({ isOpen: false, category: null, warningMessage: '', hasProducts: false, count: 0 });
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+
   // Platform Settings updating state
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
 
@@ -128,6 +148,7 @@ export default function AdminDashboard() {
     fetchAllOrders();
     fetchRestaurants();
     fetchBanners();
+    fetchCategories();
 
     const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
     const socket = io(socketHost, {
@@ -135,7 +156,7 @@ export default function AdminDashboard() {
       withCredentials: true,
       transports: ['websocket', 'polling']
     });
-    
+
     socket.on('connect', () => {
       socket.emit('join', 'admin_room');
     });
@@ -278,6 +299,187 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchCategories = async (service = selectedCategoryService) => {
+    try {
+      setIsCategoriesLoading(true);
+      const queryParam = service && service !== 'all' ? `?service=${service}` : '';
+      const res = await fetch(`${API_BASE}/admin/categories${queryParam}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCategoriesList(data);
+      }
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+    } finally {
+      setIsCategoriesLoading(false);
+    }
+  };
+
+  const handleAddCategory = async (e) => {
+    e.preventDefault();
+    setIsAddingCategory(true);
+    setAddCategoryError('');
+    try {
+      let imageUrl = addCategoryForm.image;
+      if (addCategoryFile) {
+        imageUrl = await uploadFileToBackend(addCategoryFile);
+      }
+      if (!imageUrl) {
+        setAddCategoryError('Category image or file upload is required');
+        setIsAddingCategory(false);
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/admin/categories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: addCategoryForm.name,
+          image: imageUrl,
+          dashboardType: addCategoryForm.dashboardType,
+          displayOrder: addCategoryForm.displayOrder ? Number(addCategoryForm.displayOrder) : undefined,
+          isActive: addCategoryForm.isActive
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setAddCategoryError(data.message || 'Failed to add category');
+      } else {
+        setShowAddCategoryModal(false);
+        setAddCategoryForm({ name: '', image: '', dashboardType: selectedCategoryService !== 'all' ? selectedCategoryService : 'food', displayOrder: '', isActive: true });
+        setAddCategoryFile(null);
+        fetchCategories(selectedCategoryService);
+      }
+    } catch (err) {
+      setAddCategoryError('Network error adding category');
+    } finally {
+      setIsAddingCategory(false);
+    }
+  };
+
+  const handleEditCategory = async (e) => {
+    e.preventDefault();
+    setIsEditingCategory(true);
+    setEditCategoryError('');
+    try {
+      let imageUrl = editCategoryForm.image;
+      if (editCategoryFile) {
+        imageUrl = await uploadFileToBackend(editCategoryFile);
+      }
+
+      const res = await fetch(`${API_BASE}/admin/categories/${editCategoryForm._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: editCategoryForm.name,
+          image: imageUrl,
+          dashboardType: editCategoryForm.dashboardType,
+          displayOrder: Number(editCategoryForm.displayOrder),
+          isActive: editCategoryForm.isActive
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setEditCategoryError(data.message || 'Failed to update category');
+      } else {
+        setShowEditCategoryModal(false);
+        setEditCategoryFile(null);
+        fetchCategories(selectedCategoryService);
+      }
+    } catch (err) {
+      setEditCategoryError('Network error updating category');
+    } finally {
+      setIsEditingCategory(false);
+    }
+  };
+
+  const handleToggleCategoryStatus = async (cat) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/categories/${cat._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ isActive: !cat.isActive })
+      });
+      if (res.ok) {
+        fetchCategories(selectedCategoryService);
+      }
+    } catch (err) {
+      console.error('Toggle status error:', err);
+    }
+  };
+
+  const handleMoveCategory = async (cat, direction) => {
+    const filtered = categoriesList.filter(c => selectedCategoryService === 'all' || c.dashboardType === selectedCategoryService);
+    const idx = filtered.findIndex(c => c._id === cat._id);
+    if (idx === -1) return;
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= filtered.length) return;
+
+    const newOrdered = [...filtered];
+    const temp = newOrdered[idx];
+    newOrdered[idx] = newOrdered[targetIdx];
+    newOrdered[targetIdx] = temp;
+
+    const orderedIds = newOrdered.map(c => c._id);
+    try {
+      await fetch(`${API_BASE}/admin/categories/reorder`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ orderedIds })
+      });
+      fetchCategories(selectedCategoryService);
+    } catch (err) {
+      console.error('Reorder error:', err);
+    }
+  };
+
+  const handleDeleteCategory = async (cat, force = false) => {
+    setIsDeletingCategory(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/categories/${cat._id}?force=${force}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.hasProducts) {
+          setDeleteCategoryModal({
+            isOpen: true,
+            category: cat,
+            hasProducts: true,
+            count: data.count,
+            warningMessage: data.message
+          });
+        } else {
+          alert(data.message || 'Failed to delete category');
+        }
+      } else {
+        setDeleteCategoryModal({ isOpen: false, category: null, warningMessage: '', hasProducts: false, count: 0 });
+        fetchCategories(selectedCategoryService);
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+    } finally {
+      setIsDeletingCategory(false);
+    }
+  };
+
   const fetchRestaurants = async () => {
     try {
       const res = await fetch(`${API_BASE}/restaurants`);
@@ -294,7 +496,7 @@ export default function AdminDashboard() {
     let list = [...ordersList];
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    
+
     if (analyticsAppliedDateFilter.type === 'today') {
       list = list.filter(o => {
         const t = new Date(o.createdAt).getTime();
@@ -355,7 +557,7 @@ export default function AdminDashboard() {
     let cod = 0;
     const restaurantOrders = allOrders.filter(o => String(o.restaurantId) === String(restaurantId));
     const dateFilteredOrders = getOrdersByDateForAnalytics(restaurantOrders);
-    
+
     dateFilteredOrders.forEach(order => {
       const amount = (order.total || 0) * 0.85; // 85% is net earnings for restaurant
       const method = order.paymentDetails?.method || 'COD';
@@ -363,7 +565,7 @@ export default function AdminDashboard() {
       else if (method === 'Card') card += amount;
       else if (method === 'COD') cod += amount;
     });
-    
+
     return { upi, card, cod, total: upi + card + cod };
   };
 
@@ -688,7 +890,7 @@ export default function AdminDashboard() {
   const handleAddBanner = async (e) => {
     e.preventDefault();
     if (!newBannerFile) return alert('Please select an image file');
-    
+
     setIsUploadingBanner(true);
     try {
       const uploadedImageUrl = await uploadFileToBackend(newBannerFile);
@@ -848,7 +1050,7 @@ export default function AdminDashboard() {
     let list = Array.isArray(ordersList) ? [...ordersList] : [];
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    
+
     if (appliedDateFilter.type === 'today') {
       list = list.filter(o => {
         const t = new Date(o.createdAt).getTime();
@@ -893,7 +1095,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 pb-32 animate-fade-in flex flex-col gap-8 w-full mt-4">
-      
+
       {/* Super Admin Control Center Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-5">
         <div className="flex items-center gap-3">
@@ -917,8 +1119,8 @@ export default function AdminDashboard() {
             <UserCircle className="w-4 h-4" /> Edit Profile
           </button>
           <span className={`text-[10px] font-extrabold px-3.5 py-1 rounded-full border flex items-center gap-1.5 ${
-            platformSettings.isOpen 
-              ? 'bg-green-50 border-green-200 text-green-700' 
+            platformSettings.isOpen
+              ? 'bg-green-50 border-green-200 text-green-700'
               : 'bg-red-50 border-red-200 text-red-700 animate-pulse'
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full ${platformSettings.isOpen ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -971,11 +1173,12 @@ export default function AdminDashboard() {
 
       {/* Main Tab System Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-        
+
         {/* Left Side: Navigation Tabs Menu */}
         <div className="lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex flex-col gap-1">
           {[
             { id: 'analytics', label: 'Ecosystem Analytics', icon: DollarSign },
+            { id: 'categories', label: 'Categories', icon: Layers, badge: categoriesList.length },
             { id: 'kyc', label: 'KYC Document Approvals', icon: ShieldCheck, badge: pendingKyc.length },
             { id: 'users', label: 'User Directory Manager', icon: Users, badge: allUsers.length },
             { id: 'orders', label: 'All Orders History', icon: ShoppingBag, badge: allOrders.length },
@@ -992,8 +1195,8 @@ export default function AdminDashboard() {
                 key={tab.id}
                 onClick={() => setActiveSubTab(tab.id)}
                 className={`w-full p-3 rounded-2xl flex items-center justify-between text-left font-bold text-xs transition-all cursor-pointer ${
-                  active 
-                    ? 'bg-primary text-white shadow-xs' 
+                  active
+                    ? 'bg-primary text-white shadow-xs'
                     : 'text-muted hover:bg-base hover:text-main'
                 }`}
               >
@@ -1015,12 +1218,12 @@ export default function AdminDashboard() {
 
         {/* Right Side: Tab Contents Body */}
         <div className="lg:col-span-3">
-          
+
           {/* ECOSYSTEM ANALYTICS TAB */}
           {activeSubTab === 'analytics' && (
             <div className="flex flex-col gap-6">
               <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Ecosystem Analytics</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Customers summary */}
                 <div className="bg-surface border border-line rounded-3xl p-5 shadow-2xs flex items-center gap-4">
@@ -1068,8 +1271,8 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase ${
-                    adminFoodAvailable 
-                      ? 'bg-green-50 border-green-200 text-green-700' 
+                    adminFoodAvailable
+                      ? 'bg-green-50 border-green-200 text-green-700'
                       : 'bg-red-50 border-red-200 text-red-700 animate-pulse'
                   }`}>
                     {adminFoodAvailable ? '🟢 Active (Riders Online)' : '🔴 Offline (No available riders)'}
@@ -1086,8 +1289,8 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg border uppercase ${
-                    adminRideAvailable 
-                      ? 'bg-yellow-50 border-yellow-250 text-yellow-800' 
+                    adminRideAvailable
+                      ? 'bg-yellow-50 border-yellow-250 text-yellow-800'
                       : 'bg-red-50 border-red-200 text-red-700 animate-pulse'
                   }`}>
                     {adminRideAvailable ? '🟢 Active (Motorized Riders)' : '🔴 Offline (No motorized riders)'}
@@ -1121,7 +1324,7 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="bg-violet-50/20 border border-violet-100 p-4 rounded-2xl text-xs font-semibold text-muted mt-2 leading-relaxed">
-                  <span className="text-primary font-bold">Billing Architecture: </span> 
+                  <span className="text-primary font-bold">Billing Architecture: </span>
                   Jinkzo processes digital payment collections and disperses funds daily. Platform splits commissions seamlessly across all active food ordering channels based on configured system parameters.
                 </div>
               </div>
@@ -1133,7 +1336,7 @@ export default function AdminDashboard() {
                     <h4 className="font-display font-extrabold text-sm text-main">Restaurant Payments Breakdown</h4>
                     <p className="text-[10px] text-muted font-semibold font-bold">Separate payment methods (UPI, Card, COD) and net payout totals for all registered restaurant kitchens.</p>
                   </div>
-                  
+
                   {/* Date range picker selector */}
                   <div className="relative flex-shrink-0">
                     <button
@@ -1186,7 +1389,7 @@ export default function AdminDashboard() {
                               setAnalyticsAppliedDateFilter({ type: 'custom', start: dateStr, end: dateStr });
                               setAnalyticsShowDatePicker(false);
                             })}
-                            
+
                             {analyticsDateFilterType === 'custom' && (
                               <div className="flex gap-2">
                                 <div className="flex flex-col gap-0.5 flex-grow">
@@ -1295,7 +1498,7 @@ export default function AdminDashboard() {
           {activeSubTab === 'kyc' && (
             <div className="flex flex-col gap-4 animate-scale-up">
               <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">KYC Validation Center</h3>
-              
+
               {isKycLoading ? (
                 <div className="h-48 bg-surface border border-line rounded-3xl animate-pulse" />
               ) : pendingKyc.length > 0 ? (
@@ -1338,7 +1541,7 @@ export default function AdminDashboard() {
                           onChange={(e) => setKycRemarks({ ...kycRemarks, [user._id]: e.target.value })}
                           className="bg-base border border-line-strong rounded-xl px-4 py-2.5 text-xs text-main outline-none flex-grow w-full"
                         />
-                        
+
                         <div className="flex gap-2 flex-shrink-0 w-full sm:w-auto">
                           <button
                             onClick={() => handleKycStatus(user._id, 'Approved')}
@@ -1388,8 +1591,8 @@ export default function AdminDashboard() {
                         setRiderAvailabilityFilter('all');
                       }}
                       className={`text-[9px] font-bold px-3 py-1.5 rounded-lg border transition-colors cursor-pointer ${
-                        userRoleFilter === filter.id 
-                          ? 'bg-primary text-white border-primary shadow-xs' 
+                        userRoleFilter === filter.id
+                          ? 'bg-primary text-white border-primary shadow-xs'
                           : 'bg-surface text-muted border-line-strong hover:bg-base'
                       }`}
                     >
@@ -1420,8 +1623,8 @@ export default function AdminDashboard() {
                       key={subFilter.id}
                       onClick={() => setRiderAvailabilityFilter(subFilter.id)}
                       className={`text-[9px] font-extrabold px-3 py-1.8 rounded-lg border transition-all cursor-pointer ${
-                        riderAvailabilityFilter === subFilter.id 
-                          ? 'bg-yellow-400 text-black border-yellow-400 shadow-3xs' 
+                        riderAvailabilityFilter === subFilter.id
+                          ? 'bg-yellow-400 text-black border-yellow-400 shadow-3xs'
                           : 'bg-surface text-muted border-gray-250 hover:bg-base'
                       }`}
                     >
@@ -1430,7 +1633,7 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               )}
- 
+
               {isUsersLoading ? (
                 <div className="h-48 bg-surface border border-line rounded-3xl animate-pulse" />
               ) : filteredUsers.length > 0 ? (
@@ -1443,8 +1646,8 @@ export default function AdminDashboard() {
                     const vehicleType = u.deliveryDetails?.vehicleType || 'Bicycle';
 
                     return (
-                      <div 
-                        key={u._id} 
+                      <div
+                        key={u._id}
                         className={`bg-surface border border-line p-5 rounded-3xl shadow-2xs flex flex-col gap-4 relative group hover:shadow-xs transition-all duration-300 ${
                           isRider ? 'md:col-span-2' : ''
                         }`}
@@ -1465,7 +1668,7 @@ export default function AdminDashboard() {
                             <span className="text-[10px] text-muted font-semibold">{u.email}</span>
                             <span className="text-[9px] text-muted font-mono mt-0.5">{u.phone}</span>
                           </div>
- 
+
                           {/* Block / Edit / Delete Controls */}
                           {u.role !== 'admin' && (
                             <div className="flex items-center gap-1.5">
@@ -1480,8 +1683,8 @@ export default function AdminDashboard() {
                                 onClick={() => handleToggleBlockUser(u._id)}
                                 disabled={blockingUserId === u._id || deletingUserId === u._id}
                                 className={`p-2 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
-                                  u.isBlocked 
-                                    ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' 
+                                  u.isBlocked
+                                    ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
                                     : 'bg-base text-muted border-line-strong hover:text-red-500 hover:border-red-200'
                                 }`}
                                 title={u.isBlocked ? "Unblock Account" : "Block Account"}
@@ -1510,8 +1713,8 @@ export default function AdminDashboard() {
                                 <button
                                   onClick={() => handleUpdateRiderDetails(u._id, { isAvailable: !isOnline })}
                                   className={`text-[9px] font-black px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                                    isOnline 
-                                      ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 shadow-3xs' 
+                                    isOnline
+                                      ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 shadow-3xs'
                                       : 'bg-surface border-gray-250 text-muted hover:bg-base'
                                   }`}
                                 >
@@ -1539,8 +1742,8 @@ export default function AdminDashboard() {
                               <button
                                 onClick={() => handleUpdateRiderDetails(u._id, { activeFoodDelivery: !(u.deliveryDetails?.activeFoodDelivery !== false) })}
                                 className={`text-[8px] font-extrabold px-2 py-1 rounded-lg border flex items-center gap-1 transition-all cursor-pointer ${
-                                  isFoodActive 
-                                    ? 'bg-green-50 border-green-200 text-green-700 font-black hover:bg-green-100 shadow-3xs' 
+                                  isFoodActive
+                                    ? 'bg-green-50 border-green-200 text-green-700 font-black hover:bg-green-100 shadow-3xs'
                                     : 'bg-base border-line-strong text-muted font-bold hover:bg-surface'
                                 }`}
                               >
@@ -1552,7 +1755,7 @@ export default function AdminDashboard() {
                               <button
                                 onClick={() => handleUpdateRiderDetails(u._id, { activeRide: !(u.deliveryDetails?.activeRide !== false) })}
                                 className={`text-[8px] font-extrabold px-2 py-1 rounded-lg border flex items-center gap-1 transition-all cursor-pointer ${
-                                  isRideActive 
+                                  isRideActive
                                     ? 'bg-yellow-50 border-yellow-200 text-yellow-850 font-black hover:bg-yellow-100 shadow-3xs'
                                     : 'bg-base border-line-strong text-muted font-bold hover:bg-surface'
                                 }`}
@@ -1606,7 +1809,7 @@ export default function AdminDashboard() {
             <div className="flex flex-col gap-4 animate-scale-up">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-2">
                 <h3 className="font-display font-extrabold text-base text-main">All Platform Orders History</h3>
-                
+
                 {/* Date range picker selector */}
                 <div className="relative">
                   <button
@@ -1659,7 +1862,7 @@ export default function AdminDashboard() {
                             setAppliedDateFilter({ type: 'custom', start: dateStr, end: dateStr });
                             setShowDatePicker(false);
                           })}
-                          
+
                           {dateFilterType === 'custom' && (
                             <div className="flex gap-2">
                               <div className="flex flex-col gap-0.5 flex-grow">
@@ -1768,7 +1971,7 @@ export default function AdminDashboard() {
                               </div>
                               <span className="text-[9px] font-black px-2 py-0.5 rounded uppercase border bg-red-50 border-red-200 text-red-700">Ready for Pickup</span>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold text-muted">
                               <div className="flex flex-col gap-0.5">
                                 <span className="uppercase font-extrabold text-red-400">Restaurant</span>
@@ -1781,7 +1984,7 @@ export default function AdminDashboard() {
                                 <span>{order.customerPhone || order.customerEmail}</span>
                               </div>
                             </div>
-                            
+
                             {/* Items details */}
                             {Array.isArray(order.items) && order.items.length > 0 && (
                               <div className="flex flex-col gap-1 py-1 px-1 bg-base/50 rounded-lg">
@@ -1795,7 +1998,7 @@ export default function AdminDashboard() {
                             )}
 
                             <div className="pt-2 flex gap-2">
-                              <select 
+                              <select
                                 value={selectedRiders[order._id] || ''}
                                 onChange={(e) => setSelectedRiders(prev => ({...prev, [order._id]: e.target.value}))}
                                 className="flex-1 bg-base border border-line-strong rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-400"
@@ -1805,7 +2008,7 @@ export default function AdminDashboard() {
                                   <option key={rider._id} value={rider._id}>{rider.name} ({rider.phone})</option>
                                 ))}
                               </select>
-                              <button 
+                              <button
                                 onClick={() => selectedRiders[order._id] && handleAssignRider(order._id, selectedRiders[order._id])}
                                 disabled={!selectedRiders[order._id]}
                                 className="px-4 py-2 bg-red-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 hover:bg-red-700"
@@ -1841,7 +2044,7 @@ export default function AdminDashboard() {
                               </div>
                               <span className="text-[9px] font-black px-2 py-0.5 rounded uppercase border bg-yellow-50 border-yellow-200 text-yellow-700">Needs Captain</span>
                             </div>
-                            
+
                             <div className="grid grid-cols-1 gap-2 text-[10px] font-semibold text-muted">
                               <div className="flex flex-col gap-0.5">
                                 <span className="uppercase font-extrabold text-yellow-500">Customer Details</span>
@@ -1858,9 +2061,9 @@ export default function AdminDashboard() {
                                 </span>
                               </div>
                             </div>
-                            
+
                             <div className="pt-2 flex gap-2">
-                              <select 
+                              <select
                                 value={selectedCaptains[order._id] || ''}
                                 onChange={(e) => setSelectedCaptains(prev => ({...prev, [order._id]: e.target.value}))}
                                 className="flex-1 bg-base border border-line-strong rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-yellow-400"
@@ -1870,7 +2073,7 @@ export default function AdminDashboard() {
                                   <option key={captain._id} value={captain._id}>{captain.name} ({captain.phone})</option>
                                 ))}
                               </select>
-                              <button 
+                              <button
                                 onClick={() => selectedCaptains[order._id] && handleAssignCaptain(order._id, selectedCaptains[order._id])}
                                 disabled={!selectedCaptains[order._id]}
                                 className="px-4 py-2 bg-yellow-500 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 hover:bg-yellow-600"
@@ -1957,7 +2160,7 @@ export default function AdminDashboard() {
                       {/* Map Tracking for Active Rides */}
                       {order.orderType === 'ride' && ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Pickup', 'Picked_Up', 'Out for Delivery', 'Out_for_Delivery'].includes(order.status) && (
                         <div className="rounded-2xl overflow-hidden border border-line mt-2">
-                          <InteractiveMap 
+                          <InteractiveMap
                             status={order.status}
                             isRide={true}
                             orderId={order._id}
@@ -1989,8 +2192,8 @@ export default function AdminDashboard() {
                         <div className="bg-green-50/20 border border-green-100 rounded-2xl p-4 text-xs font-semibold text-green-955 flex flex-col gap-1.5">
                           <div className="flex items-center gap-1">
                             {[1, 2, 3, 4, 5].map((star) => (
-                              <span 
-                                key={star} 
+                              <span
+                                key={star}
                                 className={`text-sm ${
                                   star <= order.review.rating ? 'text-yellow-500' : 'text-gray-300'
                                 }`}
@@ -2052,7 +2255,7 @@ export default function AdminDashboard() {
           {activeSubTab === 'withdrawals' && (
             <div className="flex flex-col gap-4">
               <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Rider Payout Requests</h3>
-              
+
               {isWithdrawalsLoading ? (
                 <div className="h-48 bg-surface border border-line rounded-3xl animate-pulse" />
               ) : withdrawals.length > 0 ? (
@@ -2075,7 +2278,7 @@ export default function AdminDashboard() {
                           <span className="text-sm font-black text-main">₹{w.amount}</span>
                           <p className="text-[9px] text-muted font-semibold">Immediate Cashout</p>
                         </div>
-                        
+
                         {w.status === 'Pending' && (
                           <button
                             onClick={() => handleApproveWithdrawal(w._id)}
@@ -2103,7 +2306,7 @@ export default function AdminDashboard() {
           {activeSubTab === 'complaints' && (
             <div className="flex flex-col gap-4">
               <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Support Tickets Desk</h3>
-              
+
               {isComplaintsLoading ? (
                 <div className="h-48 skeleton rounded-3xl" />
               ) : complaints.length > 0 ? (
@@ -2119,14 +2322,14 @@ export default function AdminDashboard() {
                           c.status === 'Resolved' ? 'bg-green-100 text-green-700' : 'bg-red-150 text-red-600 animate-pulse'
                         }`}>{c.status}</span>
                       </div>
-                      
+
                       <div className="text-xs leading-relaxed font-semibold text-muted my-1">
                         "{c.message}"
                       </div>
-                      
+
                       <div className="border-t border-line pt-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                         <span className="text-[10px] text-muted font-semibold">Submitted by {c.customerName} ({c.email})</span>
-                        
+
                         {c.status === 'Open' && (
                           <button
                             onClick={() => handleResolveComplaint(c._id)}
@@ -2154,7 +2357,7 @@ export default function AdminDashboard() {
           {activeSubTab === 'coupons' && (
             <div className="flex flex-col gap-4">
               <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Platform Discounts & Coupons</h3>
-              
+
               {/* Add Platform Coupon */}
               <form onSubmit={handleCreateCoupon} className="bg-base border border-gray-150 p-4 rounded-3xl flex gap-3 flex-wrap items-end">
                 <div className="flex flex-col gap-1">
@@ -2225,7 +2428,7 @@ export default function AdminDashboard() {
           {activeSubTab === 'settings' && (
             <div className="flex flex-col gap-4">
               <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Platform Global Parameters</h3>
-              
+
               <form onSubmit={handleSaveSettings} className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="flex flex-col gap-1">
@@ -2264,7 +2467,7 @@ export default function AdminDashboard() {
                             </div>
                             <div>
                               <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Fee (₹)</label>
-                              <input type="number" 
+                              <input type="number"
                                 value={platformSettings?.foodDeliveryPricing?.[tier]?.fee || defaults[idx].fee}
                                 onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, [tier]: { ...platformSettings.foodDeliveryPricing?.[tier], fee: parseFloat(e.target.value) } } })}
                                 className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
@@ -2299,7 +2502,7 @@ export default function AdminDashboard() {
                             </div>
                             <div>
                               <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Fee (₹)</label>
-                              <input type="number" 
+                              <input type="number"
                                 value={platformSettings?.rideBikePricing?.[tier]?.fee || defaults[idx].fee}
                                 onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], fee: parseFloat(e.target.value) } } })}
                                 className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
@@ -2335,7 +2538,7 @@ export default function AdminDashboard() {
                             </div>
                             <div>
                               <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Fee (₹)</label>
-                              <input type="number" 
+                              <input type="number"
                                 value={platformSettings?.rideAutoPricing?.[tier]?.fee || defaults[idx].fee}
                                 onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], fee: parseFloat(e.target.value) } } })}
                                 className="bg-base border border-line-strong rounded-lg px-2 py-2 text-[10px] font-bold w-full"
@@ -2350,7 +2553,7 @@ export default function AdminDashboard() {
                   <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3">
                     <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500" />Ride Services & Multi-Order Grouping</h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      
+
                       <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox"
@@ -2514,9 +2717,9 @@ export default function AdminDashboard() {
           {activeSubTab === 'banners' && (
             <div className="flex flex-col gap-6">
               <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Dynamic Promo Banners</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
+
                 {/* Uploader Form */}
                 <div className="md:col-span-1 flex flex-col gap-4">
                   <h4 className="text-xs font-bold text-main">Add New Banner</h4>
@@ -2568,7 +2771,7 @@ export default function AdminDashboard() {
                     Live Banners Feed
                     <span className="bg-violet-50 text-primary px-2 py-0.5 rounded-md text-[10px]">{banners.length} Total</span>
                   </h4>
-                  
+
                   {isBannersLoading ? (
                     <div className="bg-surface rounded-3xl p-8 border border-line flex items-center justify-center">
                       <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -2616,6 +2819,239 @@ export default function AdminDashboard() {
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── CATEGORY MANAGEMENT TAB ──────────────────────────────────── */}
+          {activeSubTab === 'categories' && (
+            <div className="flex flex-col gap-6 animate-fade-in">
+              {/* Header with Dashboard Service Selector & Add Category Button */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
+                <div className="flex flex-col gap-1">
+                  <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2">
+                    <Layers className="w-5 h-5 text-primary" />
+                    Category Management
+                  </h3>
+                  <p className="text-xs text-muted font-medium">
+                    Manage circular categories, display orders, images, and live visibility for each service.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {/* Dashboard / Service Selector */}
+                  <div className="flex items-center gap-2 bg-base border border-line-strong rounded-xl px-3 py-2 shadow-2xs">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">Service:</span>
+                    <select
+                      value={selectedCategoryService}
+                      onChange={(e) => {
+                        setSelectedCategoryService(e.target.value);
+                        fetchCategories(e.target.value);
+                      }}
+                      className="bg-transparent text-xs font-black text-main outline-none cursor-pointer"
+                    >
+                      <option value="food">Food</option>
+                      <option value="cool_hot">Cool & Hot</option>
+                      <option value="grocery">Grocery</option>
+                      <option value="veg_fruits">Veg & Fruits</option>
+                      <option value="meat">Meat</option>
+                      <option value="all">All Services</option>
+                    </select>
+                  </div>
+
+                  {/* Add Category Button */}
+                  <button
+                    onClick={() => {
+                      setAddCategoryForm({
+                        name: '',
+                        image: '',
+                        dashboardType: selectedCategoryService !== 'all' ? selectedCategoryService : 'food',
+                        displayOrder: categoriesList.filter(c => selectedCategoryService === 'all' || c.dashboardType === selectedCategoryService).length + 1,
+                        isActive: true
+                      });
+                      setAddCategoryFile(null);
+                      setAddCategoryError('');
+                      setShowAddCategoryModal(true);
+                    }}
+                    className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Add Category</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Category Table */}
+              <div className="bg-surface border border-line rounded-3xl overflow-hidden shadow-2xs">
+                {isCategoriesLoading ? (
+                  <div className="p-12 flex items-center justify-center">
+                    <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : categoriesList.filter(c => selectedCategoryService === 'all' || c.dashboardType === selectedCategoryService).length === 0 ? (
+                  <div className="p-12 text-center flex flex-col items-center gap-3">
+                    <Layers className="w-12 h-12 text-muted/40" />
+                    <p className="text-sm font-bold text-main">No categories found for this service.</p>
+                    <button
+                      onClick={() => {
+                        setAddCategoryForm({
+                          name: '',
+                          image: '',
+                          dashboardType: selectedCategoryService !== 'all' ? selectedCategoryService : 'food',
+                          displayOrder: 1,
+                          isActive: true
+                        });
+                        setAddCategoryFile(null);
+                        setAddCategoryError('');
+                        setShowAddCategoryModal(true);
+                      }}
+                      className="text-xs font-bold text-primary hover:underline cursor-pointer"
+                    >
+                      Click here to add the first category
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-line bg-base/50 text-[10px] uppercase font-black tracking-wider text-muted">
+                          <th className="py-3.5 px-4 w-12 text-center">Order</th>
+                          <th className="py-3.5 px-4 w-16">Image</th>
+                          <th className="py-3.5 px-4">Category</th>
+                          <th className="py-3.5 px-4">Dashboard / Service</th>
+                          <th className="py-3.5 px-4 text-center">Status</th>
+                          <th className="py-3.5 px-4 text-center w-20">Seq #</th>
+                          <th className="py-3.5 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {categoriesList
+                          .filter(c => selectedCategoryService === 'all' || c.dashboardType === selectedCategoryService)
+                          .map((cat, idx, arr) => (
+                            <tr key={cat._id} className="hover:bg-base/30 transition-colors">
+                              {/* Reorder Buttons */}
+                              <td className="py-3 px-4 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => handleMoveCategory(cat, 'up')}
+                                    disabled={idx === 0}
+                                    className="p-1 rounded hover:bg-base text-muted hover:text-main disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
+                                    title="Move Up"
+                                  >
+                                    <MoveUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleMoveCategory(cat, 'down')}
+                                    disabled={idx === arr.length - 1}
+                                    className="p-1 rounded hover:bg-base text-muted hover:text-main disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
+                                    title="Move Down"
+                                  >
+                                    <MoveDown className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+
+                              {/* Image */}
+                              <td className="py-3 px-4">
+                                <div className="w-11 h-11 rounded-full overflow-hidden border border-line-strong shadow-xs flex-shrink-0 bg-base">
+                                  <img
+                                    src={cat.image}
+                                    alt={cat.name}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=100&h=100&q=80'; }}
+                                  />
+                                </div>
+                              </td>
+
+                              {/* Category Name */}
+                              <td className="py-3 px-4">
+                                <span className="font-extrabold text-main text-sm">
+                                  {cat.name}
+                                </span>
+                              </td>
+
+                              {/* Dashboard / Service */}
+                              <td className="py-3 px-4">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                  cat.dashboardType === 'food' ? 'bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-950/40 dark:border-orange-800 dark:text-orange-400' :
+                                  cat.dashboardType === 'cool_hot' ? 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:border-purple-800 dark:text-purple-400' :
+                                  cat.dashboardType === 'grocery' ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-800 dark:text-blue-400' :
+                                  cat.dashboardType === 'meat' ? 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:border-red-800 dark:text-red-400' :
+                                  'bg-green-50 text-green-700 border border-green-200 dark:bg-green-950/40 dark:border-green-800 dark:text-green-400'
+                                }`}>
+                                  {cat.dashboardType === 'food' ? 'Food' :
+                                   cat.dashboardType === 'cool_hot' ? 'Cool & Hot' :
+                                   cat.dashboardType === 'grocery' ? 'Grocery' :
+                                   cat.dashboardType === 'meat' ? 'Meat' :
+                                   'Veg & Fruits'}
+                                </span>
+                              </td>
+
+                              {/* Status */}
+                              <td className="py-3 px-4 text-center">
+                                <button
+                                  onClick={() => handleToggleCategoryStatus(cat)}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold cursor-pointer border transition-all ${
+                                    cat.isActive
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400'
+                                      : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400'
+                                  }`}
+                                  title="Click to toggle Active / Inactive"
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full ${cat.isActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
+                                  {cat.isActive ? 'Active' : 'Inactive'}
+                                </button>
+                              </td>
+
+                              {/* Order */}
+                              <td className="py-3 px-4 text-center font-black text-main">
+                                #{cat.displayOrder || idx + 1}
+                              </td>
+
+                              {/* Actions */}
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setEditCategoryForm({
+                                        _id: cat._id,
+                                        name: cat.name,
+                                        image: cat.image,
+                                        dashboardType: cat.dashboardType,
+                                        displayOrder: cat.displayOrder || idx + 1,
+                                        isActive: cat.isActive !== false
+                                      });
+                                      setEditCategoryFile(null);
+                                      setEditCategoryError('');
+                                      setShowEditCategoryModal(true);
+                                    }}
+                                    className="p-1.5 rounded-xl border border-line-strong hover:border-primary text-muted hover:text-primary hover:bg-primary/5 transition-colors cursor-pointer"
+                                    title="Edit Category"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setDeleteCategoryModal({
+                                        isOpen: true,
+                                        category: cat,
+                                        warningMessage: '',
+                                        hasProducts: false,
+                                        count: 0
+                                      });
+                                    }}
+                                    className="p-1.5 rounded-xl border border-line-strong hover:border-red-500 text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                                    title="Delete Category"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2740,6 +3176,333 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADD CATEGORY MODAL ────────────────────────────────────────── */}
+      {showAddCategoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2">
+                <Plus className="w-4 h-4 text-primary" />
+                Add New Category
+              </h3>
+              <button onClick={() => setShowAddCategoryModal(false)} className="text-muted hover:text-main cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {addCategoryError && (
+              <p className="text-[11px] font-bold text-red-500 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-3 py-2 rounded-xl">
+                {addCategoryError}
+              </p>
+            )}
+
+            <form onSubmit={handleAddCategory} className="flex flex-col gap-3.5">
+              {/* Dashboard / Service */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Dashboard / Service
+                </label>
+                <select
+                  value={addCategoryForm.dashboardType}
+                  onChange={(e) => setAddCategoryForm({ ...addCategoryForm, dashboardType: e.target.value })}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                >
+                  <option value="food">Food</option>
+                  <option value="cool_hot">Cool & Hot</option>
+                  <option value="grocery">Grocery</option>
+                  <option value="veg_fruits">Veg & Fruits</option>
+                  <option value="meat">Meat</option>
+                </select>
+              </div>
+
+              {/* Category Name */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Category Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Ice Creams, Biryani..."
+                  value={addCategoryForm.name}
+                  onChange={(e) => setAddCategoryForm({ ...addCategoryForm, name: e.target.value })}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                />
+              </div>
+
+              {/* Category Image Upload / URL */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Category Image
+                </label>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full overflow-hidden border border-line-strong bg-base flex-shrink-0 flex items-center justify-center">
+                    {addCategoryFile ? (
+                      <img src={URL.createObjectURL(addCategoryFile)} alt="Preview" className="w-full h-full object-cover" />
+                    ) : addCategoryForm.image ? (
+                      <img src={addCategoryForm.image} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=100&h=100&q=80'; }} />
+                    ) : (
+                      <ImagePlus className="w-5 h-5 text-muted/50" />
+                    )}
+                  </div>
+                  <div className="flex-1 flex flex-col gap-1.5">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setAddCategoryFile(e.target.files[0])}
+                      className="text-xs text-muted file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                    />
+                    <input
+                      type="url"
+                      placeholder="Or paste Image URL (https://...)"
+                      value={addCategoryForm.image}
+                      onChange={(e) => setAddCategoryForm({ ...addCategoryForm, image: e.target.value })}
+                      className="bg-base border border-line-strong rounded-lg px-2.5 py-1.5 text-[11px] text-main font-medium outline-none focus:border-primary w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Display Order & Status */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Display Order
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="1"
+                    value={addCategoryForm.displayOrder}
+                    onChange={(e) => setAddCategoryForm({ ...addCategoryForm, displayOrder: e.target.value })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Status
+                  </label>
+                  <select
+                    value={addCategoryForm.isActive ? 'active' : 'inactive'}
+                    onChange={(e) => setAddCategoryForm({ ...addCategoryForm, isActive: e.target.value === 'active' })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 mt-3 pt-2 border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCategoryModal(false)}
+                  className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAddingCategory}
+                  className="flex-1 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isAddingCategory ? 'Saving...' : 'Save Category'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT CATEGORY MODAL ───────────────────────────────────────── */}
+      {showEditCategoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-primary" />
+                Edit Category
+              </h3>
+              <button onClick={() => setShowEditCategoryModal(false)} className="text-muted hover:text-main cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {editCategoryError && (
+              <p className="text-[11px] font-bold text-red-500 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-3 py-2 rounded-xl">
+                {editCategoryError}
+              </p>
+            )}
+
+            <form onSubmit={handleEditCategory} className="flex flex-col gap-3.5">
+              {/* Dashboard / Service */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Dashboard / Service
+                </label>
+                <select
+                  value={editCategoryForm.dashboardType}
+                  onChange={(e) => setEditCategoryForm({ ...editCategoryForm, dashboardType: e.target.value })}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                >
+                  <option value="food">Food</option>
+                  <option value="cool_hot">Cool & Hot</option>
+                  <option value="grocery">Grocery</option>
+                  <option value="veg_fruits">Veg & Fruits</option>
+                  <option value="meat">Meat</option>
+                </select>
+              </div>
+
+              {/* Category Name */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Category Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Special Biryani"
+                  value={editCategoryForm.name}
+                  onChange={(e) => setEditCategoryForm({ ...editCategoryForm, name: e.target.value })}
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                />
+              </div>
+
+              {/* Category Image Upload / URL */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                  Category Image
+                </label>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full overflow-hidden border border-line-strong bg-base flex-shrink-0 flex items-center justify-center">
+                    {editCategoryFile ? (
+                      <img src={URL.createObjectURL(editCategoryFile)} alt="Preview" className="w-full h-full object-cover" />
+                    ) : editCategoryForm.image ? (
+                      <img src={editCategoryForm.image} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=100&h=100&q=80'; }} />
+                    ) : (
+                      <ImagePlus className="w-5 h-5 text-muted/50" />
+                    )}
+                  </div>
+                  <div className="flex-1 flex flex-col gap-1.5">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setEditCategoryFile(e.target.files[0])}
+                      className="text-xs text-muted file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                    />
+                    <input
+                      type="url"
+                      placeholder="Or Image URL"
+                      value={editCategoryForm.image}
+                      onChange={(e) => setEditCategoryForm({ ...editCategoryForm, image: e.target.value })}
+                      className="bg-base border border-line-strong rounded-lg px-2.5 py-1.5 text-[11px] text-main font-medium outline-none focus:border-primary w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Display Order & Status */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Display Order
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="1"
+                    value={editCategoryForm.displayOrder}
+                    onChange={(e) => setEditCategoryForm({ ...editCategoryForm, displayOrder: e.target.value })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                    Status
+                  </label>
+                  <select
+                    value={editCategoryForm.isActive ? 'active' : 'inactive'}
+                    onChange={(e) => setEditCategoryForm({ ...editCategoryForm, isActive: e.target.value === 'active' })}
+                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary w-full"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 mt-3 pt-2 border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCategoryModal(false)}
+                  className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isEditingCategory}
+                  className="flex-1 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isEditingCategory ? 'Saving...' : 'Save Category'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE CATEGORY CONFIRMATION MODAL ───────────────────────── */}
+      {deleteCategoryModal.isOpen && deleteCategoryModal.category && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 dark:bg-red-950/40 text-red-600 flex items-center justify-center mx-auto border border-red-100 dark:border-red-900">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <h3 className="font-display font-extrabold text-base text-main">
+                Delete Category?
+              </h3>
+              <p className="text-xs text-muted">
+                Are you sure you want to delete <span className="font-bold text-main">"{deleteCategoryModal.category.name}"</span>?
+              </p>
+            </div>
+
+            {deleteCategoryModal.hasProducts && (
+              <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-3.5 text-left flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] font-bold text-amber-800 dark:text-amber-300 leading-tight">
+                  {deleteCategoryModal.warningMessage || `This category contains ${deleteCategoryModal.count} product(s). Please reassign the products before deleting this category.`}
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteCategoryModal({ isOpen: false, category: null, warningMessage: '', hasProducts: false, count: 0 })}
+                className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingCategory}
+                onClick={() => handleDeleteCategory(deleteCategoryModal.category, deleteCategoryModal.hasProducts)}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingCategory ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

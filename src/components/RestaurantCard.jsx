@@ -1,8 +1,11 @@
 import React from 'react';
 import { Star, Clock, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useFavoriteStore } from '../store/favoriteStore';
 
 export default function RestaurantCard({ restaurant, isLoading }) {
+  const isHotelFavourite = useFavoriteStore((state) => state.isHotelFavourite);
+  const toggleHotel = useFavoriteStore((state) => state.toggleHotel);
   if (isLoading) {
     return (
       <div className="bg-surface rounded-2xl overflow-hidden shadow-sm border border-line animate-pulse">
@@ -38,6 +41,7 @@ export default function RestaurantCard({ restaurant, isLoading }) {
 
   const numRating = typeof rating === 'number' ? rating : parseFloat(rating || 4.0) || 4.0;
   const tagsList = Array.isArray(cuisineTags) ? cuisineTags : [];
+  const isFav = isHotelFavourite(_id);
 
   // Map dollar price range to readable rupee string
   const getRupeeCost = (range) => {
@@ -47,7 +51,7 @@ export default function RestaurantCard({ restaurant, isLoading }) {
   };
 
   return (
-    <Link 
+    <Link
       to={`/restaurant/${_id}`}
       className={`group bg-surface rounded-2xl overflow-hidden shadow-sm hover:shadow-md border border-line transition-all duration-300 transform hover:-translate-y-1 flex flex-col h-full ${isClosed ? 'opacity-80' : ''}`}
     >
@@ -60,13 +64,13 @@ export default function RestaurantCard({ restaurant, isLoading }) {
             </span>
           </div>
         )}
-        <img 
-          src={image} 
-          alt={name} 
+        <img
+          src={image}
+          alt={name}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           loading="lazy"
         />
-        
+
         {/* Pure Veg Indicator overlay */}
         {isPureVeg && (
           <span className="absolute top-3 left-3 bg-green-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
@@ -75,14 +79,20 @@ export default function RestaurantCard({ restaurant, isLoading }) {
         )}
 
         {/* Favorite Icon Overlay */}
-        <button 
+        <button
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            toggleHotel(restaurant);
           }}
-          className="absolute top-3 right-3 p-2 bg-surface/80 hover:bg-surface text-muted hover:text-red-500 rounded-full shadow-sm transition-colors backdrop-blur-sm"
+          className="absolute top-3 right-3 p-2 bg-white/90 dark:bg-[#141926]/90 hover:bg-white dark:hover:bg-[#1E2538] rounded-full shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer backdrop-blur-xs z-10"
+          title={isFav ? 'Remove from Favourites' : 'Add to Favourites'}
         >
-          <Heart className="w-4 h-4 fill-transparent hover:fill-red-500 transition-colors" />
+          <Heart className={`w-4 h-4 transition-colors ${
+            isFav
+              ? 'text-[#7C3AED] fill-[#7C3AED]'
+              : 'text-gray-400 hover:text-[#7C3AED]'
+          }`} />
         </button>
       </div>
 
@@ -112,8 +122,8 @@ export default function RestaurantCard({ restaurant, isLoading }) {
         {/* Cuisines Tags */}
         <div className="flex flex-wrap gap-1.5 mt-auto">
           {tagsList.slice(0, 3).map((tag, idx) => (
-            <span 
-              key={idx} 
+            <span
+              key={idx}
               className="text-xs bg-base text-muted font-medium px-2 py-0.5 rounded-md border border-line"
             >
               {tag}

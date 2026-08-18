@@ -1,10 +1,10 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Star, Clock, AlertTriangle, ChevronRight, ShoppingBag, Search, X } from 'lucide-react';
+import { Star, Clock, AlertTriangle, ChevronRight, ShoppingBag, Search, X, Heart } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
-
+import { useFavoriteStore } from '../store/favoriteStore';
 
 const menuCategories = ['Starters', 'Burgers', 'Pizza', 'Biryani', 'Main Course', 'Desserts', 'Drinks'];
 
@@ -13,6 +13,11 @@ export default function RestaurantDetail() {
   const navigate = useNavigate();
 
   const user = useAuthStore((state) => state.user);
+
+  const isHotelFavourite = useFavoriteStore((state) => state.isHotelFavourite);
+  const toggleHotel = useFavoriteStore((state) => state.toggleHotel);
+  const isItemFavourite = useFavoriteStore((state) => state.isItemFavourite);
+  const toggleItem = useFavoriteStore((state) => state.toggleItem);
 
   const [restaurant, setRestaurant] = useState(null);
   const [menuItems, setMenuItems] = useState([]);
@@ -112,14 +117,28 @@ export default function RestaurantDetail() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-8 pb-32 animate-fade-in relative flex flex-col gap-8">
-      
+
       {/* cover Image Banner */}
       <section className="relative rounded-3xl overflow-hidden h-[240px] md:h-[300px] shadow-md">
-        <img 
-          src={restaurant.image} 
-          alt={restaurant.name} 
+        <img
+          src={restaurant.image}
+          alt={restaurant.name}
           className="w-full h-full object-cover"
         />
+
+        {/* Restaurant Heart Button */}
+        <button
+          onClick={() => toggleHotel(restaurant)}
+          className="absolute top-4 right-4 p-2.5 rounded-full bg-white/90 dark:bg-[#141926]/90 shadow-lg border border-gray-100 dark:border-white/10 hover:scale-110 active:scale-95 transition-all cursor-pointer z-10 backdrop-blur-xs"
+          title={isHotelFavourite(restaurant._id) ? 'Remove from Favourites' : 'Add to Favourites'}
+        >
+          <Heart className={`w-5 h-5 transition-colors ${
+            isHotelFavourite(restaurant._id)
+              ? 'text-[#7C3AED] fill-[#7C3AED]'
+              : 'text-gray-400 hover:text-[#7C3AED]'
+          }`} />
+        </button>
+
         <div className="absolute inset-0 bg-black/45 flex flex-col justify-end p-6 md:p-8 text-white backdrop-blur-3xs">
           <div className="flex flex-col gap-2">
             <h1 className="font-display font-extrabold text-2xl md:text-4xl leading-tight">
@@ -171,7 +190,7 @@ export default function RestaurantDetail() {
             </div>
             <div className="flex items-center gap-4 overflow-x-auto no-scrollbar py-1 px-1">
               {activeOffers.map((offer, idx) => (
-                <div 
+                <div
                   key={idx}
                   className="bg-surface border border-gray-150 rounded-2xl p-4 shadow-3xs flex flex-col justify-between min-w-[210px] max-w-[230px] flex-shrink-0 relative overflow-hidden group hover:border-primary/30 transition-all cursor-pointer select-none"
                   onClick={() => {
@@ -181,7 +200,7 @@ export default function RestaurantDetail() {
                 >
                   {/* Decorative circle */}
                   <div className="absolute -right-4 -top-4 w-12 h-12 bg-primary/5 rounded-full group-hover:scale-125 transition-transform" />
-                  
+
                   <div className="flex flex-col gap-1">
                     <span className="font-mono font-black text-xs text-main tracking-wider bg-base border border-gray-150 px-2 py-0.5 rounded-lg w-max">
                       {offer.code}
@@ -243,8 +262,8 @@ export default function RestaurantDetail() {
                     document.getElementById(category)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }}
                   className={`w-full text-left px-3 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-between ${
-                    activeCategory === category 
-                      ? 'bg-primary-light text-primary' 
+                    activeCategory === category
+                      ? 'bg-primary-light text-primary'
                       : 'text-muted hover:bg-base disabled:opacity-40 disabled:hover:bg-transparent'
                   }`}
                 >
@@ -269,8 +288,8 @@ export default function RestaurantDetail() {
                   document.getElementById(category)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }}
                 className={`px-3.5 py-2 text-xs font-bold rounded-full transition-all flex-shrink-0 border cursor-pointer ${
-                  activeCategory === category 
-                    ? 'bg-primary-light text-primary border-primary-light' 
+                  activeCategory === category
+                    ? 'bg-primary-light text-primary border-primary-light'
                     : 'bg-surface text-muted border-line'
                 }`}
               >
@@ -294,9 +313,9 @@ export default function RestaurantDetail() {
             if (categoryItems.length === 0) return null;
 
             return (
-              <section 
-                id={category} 
-                key={category} 
+              <section
+                id={category}
+                key={category}
                 className="flex flex-col gap-4 scroll-mt-28"
               >
                 <div className="border-b border-line pb-2 flex items-center justify-between">
@@ -314,8 +333,8 @@ export default function RestaurantDetail() {
                     const isDisabled = isRestClosed || isItemUnavailable;
 
                     return (
-                      <div 
-                        key={item._id} 
+                      <div
+                        key={item._id}
                         className={`bg-surface rounded-2xl p-4 shadow-2xs border border-line flex items-center justify-between gap-4 transition-all hover:shadow-sm ${isDisabled ? 'opacity-75' : ''}`}
                       >
                         {/* Food description info */}
@@ -343,13 +362,33 @@ export default function RestaurantDetail() {
                               </span>
                             </div>
                           )}
-                          <img 
-                            src={item.image} 
-                            alt={item.name} 
+                          <img
+                            src={item.image}
+                            alt={item.name}
                             className="w-full h-full object-cover rounded-2xl bg-base border border-line shadow-2xs"
                             loading="lazy"
                           />
-                          
+
+                          {/* Item Heart Button */}
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleItem({
+                                ...item,
+                                restaurant: { name: restaurant.name, _id: restaurant._id }
+                              });
+                            }}
+                            className="absolute top-1.5 right-1.5 p-1.5 rounded-full bg-white/90 dark:bg-[#141926]/90 shadow-sm border border-gray-100 dark:border-white/10 hover:scale-110 active:scale-95 transition-all cursor-pointer z-10"
+                            title={isItemFavourite(item._id) ? 'Remove from Favourites' : 'Add to Favourites'}
+                          >
+                            <Heart className={`w-3.5 h-3.5 transition-colors ${
+                              isItemFavourite(item._id)
+                                ? 'text-[#7C3AED] fill-[#7C3AED]'
+                                : 'text-gray-400 hover:text-[#7C3AED]'
+                            }`} />
+                          </button>
+
                           {/* Quantity control overlays */}
                           {isDisabled ? (
                             <div className="absolute -bottom-3.5 bg-gray-100 border border-line-strong rounded-xl flex items-center justify-center w-[85%] h-9 shadow-md">
@@ -427,57 +466,6 @@ export default function RestaurantDetail() {
         </div>
       )}
 
-      {/* ─── Floating View Cart Bar (Blinkit/Swiggy style) ─── */}
-      {cartItems.length > 0 && (() => {
-        const { total } = getCalculations();
-        const totalItems = cartItems.reduce((s, i) => s + i.quantity, 0);
-        return (
-          // FIX: use inset-x-4 + bottom instead of left-1/2 translate-x.
-          // The parent has animate-fade-in which applies a CSS transform, which
-          // turns this fixed element's containing block into the parent — not
-          // the viewport. Using left/right values directly avoids the issue.
-          <div
-            className="fixed bottom-20 md:bottom-6 inset-x-4 z-[9999] pointer-events-none"
-          >
-            <div
-              className="max-w-lg mx-auto pointer-events-auto"
-              style={{ animation: 'slideUpCart 0.35s cubic-bezier(0.34,1.56,0.64,1) both' }}
-            >
-              <button
-                onClick={() => navigate('/cart')}
-                className="w-full bg-primary hover:bg-primary-hover text-white rounded-2xl shadow-2xl flex items-center justify-between px-5 py-4 gap-4 transition-colors group"
-              >
-                {/* Left: item count badge + label */}
-                <div className="flex items-center gap-3">
-                  <span className="bg-white/20 text-white text-xs font-black px-2.5 py-1 rounded-xl min-w-[28px] text-center">
-                    {totalItems}
-                  </span>
-                  <div className="flex flex-col items-start">
-                    <span className="text-sm font-extrabold leading-tight">View Cart</span>
-                    <span className="text-[10px] text-white/75 font-semibold leading-none mt-0.5">
-                      {cartRestaurant?.name || 'Your order'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Right: total + arrow */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-extrabold">₹{total.toFixed(2)}</span>
-                  <ChevronRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
-                </div>
-              </button>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Keyframe: only slide vertically — no X transform so centering stays intact */}
-      <style>{`
-        @keyframes slideUpCart {
-          from { opacity: 0; transform: translateY(20px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 }

@@ -95,6 +95,14 @@ export const useAuthStore = create((set, get) => ({
       if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
+
+      try {
+        const { useFavoriteStore } = await import('./favoriteStore');
+        useFavoriteStore.getState().fetchUserFavourites();
+      } catch (e) {
+        console.error('Failed to fetch favourites on login:', e);
+      }
+
       return { success: true };
     } catch (err) {
       set({ error: err.message });
@@ -140,6 +148,14 @@ export const useAuthStore = create((set, get) => ({
       if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
+
+      try {
+        const { useFavoriteStore } = await import('./favoriteStore');
+        useFavoriteStore.getState().fetchUserFavourites();
+      } catch (e) {
+        console.error('Failed to fetch favourites on register:', e);
+      }
+
       return { success: true };
     } catch (err) {
       set({ error: err.message });
@@ -164,12 +180,19 @@ export const useAuthStore = create((set, get) => ({
     } catch (e) {
       console.error('Logout request failed:', e);
     }
-    
+
     try {
       const { useCartStore } = await import('./cartStore');
       useCartStore.getState().clearCart();
     } catch (e) {
       console.error('Failed to clear cart on logout:', e);
+    }
+
+    try {
+      const { useFavoriteStore } = await import('./favoriteStore');
+      useFavoriteStore.getState().clearFavourites();
+    } catch (e) {
+      console.error('Failed to clear favourites on logout:', e);
     }
 
     localStorage.removeItem(ACCESS_KEY);

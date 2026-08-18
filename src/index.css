@@ -4,6 +4,8 @@
 
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ═══════════════════════════════════════════════════════════════
    🏛️ ALEXANDRIA — Royal Premium Color System
    Inspired by the grandeur of ancient Alexandria, Egypt.
@@ -23,24 +25,18 @@
   }
 
   .dark {
-    --bg-base: #0C0A1D;      /* Midnight indigo — the night sky over Alexandria */
-    --bg-surface: #1A1730;   /* Deep royal — Pharaoh's chamber walls */
-    --text-main: #F5F3FF;    /* Moonlit white — moonlight on the Nile */
-    --text-muted: #94A3B8;   /* Desert silver — silver starlight */
-    --border-main: #2A2554;  /* Shadow violet — deep violet shadow */
-    --border-strong: #3B3573; /* Dusk purple — evening horizon */
-    --glass-bg: rgba(26, 23, 48, 0.8);
-    --glass-border: rgba(124, 58, 237, 0.12);
+    --bg-base: #0B0E17;      /* Deep dark slate background */
+    --bg-surface: #141926;   /* Dark elevated card surface */
+    --text-main: #FFFFFF;    /* Crisp pure white */
+    --text-muted: #94A3B8;   /* Slate gray text */
+    --border-main: #1F2738;  /* Subtle dark border */
+    --border-strong: #2E384D; /* Stronger dark border */
+    --glass-bg: rgba(20, 25, 38, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.08);
   }
 
   body {
-    background-color: #fff0f5;
-    background-image: 
-      radial-gradient(circle at 10% 20%, rgba(255, 175, 122, 0.6) 0%, transparent 40%),
-      radial-gradient(circle at 90% 80%, rgba(255, 115, 235, 0.4) 0%, transparent 50%),
-      radial-gradient(circle at 10% 90%, rgba(162, 107, 255, 0.3) 0%, transparent 40%),
-      radial-gradient(circle at 80% 20%, rgba(255, 218, 185, 0.5) 0%, transparent 40%);
-    background-attachment: fixed;
+    background-color: var(--bg-base);
     color: var(--text-main);
   }
 }
@@ -180,226 +176,7 @@ body {
   scrollbar-width: none;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   DARK MODE — override hardcoded Tailwind color utilities
-   so text/backgrounds/borders adapt to the dark theme.
-   This catches all instances across every JSX file at once.
-   ═══════════════════════════════════════════════════════════════ */
-
-/* ── Text colors: dark grays / black → light for readability ── */
-.dark .text-black {
-  color: #f1f5f9 !important;
-}
-.dark .text-gray-900 {
-  color: #f1f5f9 !important;
-}
-.dark .text-gray-855 {
-  color: #f1f5f9 !important;
-}
-.dark .text-gray-850 {
-  color: #f1f5f9 !important;
-}
-.dark .text-gray-805 {
-  color: #e2e8f0 !important;
-}
-.dark .text-gray-800 {
-  color: #e2e8f0 !important;
-}
-.dark .text-gray-755 {
-  color: #e2e8f0 !important;
-}
-.dark .text-gray-750 {
-  color: #e2e8f0 !important;
-}
-.dark .text-gray-700 {
-  color: #cbd5e1 !important;
-}
-.dark .text-gray-655 {
-  color: #94a3b8 !important;
-}
-.dark .text-gray-650 {
-  color: #94a3b8 !important;
-}
-.dark .text-gray-600 {
-  color: #94a3b8 !important;
-}
-.dark .text-gray-500 {
-  color: #94a3b8 !important;
-}
-.dark .text-gray-450 {
-  color: #64748b !important;
-}
-.dark .text-gray-400 {
-  color: #64748b !important;
-}
-.dark .text-gray-300 {
-  color: #475569 !important;
-}
-.dark .text-gray-200 {
-  color: #334155 !important;
-}
-
-/* ── Background colors: whites / light grays → dark surfaces ── */
-.dark .bg-white {
-  background-color: var(--bg-surface) !important;
-}
-.dark .bg-gray-50 {
-  background-color: #1A1730 !important;
-}
-.dark .bg-gray-100 {
-  background-color: #1A1730 !important;
-}
-.dark .bg-gray-200 {
-  background-color: #2A2554 !important;
-}
-.dark .bg-gray-300 {
-  background-color: #3B3573 !important;
-}
-
-/* ── Hover/disabled background states ── */
-.dark .hover\:bg-gray-100:hover {
-  background-color: #2A2554 !important;
-}
-.dark .hover\:bg-gray-50:hover {
-  background-color: #1A1730 !important;
-}
-.dark .disabled\:bg-gray-100:disabled {
-  background-color: #2A2554 !important;
-}
-
-/* ── Border colors: light grays → dark borders ── */
-.dark .border-gray-100 {
-  border-color: #2A2554 !important;
-}
-.dark .border-gray-150 {
-  border-color: #2A2554 !important;
-}
-.dark .border-gray-155 {
-  border-color: #2A2554 !important;
-}
-.dark .border-gray-200 {
-  border-color: #2A2554 !important;
-}
-.dark .border-gray-250 {
-  border-color: #3B3573 !important;
-}
-.dark .border-gray-255 {
-  border-color: #3B3573 !important;
-}
-.dark .border-gray-300 {
-  border-color: #3B3573 !important;
-}
-.dark .border-gray-400 {
-  border-color: #3B3573 !important;
-}
-.dark .border-white {
-  border-color: var(--bg-surface) !important;
-}
-
-/* ── Divide colors ── */
-.dark .divide-gray-50 > :not(:last-child) {
-  border-color: #2A2554 !important;
-}
-
-/* ── Colored status badges — soften backgrounds for dark mode ── */
-.dark .bg-green-50 {
-  background-color: rgba(34, 197, 94, 0.1) !important;
-}
-.dark .bg-green-100 {
-  background-color: rgba(34, 197, 94, 0.15) !important;
-}
-.dark .bg-blue-50 {
-  background-color: rgba(59, 130, 246, 0.1) !important;
-}
-.dark .bg-blue-100 {
-  background-color: rgba(59, 130, 246, 0.15) !important;
-}
-.dark .bg-violet-50 {
-  background-color: rgba(124, 58, 237, 0.1) !important;
-}
-.dark .bg-violet-100 {
-  background-color: rgba(124, 58, 237, 0.15) !important;
-}
-.dark .bg-orange-50 {
-  background-color: rgba(249, 115, 22, 0.1) !important;
-}
-.dark .bg-orange-100 {
-  background-color: rgba(249, 115, 22, 0.15) !important;
-}
-.dark .bg-yellow-50 {
-  background-color: rgba(234, 179, 8, 0.1) !important;
-}
-.dark .bg-yellow-100 {
-  background-color: rgba(234, 179, 8, 0.15) !important;
-}
-.dark .bg-red-50 {
-  background-color: rgba(239, 68, 68, 0.1) !important;
-}
-.dark .bg-red-100 {
-  background-color: rgba(239, 68, 68, 0.15) !important;
-}
-.dark .bg-purple-50 {
-  background-color: rgba(168, 85, 247, 0.1) !important;
-}
-.dark .bg-purple-100 {
-  background-color: rgba(168, 85, 247, 0.15) !important;
-}
-.dark .bg-emerald-50 {
-  background-color: rgba(16, 185, 129, 0.1) !important;
-}
-
-/* ── Colored status badge borders — soften for dark mode ── */
-.dark .border-green-100,
-.dark .border-green-200 {
-  border-color: rgba(34, 197, 94, 0.2) !important;
-}
-.dark .border-blue-100,
-.dark .border-blue-200 {
-  border-color: rgba(59, 130, 246, 0.2) !important;
-}
-.dark .border-violet-100,
-.dark .border-violet-200 {
-  border-color: rgba(124, 58, 237, 0.2) !important;
-}
-.dark .border-orange-100,
-.dark .border-orange-200 {
-  border-color: rgba(249, 115, 22, 0.2) !important;
-}
-.dark .border-yellow-100,
-.dark .border-yellow-200 {
-  border-color: rgba(234, 179, 8, 0.2) !important;
-}
-.dark .border-red-100,
-.dark .border-red-200 {
-  border-color: rgba(239, 68, 68, 0.2) !important;
-}
-.dark .border-emerald-200 {
-  border-color: rgba(16, 185, 129, 0.2) !important;
-}
-
-/* ── Divide colors ── */
-.dark .divide-gray-100 > :not(:last-child) {
-  border-color: #2A2554 !important;
-}
-.dark .divide-gray-200 > :not(:last-child) {
-  border-color: #2A2554 !important;
-}
-
-/* ── Placeholder text ── */
-.dark .placeholder-gray-400::placeholder,
-.dark .placeholder-gray-500::placeholder {
-  color: #64748b !important;
-}
-
-/* ── Input/textarea/select styling in dark mode ── */
-.dark input,
-.dark textarea,
-.dark select {
-  color: var(--text-main);
-  background-color: var(--bg-surface);
-  border-color: var(--border-main);
-}
-.dark input::placeholder,
-.dark textarea::placeholder {
-  color: #64748b;
+/* Theme-aware smooth transitions */
+* {
+  border-color: var(--color-line);
 }
