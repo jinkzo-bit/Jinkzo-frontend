@@ -523,34 +523,6 @@ export default function LoginSignup() {
               </div>
             </div>
 
-            {/* Password Strength Requirement Guidance (Signup mode) */}
-            {!isLogin && (
-              <div className="bg-violet-50/70 border border-violet-100 p-3 rounded-xl flex flex-col gap-2 text-[11px] text-muted">
-                <div className="flex items-center gap-1.5 font-bold text-violet-950 text-[11px]">
-                  <ShieldAlert className="w-3.5 h-3.5 text-primary shrink-0"/>
-                  <span>Make your password stronger with these characters:</span>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5 font-semibold text-[10px]">
-                  <div className={`flex items-center gap-1.5 transition-colors ${password.length >= 6 ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${password.length >= 6 ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
-                    Min 6 characters
-                  </div>
-                  <div className={`flex items-center gap-1.5 transition-colors ${/[A-Z]/.test(password) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${/[A-Z]/.test(password) ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
-                    Uppercase letter (A-Z)
-                  </div>
-                  <div className={`flex items-center gap-1.5 transition-colors ${/[a-z]/.test(password) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${/[a-z]/.test(password) ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
-                    Lowercase letter (a-z)
-                  </div>
-                  <div className={`flex items-center gap-1.5 transition-colors ${/[0-9!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password) ? 'text-emerald-600 font-bold' : 'text-slate-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${/[0-9!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password) ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
-                    Number / Special char
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Confirm Password with Eye Icon Toggle (Signup only) */}
             {!isLogin && (
               <div className="flex flex-col gap-1">
