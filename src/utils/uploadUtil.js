@@ -4,6 +4,149 @@ import { API_BASE } from '../config/api';
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
 /**
+ * Standardized fallback image URLs by type
+ */
+export const FALLBACK_IMAGES = {
+  food: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&h=400&q=80',
+  restaurant: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&h=400&q=80',
+  banner: '/assets/hero_delivery_banner.jpg',
+  category: '/assets/cat_food.jpg',
+  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80',
+  default: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&h=400&q=80'
+};
+
+/**
+ * Gets the configured backend origin (e.g. http://localhost:5000 or https://api.jinkzo.com)
+ * Works consistently in localhost development, production build, and deployed domains.
+ * @returns {string}
+ */
+export const getBackendOrigin = () => {
+  // 1. Explicit env variable override
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL.replace(/\/+$/, '');
+  }
+
+  // 2. Absolute API_BASE (e.g., https://api.jinkzo.com/api or http://localhost:5000/api)
+  if (API_BASE && (API_BASE.startsWith('http://') || API_BASE.startsWith('https://'))) {
+    try {
+      const parsed = new URL(API_BASE);
+      return parsed.origin;
+    } catch (e) {
+      // ignore and continue
+    }
+  }
+
+  // 3. Browser environment resolution
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    // In local development (Vite on port 5173/5174), point directly to backend on 5000
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:5000';
+    }
+    // In production with relative API_BASE, use current window origin
+    return window.location.origin;
+  }
+
+  return 'http://localhost:5000';
+};
+
+/**
+ * Normalizes any image URL or upload path into a valid, browser-accessible URL.
+ * Handles:
+ * 1. Empty/null/undefined -> returns default fallback
+ * 2. Blobs & Data URLs (from file picker previews) -> returns unchanged
+ * 3. Absolute URLs (http://, https://) -> returns unchanged (cleans accidental duplicate prefixes)
+ * 4. Frontend public assets (/assets/...) -> returns unchanged
+ * 5. Local uploads (/uploads/..., uploads/..., or bare filenames) -> prepends backend origin
+ *
+ * @param {string} url - The raw image path or URL
+ * @param {string} type - 'food' | 'restaurant' | 'banner' | 'category' | 'avatar' | 'default'
+ * @returns {string} Fully resolved, browser-accessible image URL
+ */
+export const getImageUrl = (url, type = 'default') => {
+  const fallback = FALLBACK_IMAGES[type] || FALLBACK_IMAGES.default;
+
+  if (!url || typeof url !== 'string') {
+    return fallback;
+  }
+
+  const trimmed = url.trim();
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') {
+    return fallback;
+  }
+
+  // 1. Data URLs & Blob URLs (for instant file picker previews)
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+    return trimmed;
+  }
+
+  // 2. Fix accidental duplicate prefixes (e.g., http://localhost:5000/https://...)
+  const httpIdx = trimmed.indexOf('http://');
+  const httpsIdx = trimmed.indexOf('https://');
+  if (httpsIdx > 0) {
+    return trimmed.substring(httpsIdx);
+  }
+  if (httpIdx > 0 && !trimmed.startsWith('http://localhost') && !trimmed.startsWith('http://127.0.0.1')) {
+    return trimmed.substring(httpIdx);
+  }
+
+  // 3. Legacy localhost / 127.0.0.1 upload paths (e.g. http://localhost:5000/uploads/... or http://127.0.0.1:5000/uploads/...)
+  // Dynamically normalize to current environment's backend origin so it works across dev and production
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/uploads\//i.test(trimmed)) {
+    const backendOrigin = getBackendOrigin();
+    const relativePath = trimmed.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, '');
+    return `${backendOrigin}${relativePath}`;
+  }
+
+  // 4. Absolute External URLs (https://..., http://...)
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+
+  // 5. Frontend public assets (e.g. /assets/cat_food.jpg)
+  if (trimmed.startsWith('/assets/') || trimmed.startsWith('assets/')) {
+    return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  }
+
+  // 6. Backend uploaded images (/uploads/... or uploads/...)
+  const backendOrigin = getBackendOrigin();
+  if (trimmed.startsWith('/uploads/')) {
+    return `${backendOrigin}${trimmed}`;
+  }
+  if (trimmed.startsWith('uploads/')) {
+    return `${backendOrigin}/${trimmed}`;
+  }
+
+  // 7. Bare uploaded filenames (e.g. img-1781293812-123.jpg or image-123.jpg)
+  if (trimmed.startsWith('img-') || trimmed.startsWith('image-')) {
+    return `${backendOrigin}/uploads/${trimmed}`;
+  }
+
+  // 8. General relative path
+  if (trimmed.startsWith('/')) {
+    return `${backendOrigin}${trimmed}`;
+  }
+
+  return `${backendOrigin}/uploads/${trimmed}`;
+};
+
+/**
+ * Standard image error handler to replace broken images with safe fallbacks
+ * and avoid infinite error firing loops.
+ *
+ * @param {Event} e - The image onError event
+ * @param {string} type - 'food' | 'restaurant' | 'banner' | 'category' | 'avatar' | 'default'
+ */
+export const handleImageError = (e, type = 'default') => {
+  if (!e || !e.target) return;
+  if (e.target.dataset.errorHandled) return;
+
+  e.target.dataset.errorHandled = 'true';
+  const fallback = FALLBACK_IMAGES[type] || FALLBACK_IMAGES.default;
+  e.target.src = fallback;
+};
+
+/**
  * Validates a file before sending to upload API
  * @param {File} file
  */
@@ -61,10 +204,11 @@ export const uploadFileToBackend = async (file) => {
     }
 
     const data = await res.json();
-    if (!data.imageUrl) {
+    const returnedUrl = data.imageUrl || data.url || (data.filename ? `/uploads/${data.filename}` : null);
+    if (!returnedUrl) {
       throw new Error('Upload succeeded but no image URL was returned.');
     }
-    return data.imageUrl;
+    return returnedUrl;
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
@@ -106,10 +250,11 @@ export const uploadPublicFileToBackend = async (file) => {
     }
 
     const data = await res.json();
-    if (!data.imageUrl) {
+    const returnedUrl = data.imageUrl || data.url || (data.filename ? `/uploads/${data.filename}` : null);
+    if (!returnedUrl) {
       throw new Error('Upload succeeded but no image URL was returned.');
     }
-    return data.imageUrl;
+    return returnedUrl;
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {

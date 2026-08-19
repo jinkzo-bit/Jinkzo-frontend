@@ -9,6 +9,7 @@ import {
   Headphones
 } from 'lucide-react';
 import { API_BASE } from '../config/api';
+import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 const DEFAULT_BANNER_SLIDES = [
   {
@@ -329,8 +330,9 @@ export default function Home() {
           <div className="w-[42%] sm:w-[44%] md:w-[45%] flex items-center justify-center md:justify-end z-10 pl-2 sm:pl-4">
             <div className="relative max-w-[150px] sm:max-w-[240px] md:max-w-[420px] lg:max-w-[480px] w-full flex items-center justify-center">
               <img
-                src={activeBanner.image}
+                src={getImageUrl(activeBanner.image, 'banner')}
                 alt={activeBanner.highlight || activeBanner.title}
+                onError={(e) => handleImageError(e, 'banner')}
                 className="w-full h-auto max-h-[120px] sm:max-h-[180px] md:max-h-[260px] object-cover rounded-xl sm:rounded-2xl shadow-md sm:shadow-xl shadow-purple-950/20"
               />
             </div>
@@ -399,14 +401,16 @@ export default function Home() {
               <div className="w-16 h-16 sm:w-24 sm:h-24 md:w-32 md:h-32 lg:w-36 lg:h-36 flex-shrink-0 flex items-center justify-center relative group-hover:scale-105 transition-transform duration-300 rounded-xl sm:rounded-2xl overflow-hidden">
                 {/* Light mode rendering */}
                 <img
-                  src={cat.image}
+                  src={getImageUrl(cat.image, 'category')}
                   alt={cat.title}
+                  onError={(e) => handleImageError(e, 'category')}
                   className="w-full h-full object-contain mix-blend-multiply dark:hidden"
                 />
                 {/* Dark mode rendering */}
                 <img
-                  src={cat.darkImage || cat.image}
+                  src={getImageUrl(cat.darkImage || cat.image, 'category')}
                   alt={cat.title}
+                  onError={(e) => handleImageError(e, 'category')}
                   className="w-full h-full object-contain hidden dark:block mix-blend-screen rounded-xl sm:rounded-2xl"
                 />
               </div>

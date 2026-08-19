@@ -5,6 +5,7 @@ import { Search, SlidersHorizontal, ArrowUpDown, AlertTriangle, Heart } from 'lu
 import RestaurantCard from '../components/RestaurantCard';
 import { useCartStore } from '../store/cartStore';
 import { useFavoriteStore } from '../store/favoriteStore';
+import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 // ─── 1. FOOD CATEGORIES ───
 const foodCategories = [
@@ -404,8 +405,9 @@ export default function RestaurantListing() {
                       : 'border-transparent hover:border-gray-200 dark:hover:border-white/20'
                   }`}>
                     <img
-                      src={cat.image}
+                      src={getImageUrl(cat.image, 'category')}
                       alt={cat.name}
+                      onError={(e) => handleImageError(e, 'category')}
                       className="w-full h-full object-cover rounded-full"
                       loading="lazy"
                     />
@@ -531,8 +533,9 @@ export default function RestaurantListing() {
                           </div>
                         )}
                         <img
-                          src={dish.image}
+                          src={getImageUrl(dish.image, 'food')}
                           alt={dish.name}
+                          onError={(e) => handleImageError(e, 'food')}
                           className="w-full h-full object-cover rounded-2xl bg-base border border-line shadow-2xs"
                           loading="lazy"
                         />

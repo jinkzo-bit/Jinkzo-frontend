@@ -1,6 +1,7 @@
 import { API_BASE } from '../config/api';
 import React, { useState, useEffect } from 'react';
 import { X, Star, Sparkles, AlertCircle } from 'lucide-react';
+import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryAgent, token, onFeedbackSubmit }) {
   const [rating, setRating] = useState(0);
@@ -149,10 +150,11 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
               {/* Header / Rider details */}
               <div className="p-6 bg-violet-50/45 border-b border-line/50 flex flex-col items-center text-center gap-3">
                 {deliveryAgent?.profileImage ? (
-                  <img 
-                    src={deliveryAgent.profileImage} 
-                    alt={agentName} 
-                    className="w-14 h-14 rounded-2xl object-cover shadow-sm border-2 border-white" 
+                  <img
+                    src={getImageUrl(deliveryAgent.profileImage, 'avatar')}
+                    alt={agentName}
+                    onError={(e) => handleImageError(e, 'avatar')}
+                    className="w-14 h-14 rounded-2xl object-cover shadow-sm border-2 border-white"
                   />
                 ) : (
                   <div className="w-14 h-14 rounded-2xl bg-primary text-white flex items-center justify-center font-extrabold text-lg shadow-sm border-2 border-white">

@@ -4,6 +4,7 @@ import { Heart, Building2, UtensilsCrossed, ArrowRight, ShoppingBag, Plus, Minus
 import RestaurantCard from '../components/RestaurantCard';
 import { useFavoriteStore } from '../store/favoriteStore';
 import { useCartStore } from '../store/cartStore';
+import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 export default function Favourites() {
   const [activeTab, setActiveTab] = useState('hotels'); // 'hotels' | 'items'
@@ -156,8 +157,9 @@ export default function Favourites() {
                       {/* Image + Veg badge */}
                       <div className="relative w-24 h-24 md:w-28 md:h-28 flex-shrink-0">
                         <img
-                          src={dish.image}
+                          src={getImageUrl(dish.image, 'food')}
                           alt={dish.name}
+                          onError={(e) => handleImageError(e, 'food')}
                           className="w-full h-full object-cover rounded-2xl bg-base border border-line shadow-2xs"
                           loading="lazy"
                         />

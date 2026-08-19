@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import InteractiveMap from '../components/InteractiveMap';
 import { useAuthStore } from '../store/authStore';
-import { uploadFileToBackend } from '../utils/uploadUtil';
+import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
 
 export default function AdminDashboard() {
@@ -356,7 +356,7 @@ export default function AdminDashboard() {
     setIsAddingCategory(true);
     setAddCategoryError('');
     try {
-      let imageUrl = addCategoryForm.image;
+      let imageUrl = (addCategoryForm.image || '').trim();
       if (addCategoryFile) {
         imageUrl = await uploadFileToBackend(addCategoryFile);
       }
@@ -373,7 +373,7 @@ export default function AdminDashboard() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          name: addCategoryForm.name,
+          name: addCategoryForm.name.trim(),
           image: imageUrl,
           dashboardType: addCategoryForm.dashboardType,
           displayOrder: addCategoryForm.displayOrder ? Number(addCategoryForm.displayOrder) : undefined,
@@ -402,9 +402,14 @@ export default function AdminDashboard() {
     setIsEditingCategory(true);
     setEditCategoryError('');
     try {
-      let imageUrl = editCategoryForm.image;
+      let imageUrl = (editCategoryForm.image || '').trim();
       if (editCategoryFile) {
         imageUrl = await uploadFileToBackend(editCategoryFile);
+      }
+      if (!imageUrl) {
+        setEditCategoryError('Category image or file upload is required');
+        setIsEditingCategory(false);
+        return;
       }
 
       const res = await fetch(`${API_BASE}/admin/categories/${editCategoryForm._id}`, {
@@ -414,7 +419,7 @@ export default function AdminDashboard() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          name: editCategoryForm.name,
+          name: editCategoryForm.name.trim(),
           image: imageUrl,
           dashboardType: editCategoryForm.dashboardType,
           displayOrder: Number(editCategoryForm.displayOrder),
@@ -925,7 +930,8 @@ export default function AdminDashboard() {
     e.preventDefault();
     setAddBannerError('');
 
-    if (!addBannerFile && !addBannerForm.imageUrl) {
+    const trimmedUrl = (addBannerForm.imageUrl || '').trim();
+    if (!addBannerFile && !trimmedUrl) {
       setAddBannerError('Please upload an image file or provide an Image URL.');
       return;
     }
@@ -936,7 +942,7 @@ export default function AdminDashboard() {
 
     setIsAddingBanner(true);
     try {
-      let finalImageUrl = addBannerForm.imageUrl;
+      let finalImageUrl = trimmedUrl;
       if (addBannerFile) {
         finalImageUrl = await uploadFileToBackend(addBannerFile);
       }
@@ -1001,7 +1007,8 @@ export default function AdminDashboard() {
     e.preventDefault();
     setEditBannerError('');
 
-    if (!editBannerFile && !editBannerForm.imageUrl) {
+    const trimmedUrl = (editBannerForm.imageUrl || '').trim();
+    if (!editBannerFile && !trimmedUrl) {
       setEditBannerError('Please upload an image file or provide an Image URL.');
       return;
     }
@@ -1012,7 +1019,7 @@ export default function AdminDashboard() {
 
     setIsEditingBanner(true);
     try {
-      let finalImageUrl = editBannerForm.imageUrl;
+      let finalImageUrl = trimmedUrl;
       if (editBannerFile) {
         finalImageUrl = await uploadFileToBackend(editBannerFile);
       }
@@ -2919,12 +2926,10 @@ export default function AdminDashboard() {
                                 <div className="flex items-center gap-3">
                                   <div className="w-20 h-12 rounded-xl overflow-hidden bg-base border border-line flex-shrink-0 relative">
                                     <img
-                                      src={b.imageUrl}
+                                      src={getImageUrl(b.imageUrl, 'banner')}
                                       alt={b.title}
                                       className="w-full h-full object-cover"
-                                      onError={(e) => {
-                                        e.target.src = '/assets/hero_delivery_banner.jpg';
-                                      }}
+                                      onError={(e) => handleImageError(e, 'banner')}
                                     />
                                     {!isActive && (
                                       <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center">
@@ -3171,10 +3176,10 @@ export default function AdminDashboard() {
                               <td className="py-3 px-4">
                                 <div className="w-11 h-11 rounded-full overflow-hidden border border-line-strong shadow-xs flex-shrink-0 bg-base">
                                   <img
-                                    src={cat.image}
+                                    src={getImageUrl(cat.image, 'category')}
                                     alt={cat.name}
                                     className="w-full h-full object-cover"
-                                    onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=100&h=100&q=80'; }}
+                                    onError={(e) => handleImageError(e, 'category')}
                                   />
                                 </div>
                               </td>
@@ -3461,7 +3466,7 @@ export default function AdminDashboard() {
                     {addCategoryFile ? (
                       <img src={URL.createObjectURL(addCategoryFile)} alt="Preview" className="w-full h-full object-cover" />
                     ) : addCategoryForm.image ? (
-                      <img src={addCategoryForm.image} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=100&h=100&q=80'; }} />
+                      <img src={getImageUrl(addCategoryForm.image, 'category')} alt="Preview" className="w-full h-full object-cover" onError={(e) => handleImageError(e, 'category')} />
                     ) : (
                       <ImagePlus className="w-5 h-5 text-muted/50" />
                     )}
@@ -3601,7 +3606,7 @@ export default function AdminDashboard() {
                     {editCategoryFile ? (
                       <img src={URL.createObjectURL(editCategoryFile)} alt="Preview" className="w-full h-full object-cover" />
                     ) : editCategoryForm.image ? (
-                      <img src={editCategoryForm.image} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=100&h=100&q=80'; }} />
+                      <img src={getImageUrl(editCategoryForm.image, 'category')} alt="Preview" className="w-full h-full object-cover" onError={(e) => handleImageError(e, 'category')} />
                     ) : (
                       <ImagePlus className="w-5 h-5 text-muted/50" />
                     )}
@@ -3880,7 +3885,7 @@ export default function AdminDashboard() {
                     {addBannerFile ? (
                       <img src={URL.createObjectURL(addBannerFile)} alt="Preview" className="w-full h-full object-cover" />
                     ) : addBannerForm.imageUrl ? (
-                      <img src={addBannerForm.imageUrl} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/assets/hero_delivery_banner.jpg'; }} />
+                      <img src={getImageUrl(addBannerForm.imageUrl, 'banner')} alt="Preview" className="w-full h-full object-cover" onError={(e) => handleImageError(e, 'banner')} />
                     ) : (
                       <ImagePlus className="w-6 h-6 text-white/50" />
                     )}
@@ -4061,7 +4066,7 @@ export default function AdminDashboard() {
                     {editBannerFile ? (
                       <img src={URL.createObjectURL(editBannerFile)} alt="Preview" className="w-full h-full object-cover" />
                     ) : editBannerForm.imageUrl ? (
-                      <img src={editBannerForm.imageUrl} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/assets/hero_delivery_banner.jpg'; }} />
+                      <img src={getImageUrl(editBannerForm.imageUrl, 'banner')} alt="Preview" className="w-full h-full object-cover" onError={(e) => handleImageError(e, 'banner')} />
                     ) : (
                       <ImagePlus className="w-6 h-6 text-white/50" />
                     )}

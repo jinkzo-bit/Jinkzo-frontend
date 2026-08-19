@@ -8,6 +8,7 @@ import { formatAppDateOnly, formatAppTimeOnly } from '../utils/dateUtils';
 import RiderFeedbackModal from '../components/RiderFeedbackModal';
 import { playStatusChangeSound, playCaptainAssignedSound, playDeliveredSound } from '../utils/audio';
 import { io } from 'socket.io-client';
+import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 export default function OrderTracking() {
   const { id } = useParams();
@@ -575,10 +576,11 @@ export default function OrderTracking() {
               <div className="flex items-center gap-3">
                 {/* Rider Photo avatar */}
                 {order.deliveryAgent.profileImage ? (
-                  <img 
-                    src={order.deliveryAgent.profileImage} 
-                    alt={order.deliveryAgent.name} 
-                    className="w-12 h-12 rounded-2xl object-cover border border-line" 
+                  <img
+                    src={getImageUrl(order.deliveryAgent.profileImage, 'avatar')}
+                    alt={order.deliveryAgent.name}
+                    onError={(e) => handleImageError(e, 'avatar')}
+                    className="w-12 h-12 rounded-2xl object-cover border border-line"
                   />
                 ) : (
                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-base border ${

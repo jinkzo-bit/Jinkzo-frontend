@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { ShoppingCart, Trash2, Plus, Minus, Tag, Percent, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
+import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 export default function Cart() {
   const { items, restaurant, promoCode, promoDiscount, updateQuantity, removeItem, clearCart, applyPromo, removePromo, getCalculations, fetchPlatformSettings, platformSettings } = useCartStore();
@@ -145,8 +146,9 @@ export default function Cart() {
                   <div key={item.menuItemId} className="p-4 flex items-center justify-between gap-4 hover:bg-base/20 transition-colors">
                     <div className="flex items-center gap-3.5 max-w-[65%]">
                       <img
-                        src={item.image}
+                        src={getImageUrl(item.image, 'food')}
                         alt={item.name}
+                        onError={(e) => handleImageError(e, 'food')}
                         className="w-14 h-14 md:w-16 md:h-16 object-cover rounded-xl bg-base flex-shrink-0"
                       />
                       <div className="flex flex-col gap-0.5">

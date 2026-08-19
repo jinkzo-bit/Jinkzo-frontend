@@ -2,6 +2,7 @@ import React from 'react';
 import { Star, Clock, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useFavoriteStore } from '../store/favoriteStore';
+import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 export default function RestaurantCard({ restaurant, isLoading }) {
   const isHotelFavourite = useFavoriteStore((state) => state.isHotelFavourite);
@@ -65,8 +66,9 @@ export default function RestaurantCard({ restaurant, isLoading }) {
           </div>
         )}
         <img
-          src={image}
+          src={getImageUrl(image, 'restaurant')}
           alt={name}
+          onError={(e) => handleImageError(e, 'restaurant')}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           loading="lazy"
         />

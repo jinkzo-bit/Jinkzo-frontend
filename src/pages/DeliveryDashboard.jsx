@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, ChevronRight, AlertCircle, ShoppingBag, Eye, LogOut, Send, FileText, Star, MessageSquare, Heart, Phone, Pencil, AlertTriangle, Camera } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { uploadFileToBackend } from '../utils/uploadUtil';
+import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import InteractiveMap from '../components/InteractiveMap';
 import { io } from 'socket.io-client';
 import NotificationCenter from '../components/NotificationCenter';
@@ -721,10 +721,11 @@ export default function DeliveryDashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-5">
         <div className="flex items-center gap-3">
           {user?.profileImage || riderProfile?.profileImage ? (
-            <img 
-              src={user?.profileImage || riderProfile?.profileImage} 
-              alt="Profile" 
-              className="w-12 h-12 rounded-2xl object-cover border border-line shadow-xs" 
+            <img
+              src={getImageUrl(user?.profileImage || riderProfile?.profileImage, 'avatar')}
+              alt="Profile"
+              onError={(e) => handleImageError(e, 'avatar')}
+              className="w-12 h-12 rounded-2xl object-cover border border-line shadow-xs"
             />
           ) : (
             <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
@@ -1545,7 +1546,7 @@ export default function DeliveryDashboard() {
             {user?.profileImage && (
               <div>
                 <p className="text-[10px] text-muted font-extrabold uppercase">Profile Image</p>
-                <img src={user.profileImage} alt="Profile" className="w-16 h-16 rounded-xl object-cover mt-1 border border-line" />
+                <img src={getImageUrl(user.profileImage, 'avatar')} alt="Profile" onError={(e) => handleImageError(e, 'avatar')} className="w-16 h-16 rounded-xl object-cover mt-1 border border-line" />
               </div>
             )}
             <button
@@ -1645,7 +1646,7 @@ export default function DeliveryDashboard() {
                   {editProfileImage ? (
                     <img src={URL.createObjectURL(editProfileImage)} alt="Preview" className="w-full h-full object-cover" />
                   ) : user?.profileImage || riderProfile?.profileImage ? (
-                    <img src={user?.profileImage || riderProfile?.profileImage} alt="Profile" className="w-full h-full object-cover" />
+                    <img src={getImageUrl(user?.profileImage || riderProfile?.profileImage, 'avatar')} alt="Profile" onError={(e) => handleImageError(e, 'avatar')} className="w-full h-full object-cover" />
                   ) : (
                     <Bike className="w-10 h-10 text-muted" />
                   )}

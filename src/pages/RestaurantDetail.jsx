@@ -5,6 +5,7 @@ import { Star, Clock, AlertTriangle, ChevronRight, ShoppingBag, Search, X, Heart
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { useFavoriteStore } from '../store/favoriteStore';
+import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 const menuCategories = ['Starters', 'Burgers', 'Pizza', 'Biryani', 'Main Course', 'Desserts', 'Drinks'];
 
@@ -121,8 +122,9 @@ export default function RestaurantDetail() {
       {/* cover Image Banner */}
       <section className="relative rounded-3xl overflow-hidden h-[240px] md:h-[300px] shadow-md">
         <img
-          src={restaurant.image}
+          src={getImageUrl(restaurant.image, 'restaurant')}
           alt={restaurant.name}
+          onError={(e) => handleImageError(e, 'restaurant')}
           className="w-full h-full object-cover"
         />
 
@@ -363,8 +365,9 @@ export default function RestaurantDetail() {
                             </div>
                           )}
                           <img
-                            src={item.image}
+                            src={getImageUrl(item.image, 'food')}
                             alt={item.name}
+                            onError={(e) => handleImageError(e, 'food')}
                             className="w-full h-full object-cover rounded-2xl bg-base border border-line shadow-2xs"
                             loading="lazy"
                           />

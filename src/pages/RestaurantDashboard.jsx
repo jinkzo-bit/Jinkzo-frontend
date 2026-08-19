@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus, Pencil, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { uploadFileToBackend } from '../utils/uploadUtil';
+import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
 import LocationPickerModal from '../components/LocationPickerModal';
 import NotificationCenter from '../components/NotificationCenter';
@@ -338,7 +338,7 @@ export default function RestaurantDashboard() {
     }
 
     setIsItemSaving(true);
-    let finalImageUrl = itemImage.trim();
+    let finalImageUrl = (itemImage || '').trim();
     if (itemImageFile) {
       try {
         finalImageUrl = await uploadFileToBackend(itemImageFile);
@@ -443,7 +443,7 @@ export default function RestaurantDashboard() {
       return alert("Please update your exact location using the map before saving.");
     }
 
-    let finalProfileImageUrl = profileImage;
+    let finalProfileImageUrl = (profileImage || '').trim();
     if (profileImageFile) {
       try {
         finalProfileImageUrl = await uploadFileToBackend(profileImageFile);
@@ -769,7 +769,7 @@ export default function RestaurantDashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-5">
         <div className="flex items-center gap-3">
           {restaurantProfile?.image ? (
-            <img src={restaurantProfile.image} alt="Restaurant Cover" className="w-14 h-14 rounded-2xl object-cover shadow-sm border border-line" />
+            <img src={getImageUrl(restaurantProfile.image, 'restaurant')} alt="Restaurant Cover" onError={(e) => handleImageError(e, 'restaurant')} className="w-14 h-14 rounded-2xl object-cover shadow-sm border border-line" />
           ) : (
             <div className="p-2.5 bg-primary/10 text-primary rounded-2xl">
               <Store className="w-8 h-8" />
@@ -1200,7 +1200,7 @@ export default function RestaurantDashboard() {
                   {menuItems.map(item => (
                     <div key={item._id} className="bg-surface border border-line p-4 rounded-3xl shadow-2xs flex gap-3 relative group">
                       <div className="w-16 h-16 rounded-2xl overflow-hidden bg-base flex-shrink-0">
-                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                        <img src={getImageUrl(item.image, 'food')} alt={item.name} onError={(e) => handleImageError(e, 'food')} className="w-full h-full object-cover" />
                       </div>
                       <div className="flex flex-col gap-0.5 flex-grow pr-12">
                         <div className="flex items-center gap-1.5">
@@ -1435,7 +1435,7 @@ export default function RestaurantDashboard() {
                       {profileImageFile ? (
                         <img src={URL.createObjectURL(profileImageFile)} alt="Preview" className="w-full h-full object-cover" />
                       ) : profileImage ? (
-                        <img src={profileImage} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=200&h=200&q=80'; }} />
+                        <img src={getImageUrl(profileImage, 'restaurant')} alt="Preview" className="w-full h-full object-cover" onError={(e) => handleImageError(e, 'restaurant')} />
                       ) : (
                         <ImagePlus className="w-6 h-6 text-muted/50" />
                       )}
@@ -1675,7 +1675,7 @@ export default function RestaurantDashboard() {
                     {itemImageFile ? (
                       <img src={URL.createObjectURL(itemImageFile)} alt="Preview" className="w-full h-full object-cover" />
                     ) : itemImage ? (
-                      <img src={itemImage} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&h=200&q=80'; }} />
+                      <img src={getImageUrl(itemImage, 'food')} alt="Preview" className="w-full h-full object-cover" onError={(e) => handleImageError(e, 'food')} />
                     ) : (
                       <ImagePlus className="w-6 h-6 text-muted/50" />
                     )}

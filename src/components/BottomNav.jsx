@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
+import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 export default function BottomNav() {
   const location = useLocation();
@@ -102,17 +103,12 @@ export default function BottomNav() {
               >
                 {/* Item Thumbnail */}
                 <div className="w-11 h-11 rounded-lg overflow-hidden bg-gray-200 dark:bg-gray-800 flex-shrink-0">
-                  {item.image ? (
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400">
-                      🍽️
-                    </div>
-                  )}
+                  <img
+                    src={getImageUrl(item.image, 'food')}
+                    alt={item.name}
+                    onError={(e) => handleImageError(e, 'food')}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
 
                 {/* Item Details */}
