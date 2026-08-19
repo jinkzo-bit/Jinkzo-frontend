@@ -124,6 +124,8 @@ export default function RestaurantDashboard() {
   const [itemDesc, setItemDesc] = useState('');
   const [itemIsVeg, setItemIsVeg] = useState(true);
   const [itemIsAvailable, setItemIsAvailable] = useState(true);
+  const [itemModalError, setItemModalError] = useState('');
+  const [isItemSaving, setIsItemSaving] = useState(false);
   
   // Orders Management
   const [orders, setOrders] = useState([]);
@@ -298,22 +300,23 @@ export default function RestaurantDashboard() {
 
   // Add / Edit Menu Item
   const handleOpenItemModal = (item = null) => {
+    setItemModalError('');
     if (item) {
       setEditingItem(item);
-      setItemName(item.name);
-      setItemPrice(item.price);
-      setItemCategory(item.category);
-      setItemImage(item.image);
+      setItemName(item.name || '');
+      setItemPrice(item.price || '');
+      setItemCategory(item.category || 'Main Course');
+      setItemImage(item.image || '');
       setItemImageFile(null);
       setItemDesc(item.description || '');
-      setItemIsVeg(item.isVeg);
+      setItemIsVeg(item.isVeg !== false);
       setItemIsAvailable(item.isAvailable !== false);
     } else {
       setEditingItem(null);
       setItemName('');
       setItemPrice('');
       setItemCategory('Main Course');
-      setItemImage('https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&h=200&q=80');
+      setItemImage('');
       setItemImageFile(null);
       setItemDesc('');
       setItemIsVeg(true);
@@ -324,24 +327,34 @@ export default function RestaurantDashboard() {
 
   const handleSaveItem = async (e) => {
     e.preventDefault();
-    if (!itemName || !itemPrice) return;
-    if (!itemImage && !itemImageFile) return alert('Please select an image');
+    setItemModalError('');
+    if (!itemName.trim() || !itemPrice) {
+      setItemModalError('Please enter the dish name and price.');
+      return;
+    }
+    if (!itemImage.trim() && !itemImageFile) {
+      setItemModalError('Please choose an image file or provide an Image URL.');
+      return;
+    }
 
-    let finalImageUrl = itemImage;
+    setIsItemSaving(true);
+    let finalImageUrl = itemImage.trim();
     if (itemImageFile) {
       try {
         finalImageUrl = await uploadFileToBackend(itemImageFile);
       } catch (err) {
-        return alert(err.message || 'Image upload failed');
+        setIsItemSaving(false);
+        setItemModalError(err.message || 'Image upload failed.');
+        return;
       }
     }
 
     const payload = {
-      name: itemName,
+      name: itemName.trim(),
       price: parseFloat(itemPrice),
       category: itemCategory,
       image: finalImageUrl,
-      description: itemDesc,
+      description: itemDesc.trim(),
       isVeg: itemIsVeg,
       isAvailable: itemIsAvailable
     };
@@ -362,18 +375,20 @@ export default function RestaurantDashboard() {
         body: JSON.stringify(payload)
       });
 
-      if (res.ok) {
-        const saved = await res.json();
-        if (editingItem) {
-          setMenuItems(prev => prev.map(i => i._id === editingItem._id ? saved : i));
-        } else {
-          setMenuItems(prev => [...prev, saved]);
-        }
-        setShowItemModal(false);
-        fetchMetrics(); // Refresh stats
+      const data = await res.json();
+      if (!res.ok) {
+        setItemModalError(data.message || 'Failed to save menu item.');
+        return;
       }
+
+      setShowItemModal(false);
+      setItemImageFile(null);
+      fetchMenu();
+      fetchMetrics();
     } catch (err) {
-      console.error(err);
+      setItemModalError(err.message || 'Server error saving menu item.');
+    } finally {
+      setIsItemSaving(false);
     }
   };
 
@@ -1413,17 +1428,34 @@ export default function RestaurantDashboard() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Cover Image File</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setProfileImageFile(e.target.files[0])}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main outline-none"
-                  />
-                  {profileImage && !profileImageFile && (
-                    <span className="text-[9px] text-muted px-1">Current Image: {profileImage.split('/').pop()}</span>
-                  )}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Kitchen Cover Image</label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden border border-line-strong bg-base flex-shrink-0 flex items-center justify-center shadow-xs">
+                      {profileImageFile ? (
+                        <img src={URL.createObjectURL(profileImageFile)} alt="Preview" className="w-full h-full object-cover" />
+                      ) : profileImage ? (
+                        <img src={profileImage} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=200&h=200&q=80'; }} />
+                      ) : (
+                        <ImagePlus className="w-6 h-6 text-muted/50" />
+                      )}
+                    </div>
+                    <div className="flex-1 flex flex-col gap-1.5">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setProfileImageFile(e.target.files[0])}
+                        className="text-xs text-muted file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                      />
+                      <input
+                        type="url"
+                        placeholder="Or paste Cover Image URL (https://...)"
+                        value={profileImage}
+                        onChange={(e) => setProfileImage(e.target.value)}
+                        className="bg-base border border-line-strong rounded-lg px-2.5 py-1.5 text-[11px] text-main font-medium outline-none focus:border-primary w-full"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-3.5 mt-2">
@@ -1574,7 +1606,13 @@ export default function RestaurantDashboard() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveItem} className="flex flex-col gap-4 mt-4">
+            {itemModalError && (
+              <p className="text-[11px] font-bold text-red-500 bg-red-50 border border-red-200 px-3 py-2 rounded-xl">
+                {itemModalError}
+              </p>
+            )}
+
+            <form onSubmit={handleSaveItem} className="flex flex-col gap-3.5">
               
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Dish Name</label>
@@ -1629,17 +1667,35 @@ export default function RestaurantDashboard() {
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Image File</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setItemImageFile(e.target.files[0])}
-                  className="bg-base border border-gray-255 rounded-xl px-3.5 py-2.5 text-xs text-main outline-none"
-                />
-                {itemImage && !itemImageFile && (
-                  <span className="text-[9px] text-muted px-1">Current Image: {itemImage.split('/').pop()}</span>
-                )}
+              {/* Menu Item Image: Choose File OR Image URL with Live Preview */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Dish Image *</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-2xl overflow-hidden border border-line-strong bg-base flex-shrink-0 flex items-center justify-center shadow-xs">
+                    {itemImageFile ? (
+                      <img src={URL.createObjectURL(itemImageFile)} alt="Preview" className="w-full h-full object-cover" />
+                    ) : itemImage ? (
+                      <img src={itemImage} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&h=200&q=80'; }} />
+                    ) : (
+                      <ImagePlus className="w-6 h-6 text-muted/50" />
+                    )}
+                  </div>
+                  <div className="flex-1 flex flex-col gap-1.5">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setItemImageFile(e.target.files[0])}
+                      className="text-xs text-muted file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                    />
+                    <input
+                      type="url"
+                      placeholder="Or paste Image URL (https://...)"
+                      value={itemImage}
+                      onChange={(e) => setItemImage(e.target.value)}
+                      className="bg-base border border-line-strong rounded-lg px-2.5 py-1.5 text-[11px] text-main font-medium outline-none focus:border-primary w-full"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex flex-col gap-2 mt-1">
@@ -1666,8 +1722,8 @@ export default function RestaurantDashboard() {
                 </div>
               </div>
 
-              <button type="submit" className="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 rounded-xl mt-2 cursor-pointer shadow-md">
-                {editingItem ? 'Update Menu Item' : 'Add Item to Menu'}
+              <button type="submit" disabled={isItemSaving} className="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 rounded-xl mt-2 cursor-pointer shadow-md disabled:opacity-50">
+                {isItemSaving ? 'Saving...' : (editingItem ? 'Update Menu Item' : 'Add Item to Menu')}
               </button>
             </form>
           </div>

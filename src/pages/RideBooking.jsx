@@ -1,7 +1,7 @@
 import { API_BASE } from '../config/api';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bike, Package, MapPin, ArrowRight, CreditCard, Sparkles, AlertCircle, Check, HelpCircle, FileText } from 'lucide-react';
+import { Bike, Package, MapPin, ArrowRight, CreditCard, Sparkles, AlertCircle, Check, FileText } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { getRoute } from '../services/routingService';
@@ -674,31 +674,6 @@ export default function RideBooking() {
                 </>
               )}
             </button>
-
-            {/* Distance Price help tier box */}
-            <div className="bg-yellow-50/50 border border-yellow-200/50 rounded-2xl p-3 flex gap-2 text-yellow-800 text-[10px]">
-              <HelpCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-extrabold">Price Rules Guide ({vehicleType === 'bike' ? 'Bike Taxi' : 'Auto Taxi'}):</p>
-                <p className="mt-0.5 leading-relaxed font-semibold">
-                  Distance is calculated dynamically between locations: 
-                  {vehicleType === 'bike' ? (
-                    ` 0–${platformSettings?.rideBikePricing?.tier1?.maxDistanceKm || 2}km: ₹${platformSettings?.rideBikePricing?.tier1?.fee || 20}, ` +
-                    `>${platformSettings?.rideBikePricing?.tier1?.maxDistanceKm || 2}–${platformSettings?.rideBikePricing?.tier2?.maxDistanceKm || 3.5}km: ₹${platformSettings?.rideBikePricing?.tier2?.fee || 25}, ` +
-                    `>${platformSettings?.rideBikePricing?.tier2?.maxDistanceKm || 3.5}–${platformSettings?.rideBikePricing?.tier3?.maxDistanceKm || 6}km: ₹${platformSettings?.rideBikePricing?.tier3?.fee || 40}, ` +
-                    `>${platformSettings?.rideBikePricing?.tier3?.maxDistanceKm || 6}–${platformSettings?.rideBikePricing?.tier4?.maxDistanceKm || 12}km: ₹${platformSettings?.rideBikePricing?.tier4?.fee || 80}, ` +
-                    `>${platformSettings?.rideBikePricing?.tier4?.maxDistanceKm || 12}km: capped at ₹${platformSettings?.rideBikePricing?.tier5?.fee || 120}.`
-                  ) : (
-                    ` 0–${platformSettings?.rideAutoPricing?.tier1?.maxDistanceKm || 2}km: ₹${platformSettings?.rideAutoPricing?.tier1?.fee || 30}, ` +
-                    `>${platformSettings?.rideAutoPricing?.tier1?.maxDistanceKm || 2}–${platformSettings?.rideAutoPricing?.tier2?.maxDistanceKm || 3.5}km: ₹${platformSettings?.rideAutoPricing?.tier2?.fee || 40}, ` +
-                    `>${platformSettings?.rideAutoPricing?.tier2?.maxDistanceKm || 3.5}–${platformSettings?.rideAutoPricing?.tier3?.maxDistanceKm || 6}km: ₹${platformSettings?.rideAutoPricing?.tier3?.fee || 70}, ` +
-                    `>${platformSettings?.rideAutoPricing?.tier3?.maxDistanceKm || 6}–${platformSettings?.rideAutoPricing?.tier4?.maxDistanceKm || 12}km: ₹${platformSettings?.rideAutoPricing?.tier4?.fee || 120}, ` +
-                    `>${platformSettings?.rideAutoPricing?.tier4?.maxDistanceKm || 12}km: up to ₹${platformSettings?.rideAutoPricing?.tier6?.fee || 400}.`
-                  )}
-                </p>
-              </div>
-            </div>
-
           </div>
         </div>
 

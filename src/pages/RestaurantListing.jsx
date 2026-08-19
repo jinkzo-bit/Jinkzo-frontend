@@ -150,7 +150,7 @@ export default function RestaurantListing() {
   // Fetch dynamic categories from Super Admin backend
   useEffect(() => {
     let isMounted = true;
-    fetch(`${API_BASE}/api/categories?service=${activeDashboard}`)
+    fetch(`${API_BASE}/categories?service=${activeDashboard}`)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
         if (isMounted && Array.isArray(data) && data.length > 0) {

@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, ChevronRight, AlertCircle, ShoppingBag, Eye, LogOut, Send, FileText, Star, MessageSquare, Heart, Phone, Pencil, AlertTriangle, Camera } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import { uploadFileToBackend } from '../utils/uploadUtil';
 import InteractiveMap from '../components/InteractiveMap';
 import { io } from 'socket.io-client';
 import NotificationCenter from '../components/NotificationCenter';
@@ -42,17 +43,10 @@ export default function DeliveryDashboard() {
       let profileImageUrl = riderProfile?.profileImage || user?.profileImage || '';
       
       if (editProfileImage) {
-        const formData = new FormData();
-        formData.append('image', editProfileImage);
-        const uploadRes = await fetch(`${API_BASE}/upload`, {
-          method: 'POST',
-          body: formData
-        });
-        const uploadData = await uploadRes.json();
-        if (uploadRes.ok && uploadData.imageUrl) {
-          profileImageUrl = uploadData.imageUrl;
-        } else {
-          setProfileError('Failed to upload image.');
+        try {
+          profileImageUrl = await uploadFileToBackend(editProfileImage);
+        } catch (uErr) {
+          setProfileError(uErr.message || 'Failed to upload image.');
           setIsSavingProfile(false);
           return;
         }

@@ -391,7 +391,7 @@ export default function AdminDashboard() {
         fetchCategories(selectedCategoryService);
       }
     } catch (err) {
-      setAddCategoryError('Network error adding category');
+      setAddCategoryError(err.message || 'Failed to add category');
     } finally {
       setIsAddingCategory(false);
     }
@@ -431,7 +431,7 @@ export default function AdminDashboard() {
         fetchCategories(selectedCategoryService);
       }
     } catch (err) {
-      setEditCategoryError('Network error updating category');
+      setEditCategoryError(err.message || 'Failed to update category');
     } finally {
       setIsEditingCategory(false);
     }
