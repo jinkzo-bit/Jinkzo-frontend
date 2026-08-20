@@ -4,6 +4,7 @@ import { ShoppingCart, Trash2, Plus, Minus, Tag, Percent, ArrowRight, ShieldChec
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
+import VegBadge from '../components/VegBadge';
 
 export default function Cart() {
   const { items, restaurant, promoCode, promoDiscount, updateQuantity, removeItem, clearCart, applyPromo, removePromo, getCalculations, fetchPlatformSettings, platformSettings } = useCartStore();
@@ -152,10 +153,8 @@ export default function Cart() {
                         className="w-14 h-14 md:w-16 md:h-16 object-cover rounded-xl bg-base flex-shrink-0"
                       />
                       <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <div className={`w-3 h-3 rounded-xs border flex items-center justify-center p-0.5 flex-shrink-0 ${item.isVeg ? 'border-green-600' : 'border-red-600'}`}>
-                            <span className={`w-1 h-1 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
-                          </div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <VegBadge isVeg={item.isVeg} size="xs" />
                           <h3 className="font-display font-semibold text-sm md:text-base text-main line-clamp-1">
                             {item.name}
                           </h3>

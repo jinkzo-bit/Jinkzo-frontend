@@ -193,11 +193,11 @@ export default function BottomNav() {
             to="/favourites"
             className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all duration-200 ${
               isActive('/favourites')
-                ? 'text-[#7C3AED] dark:text-[#A78BFA] font-bold'
+                ? 'text-red-500 font-bold'
                 : 'text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200'
             }`}
           >
-            <Heart className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
+            <Heart className={`w-5 h-5 sm:w-5.5 sm:h-5.5 ${isActive('/favourites') ? 'fill-red-500 text-red-500' : ''}`} />
             <span className="text-[10px] sm:text-[11px] font-medium leading-none">Favourites</span>
           </Link>
 

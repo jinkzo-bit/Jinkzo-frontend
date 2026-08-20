@@ -5,7 +5,7 @@ import { useFavoriteStore } from '../store/favoriteStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 export default function RestaurantCard({ restaurant, isLoading }) {
-  const isHotelFavourite = useFavoriteStore((state) => state.isHotelFavourite);
+  const favouriteHotels = useFavoriteStore((state) => state.favouriteHotels);
   const toggleHotel = useFavoriteStore((state) => state.toggleHotel);
   if (isLoading) {
     return (
@@ -42,7 +42,7 @@ export default function RestaurantCard({ restaurant, isLoading }) {
 
   const numRating = typeof rating === 'number' ? rating : parseFloat(rating || 4.0) || 4.0;
   const tagsList = Array.isArray(cuisineTags) ? cuisineTags : [];
-  const isFav = isHotelFavourite(_id);
+  const isFav = favouriteHotels.some((h) => String(h._id) === String(_id));
 
   // Map dollar price range to readable rupee string
   const getRupeeCost = (range) => {
@@ -92,8 +92,8 @@ export default function RestaurantCard({ restaurant, isLoading }) {
         >
           <Heart className={`w-4 h-4 transition-colors ${
             isFav
-              ? 'text-[#7C3AED] fill-[#7C3AED]'
-              : 'text-gray-400 hover:text-[#7C3AED]'
+              ? 'text-red-500 fill-red-500'
+              : 'text-gray-400 hover:text-red-500'
           }`} />
         </button>
       </div>

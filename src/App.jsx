@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import BottomNav from './components/BottomNav';
@@ -6,6 +6,7 @@ import ToastContainer from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
+import AppIntro from './components/AppIntro';
 
 // Pages
 import Home from './pages/Home';
@@ -35,6 +36,21 @@ export default function App() {
   const initTheme = useThemeStore((state) => state.initTheme);
   const fetchUserFavourites = useFavoriteStore((state) => state.fetchUserFavourites);
 
+  const [showIntro, setShowIntro] = useState(() => {
+    try {
+      return !sessionStorage.getItem('corior_intro_seen');
+    } catch {
+      return false;
+    }
+  });
+
+  const handleIntroComplete = () => {
+    try {
+      sessionStorage.setItem('corior_intro_seen', 'true');
+    } catch {}
+    setShowIntro(false);
+  };
+
   // Initialize session on mount
   useEffect(() => {
     initTheme();
@@ -45,6 +61,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      {showIntro && <AppIntro onComplete={handleIntroComplete} />}
       <BrowserRouter>
         <div className="flex flex-col min-h-screen relative overflow-x-hidden">
           

@@ -19,12 +19,14 @@ import jinkzoLogo from '../assets/jinkzo-logo.jpg';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { useThemeStore } from '../store/themeStore';
+import { useLocationStore } from '../store/locationStore';
 import LocationPickerModal from './LocationPickerModal';
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
   const cartItems = useCartStore((state) => state.items);
   const { isDarkMode, toggleTheme } = useThemeStore();
+  const { lat, lng, address: storeAddress, isDetecting, detectGpsLocation, setLocation: setStoreLocation } = useLocationStore();
   const navigate = useNavigate();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,10 +44,15 @@ export default function Navbar() {
 
   const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Default address fallback
-  const deliveryAddress = (user && user.addresses && user.addresses.length > 0)
-    ? (user.addresses.find(a => a.isDefault)?.street || user.addresses[0].street || 'Allagadda Vari Vindhu, Nandikotkur')
-    : 'Allagadda Vari Vindhu, Nandikotkur';
+  // Dynamic real GPS location with fallback to user saved address or prompt
+  const deliveryAddress = isDetecting
+    ? 'Detecting location...'
+    : (storeAddress || (user?.addresses?.length > 0 ? (user.addresses.find(a => a.isDefault)?.street || user.addresses[0].street) : '') || 'Select location');
+
+  // Trigger GPS detection on mount
+  useEffect(() => {
+    detectGpsLocation();
+  }, [detectGpsLocation]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -93,13 +100,14 @@ export default function Navbar() {
             {/* Row 1: Logo (Left) and Deliver to Location + Quick Actions (Right) */}
             <div className="flex items-center justify-between gap-2">
 
-              {/* LEFT: Jinkzo Logo & Brand */}
+              {/* LEFT: Jinkzo Logo & Brand Wordmark */}
               <Link to="/" className="flex items-center gap-2 flex-shrink-0 group cursor-pointer">
                 <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden shadow-xs border border-gray-100 dark:border-white/10 flex items-center justify-center bg-white flex-shrink-0 group-hover:scale-105 transition-transform">
                   <img src={jinkzoLogo} alt="Jinkzo Logo" className="w-full h-full object-cover" />
                 </div>
-                <span className="font-display font-black text-lg sm:text-xl text-[#7C3AED] dark:text-white tracking-tight leading-none">
-                  Jinkzo
+                <span className="font-display font-black text-lg sm:text-xl tracking-tight leading-none flex items-center select-none">
+                  <span className="text-black dark:text-white">jink</span>
+                  <span className="text-[#FF6600]">zo</span>
                 </span>
               </Link>
 
@@ -112,11 +120,11 @@ export default function Navbar() {
                   title="Click to change delivery location"
                 >
                   <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-[#7C3AED]/20 text-[#7C3AED] dark:text-[#A78BFA] flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                    <MapPin className="w-3.5 h-3.5 fill-[#7C3AED]/20 text-[#7C3AED] dark:text-[#A78BFA]" />
+                    <MapPin className={`w-3.5 h-3.5 fill-[#7C3AED]/20 text-[#7C3AED] dark:text-[#A78BFA] ${isDetecting ? 'animate-bounce' : ''}`} />
                   </div>
                   <div className="flex flex-col min-w-0 pr-0.5">
                     <span className="text-[9px] text-gray-500 dark:text-slate-400 font-semibold leading-none">Deliver to</span>
-                    <span className="text-[11px] sm:text-xs font-bold text-gray-900 dark:text-white truncate max-w-[100px] xs:max-w-[140px] sm:max-w-[180px] leading-tight mt-0.5">
+                    <span className={`text-[11px] sm:text-xs font-bold truncate max-w-[100px] xs:max-w-[140px] sm:max-w-[180px] leading-tight mt-0.5 ${isDetecting ? 'text-gray-400 dark:text-slate-400 animate-pulse' : 'text-gray-900 dark:text-white'}`}>
                       {deliveryAddress}
                     </span>
                   </div>
@@ -203,8 +211,9 @@ export default function Navbar() {
                 <div className="w-9 h-9 rounded-xl overflow-hidden shadow-xs border border-gray-100 dark:border-white/10 flex items-center justify-center bg-white flex-shrink-0 group-hover:scale-105 transition-transform">
                   <img src={jinkzoLogo} alt="Jinkzo Logo" className="w-full h-full object-cover" />
                 </div>
-                <span className="font-display font-black text-xl text-[#7C3AED] dark:text-white tracking-tight">
-                  Jinkzo
+                <span className="font-display font-black text-xl lg:text-2xl tracking-tight flex items-center select-none">
+                  <span className="text-black dark:text-white">jink</span>
+                  <span className="text-[#FF6600]">zo</span>
                 </span>
               </Link>
 
@@ -215,11 +224,11 @@ export default function Navbar() {
                 title="Click to change delivery location"
               >
                 <div className="w-7 h-7 rounded-full bg-purple-100 dark:bg-[#7C3AED]/20 text-[#7C3AED] dark:text-[#A78BFA] flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                  <MapPin className="w-3.5 h-3.5 fill-[#7C3AED]/20 text-[#7C3AED] dark:text-[#A78BFA]" />
+                  <MapPin className={`w-3.5 h-3.5 fill-[#7C3AED]/20 text-[#7C3AED] dark:text-[#A78BFA] ${isDetecting ? 'animate-bounce' : ''}`} />
                 </div>
                 <div className="flex flex-col min-w-0 pr-1">
                   <span className="text-[10px] text-gray-500 dark:text-slate-400 font-medium leading-none">Deliver to</span>
-                  <span className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white truncate leading-tight mt-0.5">
+                  <span className={`text-xs sm:text-sm font-bold truncate leading-tight mt-0.5 ${isDetecting ? 'text-gray-400 dark:text-slate-400 animate-pulse' : 'text-gray-900 dark:text-white'}`}>
                     {deliveryAddress}
                   </span>
                 </div>
@@ -468,9 +477,11 @@ export default function Navbar() {
       <LocationPickerModal
         isOpen={showLocationModal}
         onClose={() => setShowLocationModal(false)}
-        initialAddress={deliveryAddress}
+        initialAddress={lat && lng ? { lat, lng, formattedAddress: deliveryAddress } : null}
         onConfirm={(addr) => {
-          console.log('Selected address:', addr);
+          if (addr) {
+            setStoreLocation(addr, 'MANUAL');
+          }
           setShowLocationModal(false);
         }}
       />

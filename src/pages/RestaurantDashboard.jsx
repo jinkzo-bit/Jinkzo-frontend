@@ -8,6 +8,7 @@ import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/upl
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
 import LocationPickerModal from '../components/LocationPickerModal';
 import NotificationCenter from '../components/NotificationCenter';
+import VegBadge from '../components/VegBadge';
 
 export default function RestaurantDashboard() {
   const { user, token, logout } = useAuthStore();
@@ -1203,10 +1204,8 @@ export default function RestaurantDashboard() {
                         <img src={getImageUrl(item.image, 'food')} alt={item.name} onError={(e) => handleImageError(e, 'food')} className="w-full h-full object-cover" />
                       </div>
                       <div className="flex flex-col gap-0.5 flex-grow pr-12">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`w-3 h-3 rounded-xs border-2 flex items-center justify-center ${item.isVeg ? 'border-green-600' : 'border-red-600'}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
-                          </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <VegBadge isVeg={item.isVeg} size="xs" />
                           <h4 className="text-xs font-bold text-main line-clamp-1">{item.name}</h4>
                         </div>
                         <span className="text-[10px] text-primary font-bold">₹{item.price}</span>

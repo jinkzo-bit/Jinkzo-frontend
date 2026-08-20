@@ -20,7 +20,8 @@ export const useCartStore = create(
     deliveryBaseFee: 40,
     platformFee: 5,
     taxPercent: 0,
-    isOpen: true
+    isOpen: true,
+    globalServiceRadiusKm: 5
   },
 
   showToast: (message, type = 'success') => {

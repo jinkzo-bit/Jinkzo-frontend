@@ -2,11 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronRight,
-  ChevronLeft,
-  Bike,
-  ShieldCheck,
-  Tag,
-  Headphones
+  ChevronLeft
 } from 'lucide-react';
 import { API_BASE } from '../config/api';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
@@ -417,73 +413,6 @@ export default function Home() {
             </div>
           </Link>
         ))}
-      </section>
-
-      {/* 4. TRUST / FEATURE BADGES BAR */}
-      <section className="bg-white dark:bg-[#141926] rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 md:p-7 shadow-[0_4px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.4)] border border-gray-100 dark:border-white/10 mt-1 sm:mt-2 transition-colors duration-300">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4 md:gap-6 divide-y sm:divide-y-0 sm:divide-x divide-gray-100 dark:divide-white/10">
-
-          {/* Feature 1: Fast Delivery */}
-          <div className="flex items-center gap-2 sm:gap-3 md:gap-3.5 px-1 sm:px-2 pt-1 sm:pt-2 md:pt-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-xl sm:rounded-2xl bg-purple-100 dark:bg-[#7C3AED]/20 text-[#7C3AED] dark:text-[#C084FC] flex items-center justify-center flex-shrink-0">
-              <Bike className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5 text-[#7C3AED] dark:text-[#C084FC]" />
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="font-display font-extrabold text-[11px] sm:text-xs md:text-sm text-gray-900 dark:text-white leading-tight truncate">
-                Fast Delivery
-              </span>
-              <span className="text-[9px] sm:text-[10px] md:text-[11px] text-gray-500 dark:text-slate-400 font-medium mt-0.5 leading-none sm:leading-tight truncate">
-                On time, every time
-              </span>
-            </div>
-          </div>
-
-          {/* Feature 2: Safe & Secure */}
-          <div className="flex items-center gap-2 sm:gap-3 md:gap-3.5 px-1 sm:px-2 pt-1 sm:pt-2 md:pt-0 sm:pl-4 md:pl-6">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-xl sm:rounded-2xl bg-rose-100 dark:bg-[#E11D48]/20 text-[#E11D48] dark:text-[#FB7185] flex items-center justify-center flex-shrink-0">
-              <ShieldCheck className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5 text-[#E11D48] dark:text-[#FB7185]" />
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="font-display font-extrabold text-[11px] sm:text-xs md:text-sm text-gray-900 dark:text-white leading-tight truncate">
-                Safe &amp; Secure
-              </span>
-              <span className="text-[9px] sm:text-[10px] md:text-[11px] text-gray-500 dark:text-slate-400 font-medium mt-0.5 leading-none sm:leading-tight truncate">
-                100% secure payments
-              </span>
-            </div>
-          </div>
-
-          {/* Feature 3: Best Offers */}
-          <div className="flex items-center gap-2 sm:gap-3 md:gap-3.5 px-1 sm:px-2 pt-1 sm:pt-2 md:pt-0 sm:pl-4 md:pl-6">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-xl sm:rounded-2xl bg-amber-100 dark:bg-[#D97706]/20 text-[#D97706] dark:text-[#FBBF24] flex items-center justify-center flex-shrink-0">
-              <Tag className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5 text-[#D97706] dark:text-[#FBBF24]" />
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="font-display font-extrabold text-[11px] sm:text-xs md:text-sm text-gray-900 dark:text-white leading-tight truncate">
-                Best Offers
-              </span>
-              <span className="text-[9px] sm:text-[10px] md:text-[11px] text-gray-500 dark:text-slate-400 font-medium mt-0.5 leading-none sm:leading-tight truncate">
-                Great deals &amp; discounts
-              </span>
-            </div>
-          </div>
-
-          {/* Feature 4: 24/7 Support */}
-          <div className="flex items-center gap-2 sm:gap-3 md:gap-3.5 px-1 sm:px-2 pt-1 sm:pt-2 md:pt-0 sm:pl-4 md:pl-6">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 rounded-xl sm:rounded-2xl bg-emerald-100 dark:bg-[#059669]/20 text-[#059669] dark:text-[#34D399] flex items-center justify-center flex-shrink-0">
-              <Headphones className="w-4 h-4 sm:w-4.5 sm:h-4.5 md:w-5 md:h-5 text-[#059669] dark:text-[#34D399]" />
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="font-display font-extrabold text-[11px] sm:text-xs md:text-sm text-gray-900 dark:text-white leading-tight truncate">
-                24/7 Support
-              </span>
-              <span className="text-[9px] sm:text-[10px] md:text-[11px] text-gray-500 dark:text-slate-400 font-medium mt-0.5 leading-none sm:leading-tight truncate">
-                We're here to help
-              </span>
-            </div>
-          </div>
-
-        </div>
       </section>
 
     </div>

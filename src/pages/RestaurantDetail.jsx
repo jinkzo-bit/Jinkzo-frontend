@@ -6,6 +6,7 @@ import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { useFavoriteStore } from '../store/favoriteStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
+import VegBadge from '../components/VegBadge';
 
 const menuCategories = ['Starters', 'Burgers', 'Pizza', 'Biryani', 'Main Course', 'Desserts', 'Drinks'];
 
@@ -15,9 +16,9 @@ export default function RestaurantDetail() {
 
   const user = useAuthStore((state) => state.user);
 
-  const isHotelFavourite = useFavoriteStore((state) => state.isHotelFavourite);
+  const favouriteHotels = useFavoriteStore((state) => state.favouriteHotels);
   const toggleHotel = useFavoriteStore((state) => state.toggleHotel);
-  const isItemFavourite = useFavoriteStore((state) => state.isItemFavourite);
+  const favouriteItems = useFavoriteStore((state) => state.favouriteItems);
   const toggleItem = useFavoriteStore((state) => state.toggleItem);
 
   const [restaurant, setRestaurant] = useState(null);
@@ -132,12 +133,12 @@ export default function RestaurantDetail() {
         <button
           onClick={() => toggleHotel(restaurant)}
           className="absolute top-4 right-4 p-2.5 rounded-full bg-white/90 dark:bg-[#141926]/90 shadow-lg border border-gray-100 dark:border-white/10 hover:scale-110 active:scale-95 transition-all cursor-pointer z-10 backdrop-blur-xs"
-          title={isHotelFavourite(restaurant._id) ? 'Remove from Favourites' : 'Add to Favourites'}
+          title={restaurant?._id && favouriteHotels.some((h) => String(h._id) === String(restaurant._id)) ? 'Remove from Favourites' : 'Add to Favourites'}
         >
           <Heart className={`w-5 h-5 transition-colors ${
-            isHotelFavourite(restaurant._id)
-              ? 'text-[#7C3AED] fill-[#7C3AED]'
-              : 'text-gray-400 hover:text-[#7C3AED]'
+            restaurant?._id && favouriteHotels.some((h) => String(h._id) === String(restaurant._id))
+              ? 'text-red-500 fill-red-500'
+              : 'text-gray-400 hover:text-red-500'
           }`} />
         </button>
 
@@ -341,9 +342,9 @@ export default function RestaurantDetail() {
                       >
                         {/* Food description info */}
                         <div className="flex-grow flex flex-col gap-1.5 max-w-[70%]">
-                          {/* Veg/Non-Veg Badge */}
-                          <div className={`w-4 h-4 rounded-xs border-2 flex items-center justify-center p-0.5 flex-shrink-0 ${item.isVeg ? 'border-green-600' : 'border-red-600'}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
+                          {/* Veg/Non-Veg Text Badge */}
+                          <div>
+                            <VegBadge isVeg={item.isVeg} />
                           </div>
 
                           <h3 className="font-display font-semibold text-base text-main">
@@ -383,12 +384,12 @@ export default function RestaurantDetail() {
                               });
                             }}
                             className="absolute top-1.5 right-1.5 p-1.5 rounded-full bg-white/90 dark:bg-[#141926]/90 shadow-sm border border-gray-100 dark:border-white/10 hover:scale-110 active:scale-95 transition-all cursor-pointer z-10"
-                            title={isItemFavourite(item._id) ? 'Remove from Favourites' : 'Add to Favourites'}
+                            title={favouriteItems.some((i) => String(i._id) === String(item._id)) ? 'Remove from Favourites' : 'Add to Favourites'}
                           >
                             <Heart className={`w-3.5 h-3.5 transition-colors ${
-                              isItemFavourite(item._id)
-                                ? 'text-[#7C3AED] fill-[#7C3AED]'
-                                : 'text-gray-400 hover:text-[#7C3AED]'
+                              favouriteItems.some((i) => String(i._id) === String(item._id))
+                                ? 'text-red-500 fill-red-500'
+                                : 'text-gray-400 hover:text-red-500'
                             }`} />
                           </button>
 

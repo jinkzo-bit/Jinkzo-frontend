@@ -6,6 +6,7 @@ import RestaurantCard from '../components/RestaurantCard';
 import { useCartStore } from '../store/cartStore';
 import { useFavoriteStore } from '../store/favoriteStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
+import VegBadge from '../components/VegBadge';
 
 // ─── 1. FOOD CATEGORIES ───
 const foodCategories = [
@@ -182,7 +183,7 @@ export default function RestaurantListing() {
   const clearCart = useCartStore((state) => state.clearCart);
 
   // Favourites Zustand Integration
-  const isItemFavourite = useFavoriteStore((state) => state.isItemFavourite);
+  const favouriteItems = useFavoriteStore((state) => state.favouriteItems);
   const toggleItem = useFavoriteStore((state) => state.toggleItem);
 
   // Cart conflict modal state
@@ -508,7 +509,7 @@ export default function RestaurantListing() {
                 const isRestClosed = dish.restaurant?.isClosed;
                 const isItemUnavailable = dish.isAvailable === false;
                 const isDisabled = isRestClosed || isItemUnavailable;
-                const isFav = isItemFavourite(dish._id);
+                const isFav = favouriteItems.some((i) => String(i._id) === String(dish._id));
 
                 return (
                   <div
@@ -539,10 +540,10 @@ export default function RestaurantListing() {
                           className="w-full h-full object-cover rounded-2xl bg-base border border-line shadow-2xs"
                           loading="lazy"
                         />
-                        {/* Veg Badge */}
-                        <span className={`absolute top-2 left-2 w-4 h-4 rounded-xs border-2 bg-surface flex items-center justify-center p-0.5 shadow-sm ${dish.isVeg ? 'border-green-600' : 'border-red-600'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${dish.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
-                        </span>
+                        {/* Veg / Non-Veg Badge */}
+                        <div className="absolute top-2 left-2 z-10">
+                          <VegBadge isVeg={dish.isVeg} size="xs" className="shadow-xs backdrop-blur-xs bg-white/95 dark:bg-[#141926]/95" />
+                        </div>
 
                         {/* Heart Button */}
                         <button
@@ -556,8 +557,8 @@ export default function RestaurantListing() {
                         >
                           <Heart className={`w-3.5 h-3.5 transition-colors ${
                             isFav
-                              ? 'text-[#7C3AED] fill-[#7C3AED]'
-                              : 'text-gray-400 hover:text-[#7C3AED]'
+                              ? 'text-red-500 fill-red-500'
+                              : 'text-gray-400 hover:text-red-500'
                           }`} />
                         </button>
                       </div>

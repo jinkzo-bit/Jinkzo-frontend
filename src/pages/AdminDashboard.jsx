@@ -7,7 +7,7 @@ import {
   XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare,
   AlertCircle, ChevronLeft, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2,
   Pencil, Plus, UserCircle, Activity, FileText, Star, TrendingUp, Search, Menu, Filter, Info, Shield, RefreshCw,
-  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical
+  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical, Save
 } from 'lucide-react';
 import InteractiveMap from '../components/InteractiveMap';
 import { useAuthStore } from '../store/authStore';
@@ -26,7 +26,8 @@ export default function AdminDashboard() {
     commissionPercent: 15,
     deliveryBaseFee: 40,
     taxPercent: 5,
-    isOpen: true
+    isOpen: true,
+    globalServiceRadiusKm: 5
   });
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(true);
   const [restaurantsList, setRestaurantsList] = useState([]);
@@ -903,7 +904,12 @@ export default function AdminDashboard() {
 
   // Save platform settings parameters
   const handleSaveSettings = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+    const radius = parseFloat(platformSettings?.globalServiceRadiusKm);
+    if (!Number.isFinite(radius) || radius < 0.1 || radius > 500) {
+      alert('Please enter a valid Service Radius between 0.1 KM and 500 KM.');
+      return;
+    }
     setIsSettingsSaving(true);
     try {
       const res = await fetch(`${API_BASE}/admin/settings`, {
@@ -918,9 +924,13 @@ export default function AdminDashboard() {
         const updated = await res.json();
         setPlatformSettings(updated);
         alert('Platform settings parameters updated successfully!');
+      } else {
+        const errData = await res.json();
+        alert(errData.message || 'Failed to update settings');
       }
     } catch (err) {
       console.error('Error saving settings:', err);
+      alert('Failed to connect to server while saving settings.');
     } finally {
       setIsSettingsSaving(false);
     }
@@ -2573,290 +2583,404 @@ export default function AdminDashboard() {
 
           {/* OPERATIONAL PARAMETERS TAB */}
           {activeSubTab === 'settings' && (
-            <div className="flex flex-col gap-4">
-              <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Platform Global Parameters</h3>
+            <div className="flex flex-col gap-6">
+              {/* Top Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
+                <div>
+                  <h3 className="font-display font-extrabold text-xl text-main">Operational Parameters</h3>
+                  <p className="text-xs text-muted font-medium mt-0.5">Configure platform operational settings and pricing parameters</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveSettings}
+                  disabled={isSettingsSaving}
+                  className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-5 py-2.5 rounded-xl cursor-pointer shadow-md transition-all flex items-center justify-center gap-2 self-start sm:self-auto disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {isSettingsSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
 
-              <form onSubmit={handleSaveSettings} className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Commission Rate (%)</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        required
-                        value={platformSettings.commissionPercent}
-                        onChange={(e) => setPlatformSettings({ ...platformSettings, commissionPercent: parseFloat(e.target.value) })}
-                        className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full"
-                      />
+              {/* Main 2-Column Grid */}
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+                {/* Left Column: Settings Cards */}
+                <form onSubmit={handleSaveSettings} className="xl:col-span-2 flex flex-col gap-6">
+                  {/* CARD 1: SERVICE RADIUS SETTINGS */}
+                  <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-4">
+                    <div>
+                      <h4 className="font-display font-extrabold text-base text-primary flex items-center gap-2">
+                        <MapPin className="w-5 h-5 text-primary" />
+                        Service Radius Settings
+                      </h4>
+                      <p className="text-xs text-muted font-medium mt-1 leading-relaxed">
+                        Set the maximum service radius. Orders will only be accepted within this radius from restaurants for food delivery and from pickup locations for rides.
+                      </p>
                     </div>
-                  </div>
 
-                  <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3 mt-2">
-                    <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-primary" />Food Delivery Pricing</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                      {['tier1', 'tier2', 'tier3', 'tier4', 'tier5'].map((tier, idx) => {
-                        const defaults = [
-                          { max: 2, fee: 20 },
-                          { max: 3.5, fee: 25 },
-                          { max: 6, fee: 40 },
-                          { max: 12, fee: 80 },
-                          { max: 20, fee: 120 }
-                        ];
-                        return (
-                          <div key={tier} className="col-span-1 flex flex-col gap-2">
-                            <div>
-                              <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Max (km)</label>
-                              <input type="number" step="0.1"
-                                value={platformSettings?.foodDeliveryPricing?.[tier]?.maxDistanceKm || defaults[idx].max}
-                                onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, [tier]: { ...platformSettings.foodDeliveryPricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
-                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Fee (₹)</label>
-                              <input type="number"
-                                value={platformSettings?.foodDeliveryPricing?.[tier]?.fee || defaults[idx].fee}
-                                onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, [tier]: { ...platformSettings.foodDeliveryPricing?.[tier], fee: parseFloat(e.target.value) } } })}
-                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3">
-                    <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-orange-500" />Ride Bike Pricing</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                      {['tier1', 'tier2', 'tier3', 'tier4', 'tier5'].map((tier, idx) => {
-                        const defaults = [
-                          { max: 2, fee: 20 },
-                          { max: 3.5, fee: 25 },
-                          { max: 6, fee: 40 },
-                          { max: 12, fee: 80 },
-                          { max: 20, fee: 120 }
-                        ];
-                        return (
-                          <div key={tier} className="col-span-1 flex flex-col gap-2">
-                            <div>
-                              <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Max (km)</label>
-                              <input type="number" step="0.1"
-                                value={platformSettings?.rideBikePricing?.[tier]?.maxDistanceKm || defaults[idx].max}
-                                onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
-                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Fee (₹)</label>
-                              <input type="number"
-                                value={platformSettings?.rideBikePricing?.[tier]?.fee || defaults[idx].fee}
-                                onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], fee: parseFloat(e.target.value) } } })}
-                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3">
-                    <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-green-500" />Ride Auto Pricing</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                      {['tier1', 'tier2', 'tier3', 'tier4', 'tier5', 'tier6'].map((tier, idx) => {
-                        const defaults = [
-                          { max: 2, fee: 30 },
-                          { max: 3.5, fee: 40 },
-                          { max: 6, fee: 70 },
-                          { max: 12, fee: 120 },
-                          { max: 20, fee: 200 },
-                          { max: 40, fee: 400 }
-                        ];
-                        return (
-                          <div key={tier} className="col-span-1 flex flex-col gap-2">
-                            <div>
-                              <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Max (km)</label>
-                              <input type="number" step="0.1"
-                                value={platformSettings?.rideAutoPricing?.[tier]?.maxDistanceKm || defaults[idx].max}
-                                onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
-                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-[10px] font-bold w-full"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Fee (₹)</label>
-                              <input type="number"
-                                value={platformSettings?.rideAutoPricing?.[tier]?.fee || defaults[idx].fee}
-                                onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], fee: parseFloat(e.target.value) } } })}
-                                className="bg-base border border-line-strong rounded-lg px-2 py-2 text-[10px] font-bold w-full"
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3">
-                    <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500" />Ride Services & Multi-Order Grouping</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-                      <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox"
-                            checked={platformSettings?.rideServices?.bikeEnabled ?? true}
-                            onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, bikeEnabled: e.target.checked } })}
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-[11px] font-bold uppercase">Bike Taxi ON</span>
+                    <div className="border border-dashed border-primary/30 dark:border-primary/40 bg-purple-50/40 dark:bg-purple-950/20 p-5 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-5 items-center">
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider">
+                          Service Radius (KM)
                         </label>
+                        <div className="relative mt-1.5 flex items-center">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="0.1"
+                            max="500"
+                            required
+                            value={platformSettings?.globalServiceRadiusKm ?? 5}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              setPlatformSettings({ ...platformSettings, globalServiceRadiusKm: isNaN(val) ? '' : val });
+                            }}
+                            className="bg-surface border border-line-strong rounded-xl px-4 py-3 text-sm text-main font-bold outline-none w-full pr-12 focus:border-primary focus:ring-1 focus:ring-primary shadow-xs"
+                          />
+                          <span className="absolute right-3.5 text-xs font-bold text-muted uppercase pointer-events-none">km</span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox"
-                            checked={platformSettings?.rideServices?.autoEnabled ?? true}
-                            onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, autoEnabled: e.target.checked } })}
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-[11px] font-bold uppercase">Auto Taxi ON</span>
-                        </label>
+                      <div className="bg-purple-100/60 dark:bg-purple-900/30 border border-primary/20 rounded-2xl p-4 flex items-start gap-3">
+                        <div className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <Info className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <h5 className="text-xs font-black text-main">How it works</h5>
+                          <p className="text-[11px] text-muted leading-relaxed mt-0.5">
+                            Orders will only be created and shown to users when the distance between the customer and restaurant/pickup location is within this radius.
+                          </p>
+                        </div>
                       </div>
+                    </div>
 
-                      <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox"
-                            checked={platformSettings?.rideServices?.parcelEnabled ?? true}
-                            onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, parcelEnabled: e.target.checked } })}
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-[11px] font-bold uppercase">Parcel Delivery ON</span>
-                        </label>
-                      </div>
+                    <div className="flex items-center gap-2 text-xs font-medium text-muted px-1">
+                      <Shield className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span>Default radius is 5 KM. You can update this value as per your business requirements.</span>
+                    </div>
+                  </div>
 
-                      <div className="flex flex-col gap-2 bg-base border border-line-strong rounded-lg p-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox"
-                            checked={platformSettings?.sameAddressMultiOrder?.enabled ?? true}
-                            onChange={(e) => setPlatformSettings({ ...platformSettings, sameAddressMultiOrder: { ...platformSettings.sameAddressMultiOrder, enabled: e.target.checked } })}
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-[11px] font-bold uppercase">Multi-Order Discount ON</span>
-                        </label>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-muted uppercase">Max Orders:</span>
-                          <input type="number" min="1"
-                            value={platformSettings?.sameAddressMultiOrder?.maxOrders || 3}
-                            onChange={(e) => setPlatformSettings({ ...platformSettings, sameAddressMultiOrder: { ...platformSettings.sameAddressMultiOrder, maxOrders: parseInt(e.target.value) } })}
-                            className="bg-white border border-line-strong rounded-md px-2 py-1 text-xs font-bold w-16 text-center"
+                  {/* CARD 2: PRICING & COMMISSION */}
+                  <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Commission Rate (%)</label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            required
+                            value={platformSettings.commissionPercent}
+                            onChange={(e) => setPlatformSettings({ ...platformSettings, commissionPercent: parseFloat(e.target.value) })}
+                            className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full"
                           />
                         </div>
                       </div>
 
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Platform Fee (₹)</label>
+                        <input
+                          type="number"
+                          required
+                          min="0"
+                          step="1"
+                          value={platformSettings.platformFee ?? 5}
+                          onChange={(e) => setPlatformSettings({ ...platformSettings, platformFee: parseFloat(e.target.value) || 0 })}
+                          className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full"
+                        />
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3">
-                    <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500" />Optional Surcharges</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {['rain', 'lateNight', 'festival'].map((sc, idx) => {
-                        const labels = { rain: 'Rain Charge', lateNight: 'Late Night Charge', festival: 'Festival Charge' };
-                        const defaultFees = { rain: 10, lateNight: 20, festival: 15 };
-                        const cur = platformSettings?.surcharges?.[sc] || { enabled: false, fee: defaultFees[sc] };
-                        return (
-                          <div key={sc} className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="checkbox"
-                                checked={cur.enabled}
-                                onChange={(e) => setPlatformSettings({ ...platformSettings, surcharges: { ...platformSettings.surcharges, [sc]: { ...cur, enabled: e.target.checked } } })}
-                                className="w-4 h-4 text-primary"
-                              />
-                              <span className="text-[11px] font-bold uppercase">{labels[sc]}</span>
-                            </label>
-                            <div className="ml-auto flex items-center gap-2">
-                              <span className="text-xs font-bold">₹</span>
-                              <input type="number"
-                                value={cur.fee}
-                                onChange={(e) => setPlatformSettings({ ...platformSettings, surcharges: { ...platformSettings.surcharges, [sc]: { ...cur, fee: parseFloat(e.target.value) } } })}
-                                className="bg-white border border-line-strong rounded-md px-2 py-1 text-xs font-bold w-16"
-                              />
+                    {/* Food Delivery Pricing */}
+                    <div className="border border-line p-4 rounded-xl flex flex-col gap-3">
+                      <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-primary" />Food Delivery Pricing</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        {['tier1', 'tier2', 'tier3', 'tier4', 'tier5'].map((tier, idx) => {
+                          const defaults = [
+                            { max: 2, fee: 20 },
+                            { max: 3.5, fee: 25 },
+                            { max: 6, fee: 40 },
+                            { max: 12, fee: 80 },
+                            { max: 20, fee: 120 }
+                          ];
+                          return (
+                            <div key={tier} className="col-span-1 flex flex-col gap-2">
+                              <div>
+                                <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Max (km)</label>
+                                <input type="number" step="0.1"
+                                  value={platformSettings?.foodDeliveryPricing?.[tier]?.maxDistanceKm || defaults[idx].max}
+                                  onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, [tier]: { ...platformSettings.foodDeliveryPricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
+                                  className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Fee (₹)</label>
+                                <input type="number"
+                                  value={platformSettings?.foodDeliveryPricing?.[tier]?.fee || defaults[idx].fee}
+                                  onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, [tier]: { ...platformSettings.foodDeliveryPricing?.[tier], fee: parseFloat(e.target.value) } } })}
+                                  className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                                />
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Platform Fee (₹)</label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      step="1"
-                      value={platformSettings.platformFee ?? 5}
-                      onChange={(e) => setPlatformSettings({ ...platformSettings, platformFee: parseFloat(e.target.value) || 0 })}
-                      className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full"
-                    />
-                  </div>
-                </div>
+                    {/* Ride Bike Pricing */}
+                    <div className="border border-line p-4 rounded-xl flex flex-col gap-3">
+                      <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-orange-500" />Ride Bike Pricing</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        {['tier1', 'tier2', 'tier3', 'tier4', 'tier5'].map((tier, idx) => {
+                          const defaults = [
+                            { max: 2, fee: 20 },
+                            { max: 3.5, fee: 25 },
+                            { max: 6, fee: 40 },
+                            { max: 12, fee: 80 },
+                            { max: 20, fee: 120 }
+                          ];
+                          return (
+                            <div key={tier} className="col-span-1 flex flex-col gap-2">
+                              <div>
+                                <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Max (km)</label>
+                                <input type="number" step="0.1"
+                                  value={platformSettings?.rideBikePricing?.[tier]?.maxDistanceKm || defaults[idx].max}
+                                  onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
+                                  className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Fee (₹)</label>
+                                <input type="number"
+                                  value={platformSettings?.rideBikePricing?.[tier]?.fee || defaults[idx].fee}
+                                  onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], fee: parseFloat(e.target.value) } } })}
+                                  className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-                <div className="flex items-center gap-3 mt-3 border-t border-line pt-4">
-                  <input
-                    type="checkbox"
-                    id="isOpen"
-                    checked={platformSettings.isOpen}
-                    onChange={(e) => setPlatformSettings({ ...platformSettings, isOpen: e.target.checked })}
-                    className="w-4.5 h-4.5 border-line-strong rounded text-primary focus:ring-primary cursor-pointer"
-                  />
-                  <label htmlFor="isOpen" className="text-xs text-muted font-bold cursor-pointer uppercase">
-                    Ecosystem Ordering Active (Toggles platform shutdown / open)
-                  </label>
-                </div>
+                    {/* Ride Auto Pricing */}
+                    <div className="border border-line p-4 rounded-xl flex flex-col gap-3">
+                      <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-green-500" />Ride Auto Pricing</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                        {['tier1', 'tier2', 'tier3', 'tier4', 'tier5', 'tier6'].map((tier, idx) => {
+                          const defaults = [
+                            { max: 2, fee: 30 },
+                            { max: 3.5, fee: 40 },
+                            { max: 6, fee: 70 },
+                            { max: 12, fee: 120 },
+                            { max: 20, fee: 200 },
+                            { max: 40, fee: 400 }
+                          ];
+                          return (
+                            <div key={tier} className="col-span-1 flex flex-col gap-2">
+                              <div>
+                                <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Max (km)</label>
+                                <input type="number" step="0.1"
+                                  value={platformSettings?.rideAutoPricing?.[tier]?.maxDistanceKm || defaults[idx].max}
+                                  onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
+                                  className="bg-base border border-line-strong rounded-lg px-2 py-2 text-[10px] font-bold w-full"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Fee (₹)</label>
+                                <input type="number"
+                                  value={platformSettings?.rideAutoPricing?.[tier]?.fee || defaults[idx].fee}
+                                  onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], fee: parseFloat(e.target.value) } } })}
+                                  className="bg-base border border-line-strong rounded-lg px-2 py-2 text-[10px] font-bold w-full"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-                {/* Rider Assignment Mode */}
-                <div className="col-span-full border border-line p-4 rounded-xl flex flex-col gap-3 mt-2">
-                  <h4 className="text-xs font-bold text-main flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-amber-500" />
-                    Rider Assignment Mode
-                  </h4>
-                  <p className="text-[11px] text-muted">Controls how riders are assigned to new orders and rides. Default is MANUAL.</p>
-                  <div className="flex items-center gap-6">
-                    <label className="flex items-center gap-2 cursor-pointer">
+                    {/* Ride Services & Multi-Order Grouping */}
+                    <div className="border border-line p-4 rounded-xl flex flex-col gap-3">
+                      <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500" />Ride Services & Multi-Order Grouping</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox"
+                              checked={platformSettings?.rideServices?.bikeEnabled ?? true}
+                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, bikeEnabled: e.target.checked } })}
+                              className="w-4 h-4 text-primary"
+                            />
+                            <span className="text-[11px] font-bold uppercase">Bike Taxi ON</span>
+                          </label>
+                        </div>
+
+                        <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox"
+                              checked={platformSettings?.rideServices?.autoEnabled ?? true}
+                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, autoEnabled: e.target.checked } })}
+                              className="w-4 h-4 text-primary"
+                            />
+                            <span className="text-[11px] font-bold uppercase">Auto Taxi ON</span>
+                          </label>
+                        </div>
+
+                        <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox"
+                              checked={platformSettings?.rideServices?.parcelEnabled ?? true}
+                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, parcelEnabled: e.target.checked } })}
+                              className="w-4 h-4 text-primary"
+                            />
+                            <span className="text-[11px] font-bold uppercase">Parcel Delivery ON</span>
+                          </label>
+                        </div>
+
+                        <div className="flex flex-col gap-2 bg-base border border-line-strong rounded-lg p-3">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox"
+                              checked={platformSettings?.sameAddressMultiOrder?.enabled ?? true}
+                              onChange={(e) => setPlatformSettings({ ...platformSettings, sameAddressMultiOrder: { ...platformSettings.sameAddressMultiOrder, enabled: e.target.checked } })}
+                              className="w-4 h-4 text-primary"
+                            />
+                            <span className="text-[11px] font-bold uppercase">Multi-Order Discount ON</span>
+                          </label>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-muted uppercase">Max Orders:</span>
+                            <input type="number" min="1"
+                              value={platformSettings?.sameAddressMultiOrder?.maxOrders || 3}
+                              onChange={(e) => setPlatformSettings({ ...platformSettings, sameAddressMultiOrder: { ...platformSettings.sameAddressMultiOrder, maxOrders: parseInt(e.target.value) } })}
+                              className="bg-white border border-line-strong rounded-md px-2 py-1 text-xs font-bold w-16 text-center"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Surcharges */}
+                    <div className="border border-line p-4 rounded-xl flex flex-col gap-3">
+                      <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500" />Optional Surcharges</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {['rain', 'lateNight', 'festival'].map((sc, idx) => {
+                          const labels = { rain: 'Rain Charge', lateNight: 'Late Night Charge', festival: 'Festival Charge' };
+                          const defaultFees = { rain: 10, lateNight: 20, festival: 15 };
+                          const cur = platformSettings?.surcharges?.[sc] || { enabled: false, fee: defaultFees[sc] };
+                          return (
+                            <div key={sc} className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox"
+                                  checked={cur.enabled}
+                                  onChange={(e) => setPlatformSettings({ ...platformSettings, surcharges: { ...platformSettings.surcharges, [sc]: { ...cur, enabled: e.target.checked } } })}
+                                  className="w-4 h-4 text-primary"
+                                />
+                                <span className="text-[11px] font-bold uppercase">{labels[sc]}</span>
+                              </label>
+                              <div className="ml-auto flex items-center gap-2">
+                                <span className="text-xs font-bold">₹</span>
+                                <input type="number"
+                                  value={cur.fee}
+                                  onChange={(e) => setPlatformSettings({ ...platformSettings, surcharges: { ...platformSettings.surcharges, [sc]: { ...cur, fee: parseFloat(e.target.value) } } })}
+                                  className="bg-white border border-line-strong rounded-md px-2 py-1 text-xs font-bold w-16"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Ecosystem Ordering Active */}
+                    <div className="flex items-center gap-3 border-t border-line pt-4">
                       <input
-                        type="radio"
-                        name="riderAssignmentMode"
-                        value="manual"
-                        checked={(platformSettings.riderAssignmentMode || 'manual') === 'manual'}
-                        onChange={() => setPlatformSettings({ ...platformSettings, riderAssignmentMode: 'manual' })}
-                        className="w-4 h-4 text-primary"
+                        type="checkbox"
+                        id="isOpen"
+                        checked={platformSettings.isOpen}
+                        onChange={(e) => setPlatformSettings({ ...platformSettings, isOpen: e.target.checked })}
+                        className="w-4.5 h-4.5 border-line-strong rounded text-primary focus:ring-primary cursor-pointer"
                       />
-                      <span className="text-xs font-bold uppercase">Manual</span>
-                      <span className="text-[10px] text-muted font-medium">(Admin picks rider)</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="riderAssignmentMode"
-                        value="auto"
-                        checked={(platformSettings.riderAssignmentMode || 'manual') === 'auto'}
-                        onChange={() => setPlatformSettings({ ...platformSettings, riderAssignmentMode: 'auto' })}
-                        className="w-4 h-4 text-primary"
-                      />
-                      <span className="text-xs font-bold uppercase">Auto</span>
-                      <span className="text-[10px] text-muted font-medium">(System offers to all eligible, first accept wins)</span>
-                    </label>
+                      <label htmlFor="isOpen" className="text-xs text-muted font-bold cursor-pointer uppercase">
+                        Ecosystem Ordering Active (Toggles platform shutdown / open)
+                      </label>
+                    </div>
+
+                    {/* Rider Assignment Mode */}
+                    <div className="border border-line p-4 rounded-xl flex flex-col gap-3">
+                      <h4 className="text-xs font-bold text-main flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-amber-500" />
+                        Rider Assignment Mode
+                      </h4>
+                      <p className="text-[11px] text-muted">Controls how riders are assigned to new orders and rides. Default is MANUAL.</p>
+                      <div className="flex items-center gap-6">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="riderAssignmentMode"
+                            value="manual"
+                            checked={(platformSettings.riderAssignmentMode || 'manual') === 'manual'}
+                            onChange={() => setPlatformSettings({ ...platformSettings, riderAssignmentMode: 'manual' })}
+                            className="w-4 h-4 text-primary"
+                          />
+                          <span className="text-xs font-bold uppercase">Manual</span>
+                          <span className="text-[10px] text-muted font-medium">(Admin picks rider)</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="riderAssignmentMode"
+                            value="auto"
+                            checked={(platformSettings.riderAssignmentMode || 'manual') === 'auto'}
+                            onChange={() => setPlatformSettings({ ...platformSettings, riderAssignmentMode: 'auto' })}
+                            className="w-4 h-4 text-primary"
+                          />
+                          <span className="text-xs font-bold uppercase">Auto</span>
+                          <span className="text-[10px] text-muted font-medium">(System offers to all eligible, first accept wins)</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSettingsSaving}
+                      className="bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 rounded-xl cursor-pointer shadow-md transition-all disabled:opacity-50 w-full"
+                    >
+                      {isSettingsSaving ? 'Saving parameters...' : 'Update Platform Parameters'}
+                    </button>
+                  </div>
+                </form>
+
+                {/* Right Column: About Radius Card */}
+                <div className="xl:col-span-1 bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-4 sticky top-6">
+                  <div>
+                    <h4 className="font-display font-extrabold text-sm text-main flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-primary" />
+                      About Radius
+                    </h4>
+                    <p className="text-xs text-muted leading-relaxed mt-1">
+                      This radius helps you control the service area of your platform.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-3 border-t border-line pt-4">
+                    {[
+                      'Affects both Food & Ride services',
+                      'Customers outside this radius cannot place orders',
+                      'Helps in better delivery management',
+                      'Reduces operational issues and delays'
+                    ].map((text, idx) => (
+                      <div key={idx} className="flex items-start gap-2.5">
+                        <div className="w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </div>
+                        <span className="text-xs text-main font-medium leading-tight">{text}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-base border border-line rounded-2xl p-4 text-[11px] text-muted leading-relaxed mt-1">
+                    <p className="font-bold text-main mb-1">Pricing Independence</p>
+                    The Global Service Radius only decides booking eligibility. Existing pricing distance tiers and calculations remain 100% active and independent.
                   </div>
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={isSettingsSaving}
-                  className="bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 rounded-xl cursor-pointer shadow-md mt-2 disabled:opacity-50 w-full"
-                >
-                  {isSettingsSaving ? 'Saving parameters...' : 'Update Platform Parameters'}
-                </button>
-              </form>
+              </div>
             </div>
           )}
 

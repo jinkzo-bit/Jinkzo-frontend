@@ -5,6 +5,7 @@ import RestaurantCard from '../components/RestaurantCard';
 import { useFavoriteStore } from '../store/favoriteStore';
 import { useCartStore } from '../store/cartStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
+import VegBadge from '../components/VegBadge';
 
 export default function Favourites() {
   const [activeTab, setActiveTab] = useState('hotels'); // 'hotels' | 'items'
@@ -12,7 +13,6 @@ export default function Favourites() {
   const favouriteHotels = useFavoriteStore((state) => state.favouriteHotels);
   const favouriteItems = useFavoriteStore((state) => state.favouriteItems);
   const toggleItem = useFavoriteStore((state) => state.toggleItem);
-  const isItemFavourite = useFavoriteStore((state) => state.isItemFavourite);
 
   const cartItems = useCartStore((state) => state.items);
   const addItem = useCartStore((state) => state.addItem);
@@ -56,7 +56,7 @@ export default function Favourites() {
       <div className="bg-surface rounded-3xl p-5 sm:p-6 border border-line shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
         <div>
           <h1 className="font-display font-black text-2xl md:text-3xl text-main tracking-tight flex items-center gap-2.5">
-            <Heart className="w-7 h-7 text-[#7C3AED] fill-[#7C3AED]" />
+            <Heart className="w-7 h-7 text-red-500 fill-red-500" />
             Favourites
           </h1>
           <p className="text-xs text-muted font-medium mt-1">
@@ -70,7 +70,7 @@ export default function Favourites() {
             onClick={() => setActiveTab('hotels')}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               activeTab === 'hotels'
-                ? 'bg-[#7C3AED] text-white shadow-sm shadow-purple-500/25'
+                ? 'bg-red-500 text-white shadow-sm shadow-red-500/25'
                 : 'text-muted hover:text-main'
             }`}
           >
@@ -87,7 +87,7 @@ export default function Favourites() {
             onClick={() => setActiveTab('items')}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               activeTab === 'items'
-                ? 'bg-[#7C3AED] text-white shadow-sm shadow-purple-500/25'
+                ? 'bg-red-500 text-white shadow-sm shadow-red-500/25'
                 : 'text-muted hover:text-main'
             }`}
           >
@@ -118,7 +118,7 @@ export default function Favourites() {
           ) : (
             /* Empty State for Hotels */
             <div className="bg-surface rounded-3xl p-12 text-center border border-line shadow-2xs flex flex-col items-center justify-center gap-3 my-4">
-              <div className="w-16 h-16 rounded-full bg-purple-50 dark:bg-purple-950/30 text-[#7C3AED] flex items-center justify-center mb-1">
+              <div className="w-16 h-16 rounded-full bg-red-50 dark:bg-red-950/30 text-red-500 flex items-center justify-center mb-1">
                 <Heart className="w-8 h-8 stroke-[1.5]" />
               </div>
               <h3 className="font-display font-extrabold text-lg text-main">
@@ -129,7 +129,7 @@ export default function Favourites() {
               </p>
               <Link
                 to="/restaurants"
-                className="mt-3 bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md shadow-purple-500/20 flex items-center gap-2 transition-all cursor-pointer"
+                className="mt-3 bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md shadow-red-500/20 flex items-center gap-2 transition-all cursor-pointer"
               >
                 <span>Explore Restaurants</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -146,7 +146,7 @@ export default function Favourites() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {favouriteItems.map((dish) => {
                 const quantity = getItemQuantity(dish._id);
-                const isFav = isItemFavourite(dish._id);
+                const isFav = favouriteItems.some((i) => String(i._id) === String(dish._id));
 
                 return (
                   <div
@@ -164,11 +164,9 @@ export default function Favourites() {
                           loading="lazy"
                         />
                         {/* Veg / Non-Veg Badge */}
-                        <span className={`absolute top-2 left-2 w-4 h-4 rounded-xs border-2 bg-surface flex items-center justify-center p-0.5 shadow-sm ${
-                          dish.isVeg ? 'border-green-600' : 'border-red-600'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${dish.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
-                        </span>
+                        <div className="absolute top-2 left-2 z-10">
+                          <VegBadge isVeg={dish.isVeg} size="xs" className="shadow-xs backdrop-blur-xs bg-white/95 dark:bg-[#141926]/95" />
+                        </div>
 
                         {/* Heart Button */}
                         <button
@@ -182,8 +180,8 @@ export default function Favourites() {
                         >
                           <Heart className={`w-4 h-4 transition-colors ${
                             isFav
-                              ? 'text-[#7C3AED] fill-[#7C3AED]'
-                              : 'text-gray-400 hover:text-[#7C3AED]'
+                              ? 'text-red-500 fill-red-500'
+                              : 'text-gray-400 hover:text-red-500'
                           }`} />
                         </button>
                       </div>
@@ -225,14 +223,14 @@ export default function Favourites() {
                           <>
                             <button
                               onClick={() => removeItem(dish._id)}
-                              className="w-8 h-full flex items-center justify-center hover:bg-base text-[#7C3AED] font-black text-sm cursor-pointer transition-colors"
+                              className="w-8 h-full flex items-center justify-center hover:bg-base text-red-500 font-black text-sm cursor-pointer transition-colors"
                             >
                               -
                             </button>
                             <span className="text-xs font-extrabold text-main">{quantity}</span>
                             <button
                               onClick={() => handleAddToCart(dish)}
-                              className="w-8 h-full flex items-center justify-center hover:bg-base text-[#7C3AED] font-black text-sm cursor-pointer transition-colors"
+                              className="w-8 h-full flex items-center justify-center hover:bg-base text-red-500 font-black text-sm cursor-pointer transition-colors"
                             >
                               +
                             </button>
@@ -240,7 +238,7 @@ export default function Favourites() {
                         ) : (
                           <button
                             onClick={() => handleAddToCart(dish)}
-                            className="w-full h-full flex items-center justify-center gap-1 text-xs font-black text-[#7C3AED] hover:bg-[#7C3AED] hover:text-white transition-all cursor-pointer"
+                            className="w-full h-full flex items-center justify-center gap-1 text-xs font-black text-red-500 hover:bg-red-500 hover:text-white transition-all cursor-pointer"
                           >
                             <span>ADD</span>
                             <Plus className="w-3.5 h-3.5 stroke-[3]" />
@@ -255,7 +253,7 @@ export default function Favourites() {
           ) : (
             /* Empty State for Items */
             <div className="bg-surface rounded-3xl p-12 text-center border border-line shadow-2xs flex flex-col items-center justify-center gap-3 my-4">
-              <div className="w-16 h-16 rounded-full bg-purple-50 dark:bg-purple-950/30 text-[#7C3AED] flex items-center justify-center mb-1">
+              <div className="w-16 h-16 rounded-full bg-red-50 dark:bg-red-950/30 text-red-500 flex items-center justify-center mb-1">
                 <UtensilsCrossed className="w-8 h-8 stroke-[1.5]" />
               </div>
               <h3 className="font-display font-extrabold text-lg text-main">
@@ -266,7 +264,7 @@ export default function Favourites() {
               </p>
               <Link
                 to="/restaurants"
-                className="mt-3 bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md shadow-purple-500/20 flex items-center gap-2 transition-all cursor-pointer"
+                className="mt-3 bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md shadow-red-500/20 flex items-center gap-2 transition-all cursor-pointer"
               >
                 <span>Explore Items</span>
                 <ArrowRight className="w-3.5 h-3.5" />

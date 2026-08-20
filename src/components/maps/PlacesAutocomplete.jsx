@@ -66,7 +66,6 @@ export default function PlacesAutocomplete({
       try {
         const params = new URLSearchParams({
           input: val,
-          types: 'geocode',
           country,
         });
         if (sessionTokenRef.current) {
@@ -110,6 +109,9 @@ export default function PlacesAutocomplete({
       setNoResults(false);
       setQuery(prediction.description);
 
+      const mainText = prediction.structured_formatting?.main_text || '';
+      const secondaryText = prediction.structured_formatting?.secondary_text || '';
+
       try {
         const params = new URLSearchParams({ placeId: prediction.place_id });
         if (sessionTokenRef.current) {
@@ -122,19 +124,24 @@ export default function PlacesAutocomplete({
         if (data.success && data.data) {
           const place = data.data;
           if (onPlaceSelect) {
+            const placeComp = place.addressComponents || {};
             onPlaceSelect({
+              placeName: place.placeName || mainText || '',
               formattedAddress: place.formattedAddress || prediction.description,
+              secondaryText,
               lat: place.lat,
               lng: place.lng,
               placeId: place.placeId,
               addressComponents: [
-                ...(place.addressComponents.houseNo ? [{ types: ['street_number'], long_name: place.addressComponents.houseNo }] : []),
-                ...(place.addressComponents.street ? [{ types: ['route'], long_name: place.addressComponents.street }] : []),
-                ...(place.addressComponents.area ? [{ types: ['sublocality_level_1'], long_name: place.addressComponents.area }] : []),
-                ...(place.addressComponents.city ? [{ types: ['locality'], long_name: place.addressComponents.city }] : []),
-                ...(place.addressComponents.state ? [{ types: ['administrative_area_level_1'], long_name: place.addressComponents.state }] : []),
-                ...(place.addressComponents.zip ? [{ types: ['postal_code'], long_name: place.addressComponents.zip }] : []),
+                ...(placeComp.houseNo ? [{ types: ['street_number'], long_name: placeComp.houseNo }] : []),
+                ...(placeComp.street ? [{ types: ['route'], long_name: placeComp.street }] : []),
+                ...(placeComp.area ? [{ types: ['sublocality_level_1'], long_name: placeComp.area }] : []),
+                ...(placeComp.villageTownCity ? [{ types: ['locality'], long_name: placeComp.villageTownCity }] : placeComp.city ? [{ types: ['locality'], long_name: placeComp.city }] : []),
+                ...(placeComp.district ? [{ types: ['administrative_area_level_2'], long_name: placeComp.district }] : []),
+                ...(placeComp.state ? [{ types: ['administrative_area_level_1'], long_name: placeComp.state }] : []),
+                ...(placeComp.zip ? [{ types: ['postal_code'], long_name: placeComp.zip }] : []),
               ],
+              rawComponents: placeComp
             });
           }
           resetSessionToken();

@@ -178,8 +178,9 @@ export default function Checkout() {
       return setErrorMsg('Please select or add a delivery address.');
     }
     
-    if (routeInfo?.distanceKm > 20) {
-      return setErrorMsg('Delivery is currently available only within 20 km.');
+    const serviceRadiusKm = platformSettings?.globalServiceRadiusKm || 5;
+    if (routeInfo?.distanceKm != null && routeInfo.distanceKm > serviceRadiusKm) {
+      return setErrorMsg(`Sorry, this restaurant is outside our current ${serviceRadiusKm} KM delivery service area.`);
     }
 
     const selectedAddress = activeAddresses[selectedAddressIndex];
@@ -511,6 +512,13 @@ export default function Checkout() {
               <span>Total Payable</span>
               <span className="text-primary text-base">{routeInfo ? `₹${total.toFixed(2)}` : 'Calculating...'}</span>
             </div>
+
+            {routeInfo && routeInfo.distanceKm > (platformSettings?.globalServiceRadiusKm || 5) && !errorMsg && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold p-2.5 rounded-xl flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600" />
+                <span>Sorry, this restaurant is outside our current {platformSettings?.globalServiceRadiusKm || 5} KM delivery service area.</span>
+              </div>
+            )}
 
             {errorMsg && (
               <div className="bg-red-50 border border-red-100 text-red-600 text-[10px] font-bold p-2.5 rounded-xl flex gap-1.5">

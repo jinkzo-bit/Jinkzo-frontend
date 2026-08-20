@@ -37,18 +37,22 @@ export default function LocationPicker({
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   // Form fields
-  const [houseNo, setHouseNo]     = useState('');
-  const [street, setStreet]       = useState('');
-  const [landmark, setLandmark]   = useState('');
-  const [area, setArea]           = useState('');
-  const [city, setCity]           = useState('');
-  const [formState, setFormState] = useState('');
-  const [zip, setZip]             = useState('');
+  const [placeName, setPlaceName]             = useState('');
+  const [houseNo, setHouseNo]                 = useState('');
+  const [street, setStreet]                   = useState('');
+  const [landmark, setLandmark]               = useState('');
+  const [area, setArea]                       = useState('');
+  const [villageTownCity, setVillageTownCity] = useState('');
+  const [city, setCity]                       = useState('');
+  const [district, setDistrict]               = useState('');
+  const [formState, setFormState]             = useState('');
+  const [zip, setZip]                         = useState('');
   const [selectedLocation, setSelectedLocation] = useState({
     lat: null,
     lng: null,
     accuracy: null,
     formattedAddress: '',
+    placeName: '',
     placeId: null,
     locationType: null,
     displayName: ''
@@ -66,28 +70,47 @@ export default function LocationPicker({
   const [locationSource, setLocationSource] = useState('MANUAL');
 
   const fillForm = useCallback((addr, sourceOverride = null) => {
-    // Check if we got addressComponents (from backend) or direct properties
     const components = addr.addressComponents || {};
     
-    setHouseNo(components.houseNo || addr.houseNo || houseNo);
-    setStreet(components.street || addr.street || street);
-    setLandmark(addr.landmark || landmark);
-    setArea(components.area || addr.area || area);
-    setCity(components.city || addr.city || city);
-    setFormState(components.state || addr.state || formState);
-    setZip(components.zip || addr.zip || zip);
-    
+    const pName = addr.placeName || components.placeName || components.pointOfInterest || addr.name || '';
+    const hNo = components.houseNo || addr.houseNo || '';
+    const st = components.street || addr.street || '';
+    const ar = components.area || addr.area || '';
+    const vtc = components.villageTownCity || components.city || addr.villageTownCity || addr.city || '';
+    const ct = components.city || vtc || addr.city || '';
+    const dist = components.district || addr.district || '';
+    const stt = components.state || addr.state || '';
+    const zp = components.zip || components.pincode || addr.zip || addr.pincode || '';
+    const lm = addr.landmark || landmark;
+    const rawFormatted = addr.formattedAddress || addr.displayName || '';
+
+    if (pName) setPlaceName(pName);
+    else if (sourceOverride !== 'KEEP_PLACE') setPlaceName('');
+
+    if (hNo) setHouseNo(hNo);
+    if (st) setStreet(st);
+    if (lm) setLandmark(lm);
+    if (ar) setArea(ar);
+    if (vtc) setVillageTownCity(vtc);
+    if (ct) setCity(ct);
+    if (dist) setDistrict(dist);
+    if (stt) setFormState(stt);
+    if (zp) setZip(zp);
+
     setSelectedLocation(prev => ({
       ...prev,
-      lat: addr.lat !== undefined ? addr.lat : prev.lat,
-      lng: addr.lng !== undefined ? addr.lng : prev.lng,
-      displayName: addr.displayName || addr.selectedLocation?.formattedAddress || addr.formattedAddress || prev.displayName,
-      formattedAddress: addr.selectedLocation?.formattedAddress || addr.formattedAddress || prev.formattedAddress,
+      lat: addr.lat !== undefined && addr.lat !== null ? addr.lat : prev.lat,
+      lng: addr.lng !== undefined && addr.lng !== null ? addr.lng : prev.lng,
+      placeName: pName || prev.placeName,
+      displayName: rawFormatted || prev.displayName,
+      formattedAddress: rawFormatted || prev.formattedAddress,
       accuracy: addr.gpsAccuracy !== undefined ? addr.gpsAccuracy : prev.accuracy,
-      locationType: addr.locationType !== undefined ? addr.locationType : prev.locationType
+      locationType: addr.locationType !== undefined ? addr.locationType : prev.locationType,
+      placeId: addr.placeId !== undefined ? addr.placeId : prev.placeId
     }));
+
     if (sourceOverride) setLocationSource(sourceOverride);
-  }, [houseNo, street, landmark, area, city, formState, zip]);
+  }, [landmark]);
 
   // Initial load
   useEffect(() => {
@@ -98,17 +121,27 @@ export default function LocationPicker({
     if (isValidInitCoord) {
       setMapCenter({ lat: initLat, lng: initLng });
       setMapZoom(HIGH_ZOOM);
-      setSelectedLocation(prev => ({ ...prev, lat: initLat, lng: initLng, placeId: initialAddress?.placeId || null, formattedAddress: initialAddress?.formattedAddress || '' }));
+      setSelectedLocation(prev => ({
+        ...prev,
+        lat: initLat,
+        lng: initLng,
+        placeName: initialAddress?.placeName || '',
+        placeId: initialAddress?.placeId || null,
+        formattedAddress: initialAddress?.formattedAddress || ''
+      }));
       setHasValidLocation(true);
 
       fillForm({
-        houseNo: initialAddress.houseNo || '',
+        placeName: initialAddress.placeName || '',
+        houseNo: initialAddress.houseNo || initialAddress.houseFlatDoor || '',
         street: initialAddress.street || '',
         landmark: initialAddress.landmark || '',
         area: initialAddress.area || '',
-        city: initialAddress.city || '',
+        villageTownCity: initialAddress.villageTownCity || initialAddress.city || '',
+        city: initialAddress.city || initialAddress.villageTownCity || '',
+        district: initialAddress.district || '',
         state: initialAddress.state || '',
-        zip: initialAddress.zip || '',
+        zip: initialAddress.zip || initialAddress.pincode || '',
         displayName: initialAddress.formattedAddress || '',
         formattedAddress: initialAddress.formattedAddress || '',
         lat: initLat,
@@ -130,7 +163,7 @@ export default function LocationPicker({
     } else {
       setMapCenter({ lat: INDIA_CENTER_LAT, lng: INDIA_CENTER_LNG });
       setMapZoom(4);
-      setSelectedLocation(prev => ({ ...prev, lat: null, lng: null, placeId: null, formattedAddress: '' }));
+      setSelectedLocation(prev => ({ ...prev, lat: null, lng: null, placeId: null, placeName: '', formattedAddress: '' }));
       setHasValidLocation(false);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -188,19 +221,32 @@ export default function LocationPicker({
   }, []);
 
   const handlePlaceSelect = useCallback((placeResult) => {
-    const { lat, lng, placeId: pid, formattedAddress: fa, addressComponents, locationType } = placeResult;
+    const { lat, lng, placeId: pid, formattedAddress: fa, placeName: pName, addressComponents, rawComponents } = placeResult;
 
-    const parsed = parseAddressComponents(addressComponents);
+    const parsed = rawComponents || parseAddressComponents(addressComponents);
+    const resolvedPlaceName = pName || parsed.placeName || parsed.pointOfInterest || '';
+
+    setPlaceName(resolvedPlaceName);
     fillForm({
       ...parsed,
+      placeName: resolvedPlaceName,
       displayName: fa,
       formattedAddress: fa,
       lat,
       lng,
-      locationType: locationType || 'SEARCH',
+      placeId: pid,
+      locationType: 'SEARCH',
     }, 'SEARCH');
 
-    setSelectedLocation(prev => ({ ...prev, placeId: pid, formattedAddress: fa, lat, lng }));
+    setSelectedLocation(prev => ({
+      ...prev,
+      placeId: pid,
+      placeName: resolvedPlaceName,
+      formattedAddress: fa,
+      displayName: fa,
+      lat,
+      lng
+    }));
     setHasValidLocation(true);
     skipNextGeocodeRef.current = true;
 
@@ -236,6 +282,7 @@ export default function LocationPicker({
         setHasValidLocation(true);
         setLocationSource('GPS');
         
+        setIsGeocoding(true);
         fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`)
           .then(res => res.json())
           .then(data => {
@@ -243,7 +290,8 @@ export default function LocationPicker({
               fillForm({ ...data.data, gpsAccuracy: accuracy }, 'GPS');
             }
           })
-          .catch(() => {});
+          .catch(() => {})
+          .finally(() => setIsGeocoding(false));
       },
       (err) => {
         console.error('GPS error:', err.code, err.message);
@@ -272,20 +320,29 @@ export default function LocationPicker({
       return;
     }
     const fullStreet = [houseNo, street].filter(Boolean).join(', ');
-    
+    const bestPlaceName = placeName || selectedLocation.placeName || street || area || city || '';
+    const bestFormattedAddress = selectedLocation.formattedAddress || [bestPlaceName, street, area, villageTownCity || city, district, formState, zip].filter(Boolean).join(', ');
+
     onConfirm({
+      placeId: selectedLocation.placeId || null,
+      placeName: bestPlaceName,
+      formattedAddress: bestFormattedAddress,
+      houseFlatDoor: houseNo,
       houseNo,
       street: fullStreet || street,
       landmark,
       area,
-      city,
+      villageTownCity: villageTownCity || city,
+      city: city || villageTownCity,
+      district,
       state: formState,
+      pincode: zip,
       zip,
+      latitude: selectedLocation.lat,
+      longitude: selectedLocation.lng,
       lat: selectedLocation.lat,
       lng: selectedLocation.lng,
-      placeId: selectedLocation.placeId || null,
-      formattedAddress: selectedLocation.formattedAddress || selectedLocation.displayName || '',
-      locationSource:   locationSource,
+      locationSource: locationSource,
     });
   };
 
@@ -295,6 +352,29 @@ export default function LocationPicker({
     }
   };
 
+  const getDisplayLocation = () => {
+    const primary = placeName || selectedLocation.placeName || street || area || villageTownCity || city || (selectedLocation.formattedAddress ? selectedLocation.formattedAddress.split(',')[0] : '');
+
+    const subParts = [];
+    if (area && area !== primary) subParts.push(area);
+    if ((villageTownCity || city) && (villageTownCity || city) !== primary && (villageTownCity || city) !== area) subParts.push(villageTownCity || city);
+    if (district && district !== primary && district !== (villageTownCity || city)) subParts.push(district);
+    if (formState && formState !== primary) subParts.push(formState);
+    if (zip && !subParts.includes(zip)) subParts.push(zip);
+
+    let subtitle = subParts.join(', ');
+    if (!subtitle && selectedLocation.formattedAddress) {
+      const parts = selectedLocation.formattedAddress.split(',').map(s => s.trim());
+      if (parts.length > 1) {
+        subtitle = parts.slice(1).join(', ');
+      }
+    }
+
+    return { primary, subtitle };
+  };
+
+  const { primary: displayTitle, subtitle: displaySubtitle } = getDisplayLocation();
+
   return (
     <div className="flex flex-col h-full w-full">
       {/* Search Bar & GPS */}
@@ -302,7 +382,7 @@ export default function LocationPicker({
         <div className="flex gap-2">
           <PlacesAutocomplete
             onPlaceSelect={handlePlaceSelect}
-            placeholder="Search area, street, city..."
+            placeholder="Search area, street, school, hospital, city..."
             darkMode={true}
             className="flex-1"
           />
@@ -372,7 +452,7 @@ export default function LocationPicker({
           <div className="absolute inset-0 flex items-end justify-center pb-4 z-20 pointer-events-none">
             <div className="bg-black/75 backdrop-blur-sm text-white text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg">
               <Loader className="w-3 h-3 animate-spin text-violet-400" />
-              Getting address...
+              Finding location...
             </div>
           </div>
         )}
@@ -448,16 +528,46 @@ export default function LocationPicker({
       </div>
 
       {/* Simplified Address Form */}
-      <div className="overflow-y-auto flex-1 px-4 pt-4 pb-2" style={{ minHeight: 0 }}>
-        {selectedLocation.displayName && (
-          <div className="bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 mb-4 flex items-start gap-2">
-            <MapPin className="w-3.5 h-3.5 text-violet-400 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <span className="text-[10px] text-violet-400/80 font-bold uppercase tracking-wider block mb-0.5">Detected Location</span>
-              <p className="text-[12px] text-white/80 font-medium leading-relaxed">{selectedLocation.displayName}</p>
-            </div>
+      <div className="overflow-y-auto flex-1 px-4 pt-3.5 pb-2" style={{ minHeight: 0 }}>
+        {/* Detected Location Card */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5 mb-3.5 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-xl bg-orange-500/20 text-[#FC8019] flex items-center justify-center flex-shrink-0 mt-0.5">
+            <MapPin className="w-4 h-4 text-[#FC8019]" />
           </div>
-        )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="text-[10px] font-black text-[#FC8019] uppercase tracking-wider">
+                Detected Location
+              </span>
+              {isGeocoding && (
+                <span className="text-[10px] text-zinc-400 flex items-center gap-1">
+                  <Loader className="w-3 h-3 animate-spin text-[#FC8019]" />
+                  Finding location...
+                </span>
+              )}
+            </div>
+            {displayTitle ? (
+              <>
+                <h4 className="text-[13px] sm:text-[14px] font-bold text-white leading-snug truncate">
+                  {displayTitle}
+                </h4>
+                {displaySubtitle ? (
+                  <p className="text-[11px] sm:text-[12px] text-zinc-400 mt-0.5 leading-snug line-clamp-2">
+                    {displaySubtitle}
+                  </p>
+                ) : null}
+              </>
+            ) : isGeocoding ? (
+              <p className="text-[12px] text-zinc-400 animate-pulse">Finding location...</p>
+            ) : selectedLocation.lat && selectedLocation.lng ? (
+              <p className="text-[12px] text-zinc-300 font-mono">
+                {selectedLocation.lat.toFixed(4)}, {selectedLocation.lng.toFixed(4)}
+              </p>
+            ) : (
+              <p className="text-[12px] text-zinc-400">Search or move map to pick location</p>
+            )}
+          </div>
+        </div>
 
         <div className="flex flex-col gap-3">
           <Field label="House / Flat / Door No." value={houseNo} onChange={setHouseNo} placeholder="e.g. 4A, B-302 (Optional)" />

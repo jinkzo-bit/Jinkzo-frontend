@@ -155,7 +155,12 @@ export default function RideBooking() {
               festivalSurcharge = platformSettings.surcharges.festival.fee || 15;
             }
             setFare(computedFare + rainSurcharge + lateNightSurcharge + festivalSurcharge);
-            setErrorMsg('');
+            const serviceRadiusKm = platformSettings?.globalServiceRadiusKm || 5;
+            if (calculatedDistance > serviceRadiusKm) {
+              setErrorMsg(`This ride is outside our current ${serviceRadiusKm} KM service radius.`);
+            } else {
+              setErrorMsg('');
+            }
           } else {
             if (currentRequestId !== routeRequestIdRef.current) return;
             setDistance('error');
@@ -206,6 +211,12 @@ export default function RideBooking() {
     }
     if (!destLat || !destLng) {
       setErrorMsg('Please select your Destination Location on the map.');
+      return;
+    }
+
+    const serviceRadiusKm = platformSettings?.globalServiceRadiusKm || 5;
+    if (typeof distance === 'number' && distance > serviceRadiusKm) {
+      setErrorMsg(`This ride is outside our current ${serviceRadiusKm} KM service radius.`);
       return;
     }
 
