@@ -22,7 +22,7 @@ export function parseAddressComponents(components) {
 
   const get = (type) => {
     const comp = components.find(c => c.types && c.types.includes(type));
-    return comp ? comp.long_name : '';
+    return comp ? (comp.longText || comp.long_name || comp.text || comp.shortText || comp.short_name || '') : '';
   };
 
   const houseNo = get('street_number') || get('premise') || get('subpremise') || '';

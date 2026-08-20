@@ -69,7 +69,7 @@ export default function LocationPicker({
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [locationSource, setLocationSource] = useState('MANUAL');
 
-  const fillForm = useCallback((addr, sourceOverride = null) => {
+  const fillForm = useCallback((addr, sourceOverride = null, authoritativeCoords = null) => {
     const components = addr.addressComponents || {};
     
     const pName = addr.placeName || components.placeName || components.pointOfInterest || addr.name || '';
@@ -85,7 +85,7 @@ export default function LocationPicker({
     const rawFormatted = addr.formattedAddress || addr.displayName || '';
 
     if (pName) setPlaceName(pName);
-    else if (sourceOverride !== 'KEEP_PLACE') setPlaceName('');
+    else if (sourceOverride !== 'KEEP_PLACE' && sourceOverride !== 'GPS' && sourceOverride !== 'MANUAL') setPlaceName('');
 
     if (hNo) setHouseNo(hNo);
     if (st) setStreet(st);
@@ -97,17 +97,31 @@ export default function LocationPicker({
     if (stt) setFormState(stt);
     if (zp) setZip(zp);
 
-    setSelectedLocation(prev => ({
-      ...prev,
-      lat: addr.lat !== undefined && addr.lat !== null ? addr.lat : prev.lat,
-      lng: addr.lng !== undefined && addr.lng !== null ? addr.lng : prev.lng,
-      placeName: pName || prev.placeName,
-      displayName: rawFormatted || prev.displayName,
-      formattedAddress: rawFormatted || prev.formattedAddress,
-      accuracy: addr.gpsAccuracy !== undefined ? addr.gpsAccuracy : prev.accuracy,
-      locationType: addr.locationType !== undefined ? addr.locationType : prev.locationType,
-      placeId: addr.placeId !== undefined ? addr.placeId : prev.placeId
-    }));
+    setSelectedLocation(prev => {
+      // Source of truth: authoritativeCoords > addr.lat/lng (initial) > prev.lat/lng
+      let targetLat = prev.lat;
+      let targetLng = prev.lng;
+
+      if (authoritativeCoords && authoritativeCoords.lat != null && authoritativeCoords.lng != null) {
+        targetLat = authoritativeCoords.lat;
+        targetLng = authoritativeCoords.lng;
+      } else if (addr.lat !== undefined && addr.lat !== null && !authoritativeCoords) {
+        targetLat = addr.lat;
+        targetLng = addr.lng;
+      }
+
+      return {
+        ...prev,
+        lat: targetLat,
+        lng: targetLng,
+        placeName: pName || prev.placeName,
+        displayName: rawFormatted || prev.displayName,
+        formattedAddress: rawFormatted || prev.formattedAddress,
+        accuracy: addr.gpsAccuracy !== undefined ? addr.gpsAccuracy : prev.accuracy,
+        locationType: addr.locationType !== undefined ? addr.locationType : prev.locationType,
+        placeId: addr.placeId !== undefined ? addr.placeId : prev.placeId
+      };
+    });
 
     if (sourceOverride) setLocationSource(sourceOverride);
   }, [landmark]);
@@ -146,14 +160,14 @@ export default function LocationPicker({
         formattedAddress: initialAddress.formattedAddress || '',
         lat: initLat,
         lng: initLng,
-      });
+      }, null, { lat: initLat, lng: initLng });
 
       if (!initialAddress.formattedAddress && !initialAddress.street) {
         setIsGeocoding(true);
         fetch(`${API_BASE}/maps/geocode?lat=${initLat}&lng=${initLng}`)
           .then(res => res.json())
           .then(data => {
-            if (data.success && data.data) fillForm(data.data);
+            if (data.success && data.data) fillForm(data.data, null, { lat: initLat, lng: initLng });
             setIsGeocoding(false);
           })
           .catch(() => setIsGeocoding(false));
@@ -186,13 +200,16 @@ export default function LocationPicker({
       if (!center) return;
       const lat = center.lat();
       const lng = center.lng();
-      setSelectedLocation(prev => ({ ...prev, lat, lng }));
-      setHasValidLocation(true);
 
       if (skipNextGeocodeRef.current) {
         skipNextGeocodeRef.current = false;
         return;
       }
+
+      // Dragged pin coordinates are the authoritative coordinates
+      setSelectedLocation(prev => ({ ...prev, lat, lng, placeId: null, locationType: 'MANUAL' }));
+      setHasValidLocation(true);
+      setLocationSource('MANUAL');
 
       clearTimeout(geocodeDebounceRef.current);
       geocodeDebounceRef.current = setTimeout(async () => {
@@ -201,10 +218,10 @@ export default function LocationPicker({
           const res = await fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`);
           const data = await res.json();
           if (data.success && data.data) {
-            fillForm(data.data, 'MANUAL');
+            // Reverse geocoding provides address fields, exact dragged coordinates are locked
+            fillForm(data.data, 'MANUAL', { lat, lng });
           }
         } catch (_) {}
-        setSelectedLocation(prev => ({ ...prev, placeId: null }));
         setIsGeocoding(false);
       }, 700);
     });
@@ -223,30 +240,34 @@ export default function LocationPicker({
   const handlePlaceSelect = useCallback((placeResult) => {
     const { lat, lng, placeId: pid, formattedAddress: fa, placeName: pName, addressComponents, rawComponents } = placeResult;
 
+    if (typeof lat !== 'number' || typeof lng !== 'number') return;
+
     const parsed = rawComponents || parseAddressComponents(addressComponents);
     const resolvedPlaceName = pName || parsed.placeName || parsed.pointOfInterest || '';
 
     setPlaceName(resolvedPlaceName);
+    
+    // Authoritative coordinates directly from Google Places API (New) Place Details
+    setSelectedLocation({
+      lat,
+      lng,
+      placeId: pid,
+      placeName: resolvedPlaceName,
+      formattedAddress: fa,
+      displayName: fa,
+      accuracy: null,
+      locationType: 'SEARCH'
+    });
+
     fillForm({
       ...parsed,
       placeName: resolvedPlaceName,
       displayName: fa,
       formattedAddress: fa,
-      lat,
-      lng,
       placeId: pid,
       locationType: 'SEARCH',
-    }, 'SEARCH');
+    }, 'SEARCH', { lat, lng });
 
-    setSelectedLocation(prev => ({
-      ...prev,
-      placeId: pid,
-      placeName: resolvedPlaceName,
-      formattedAddress: fa,
-      displayName: fa,
-      lat,
-      lng
-    }));
     setHasValidLocation(true);
     skipNextGeocodeRef.current = true;
 
@@ -269,7 +290,20 @@ export default function LocationPicker({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-        setSelectedLocation(prev => ({ ...prev, placeId: null }));
+        
+        // Authoritative device GPS coordinates
+        setSelectedLocation(prev => ({
+          ...prev,
+          lat,
+          lng,
+          accuracy,
+          placeId: null,
+          locationType: 'GPS'
+        }));
+        setHasValidLocation(true);
+        setLocationSource('GPS');
+        skipNextGeocodeRef.current = true;
+
         if (mapRef.current) {
           mapRef.current.panTo({ lat, lng });
           mapRef.current.setZoom(HIGH_ZOOM);
@@ -278,16 +312,14 @@ export default function LocationPicker({
           setMapZoom(HIGH_ZOOM);
         }
         setIsLocating(false);
-        setSelectedLocation(prev => ({ ...prev, lat, lng, accuracy, placeId: null }));
-        setHasValidLocation(true);
-        setLocationSource('GPS');
         
+        // Reverse geocoding provides address fields, coordinates locked to device GPS { lat, lng }
         setIsGeocoding(true);
         fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`)
           .then(res => res.json())
           .then(data => {
             if (data.success && data.data) {
-              fillForm({ ...data.data, gpsAccuracy: accuracy }, 'GPS');
+              fillForm({ ...data.data, gpsAccuracy: accuracy }, 'GPS', { lat, lng });
             }
           })
           .catch(() => {})

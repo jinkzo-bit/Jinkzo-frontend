@@ -34,17 +34,20 @@ export default function PlacesAutocomplete({
   const sessionTokenRef = useRef(null);
 
   // Initialize session token for cost optimization
-  useEffect(() => {
-    if (isLoaded && window.google?.maps?.places) {
-      sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+  const createSessionToken = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
     }
-  }, [isLoaded]);
+    return 'token-' + Math.random().toString(36).substring(2) + '-' + Date.now();
+  };
+
+  useEffect(() => {
+    sessionTokenRef.current = createSessionToken();
+  }, []);
 
   // Reset session token when query clears
   const resetSessionToken = useCallback(() => {
-    if (window.google?.maps?.places) {
-      sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
-    }
+    sessionTokenRef.current = createSessionToken();
   }, []);
 
   // ── Handle text input change — calls backend proxy ────────────────────────────

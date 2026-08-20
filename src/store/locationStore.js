@@ -147,7 +147,7 @@ export const useLocationStore = create(
               errorMessage: errorMsg,
             });
           },
-          { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
       },
     }),
