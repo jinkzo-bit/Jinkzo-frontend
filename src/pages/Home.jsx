@@ -5,6 +5,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import { API_BASE } from '../config/api';
+import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 const DEFAULT_BANNER_SLIDES = [
@@ -52,6 +53,7 @@ const DEFAULT_BANNER_SLIDES = [
 
 export default function Home() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [foodAvailable, setFoodAvailable] = useState(true);
   const [rideAvailable, setRideAvailable] = useState(true);
 
@@ -163,8 +165,8 @@ export default function Home() {
   const categories = [
     {
       id: 'food',
-      title: 'Food',
-      subtitle: 'Tasty meals from top restaurants',
+      title: t('home.categoryFood', 'Food'),
+      subtitle: t('home.foodSubtitle', 'Tasty meals from top restaurants'),
       textColor: 'text-[#7C3AED] dark:text-[#C084FC]',
       arrowColor: 'text-[#7C3AED] dark:text-[#C084FC]',
       btnBg: 'bg-white dark:bg-[#261E38] border-gray-100/80 dark:border-purple-800/40',
@@ -176,8 +178,8 @@ export default function Home() {
     },
     {
       id: 'ride',
-      title: 'Ride & Courier',
-      subtitle: 'Quick rides & courier service',
+      title: t('home.categoryRide', 'Ride & Courier'),
+      subtitle: t('home.rideSubtitle', 'Quick rides & courier service'),
       textColor: 'text-[#EA580C] dark:text-[#FB923C]',
       arrowColor: 'text-[#EA580C] dark:text-[#FB923C]',
       btnBg: 'bg-white dark:bg-[#382417] border-gray-100/80 dark:border-orange-800/40',
@@ -189,8 +191,8 @@ export default function Home() {
     },
     {
       id: 'grocery',
-      title: 'Grocery',
-      subtitle: 'Daily essentials delivered fast',
+      title: t('home.categoryGrocery', 'Grocery'),
+      subtitle: t('home.grocerySubtitle', 'Daily essentials delivered fast'),
       textColor: 'text-[#16A34A] dark:text-[#4ADE80]',
       arrowColor: 'text-[#16A34A] dark:text-[#4ADE80]',
       btnBg: 'bg-white dark:bg-[#163826] border-gray-100/80 dark:border-green-800/40',
@@ -202,8 +204,8 @@ export default function Home() {
     },
     {
       id: 'hot_cool',
-      title: 'Hot & Cool',
-      subtitle: 'Cool drinks, cakes & snacks',
+      title: t('home.categoryHotCool', 'Hot & Cool'),
+      subtitle: t('home.hotCoolSubtitle', 'Cool drinks, cakes & snacks'),
       textColor: 'text-[#2563EB] dark:text-[#60A5FA]',
       arrowColor: 'text-[#2563EB] dark:text-[#60A5FA]',
       btnBg: 'bg-white dark:bg-[#182B4A] border-gray-100/80 dark:border-blue-800/40',
@@ -215,8 +217,8 @@ export default function Home() {
     },
     {
       id: 'veg_fruits',
-      title: 'Veg & Fruits',
-      subtitle: 'Fresh vegetables & fruits',
+      title: t('home.categoryVegFruits', 'Veg & Fruits'),
+      subtitle: t('home.vegFruitsSubtitle', 'Fresh vegetables & fruits'),
       textColor: 'text-[#15803D] dark:text-[#4ADE80]',
       arrowColor: 'text-[#15803D] dark:text-[#4ADE80]',
       btnBg: 'bg-white dark:bg-[#183B22] border-gray-100/80 dark:border-emerald-800/40',
@@ -228,8 +230,8 @@ export default function Home() {
     },
     {
       id: 'meat',
-      title: 'Meat',
-      subtitle: 'Fresh meat, chicken & fish',
+      title: t('home.categoryMeat', 'Meat'),
+      subtitle: t('home.meatSubtitle', 'Fresh meat, chicken & fish'),
       textColor: 'text-[#DC2626] dark:text-[#F87171]',
       arrowColor: 'text-[#DC2626] dark:text-[#F87171]',
       btnBg: 'bg-white dark:bg-[#3D1A1E] border-gray-100/80 dark:border-red-800/40',
@@ -317,7 +319,7 @@ export default function Home() {
               to={activeBanner.link}
               className="mt-1 sm:mt-3 md:mt-5 inline-flex items-center gap-1 sm:gap-2 bg-[#FFD700] hover:bg-[#FACC15] text-gray-900 font-black text-[11px] sm:text-sm md:text-base px-3.5 sm:px-5 md:px-7 py-1.5 sm:py-2.5 md:py-3 rounded-full shadow-md shadow-yellow-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
-              <span>{activeBanner.buttonText}</span>
+              <span>{activeBanner.buttonText || t('common.orderNow', 'Order Now')}</span>
               <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 stroke-[3]" />
             </Link>
           </div>
@@ -364,7 +366,7 @@ export default function Home() {
       {/* 2. SECTION HEADING */}
       <section className="mt-0.5 sm:mt-1 md:mt-2">
         <h2 className="font-display font-black text-base sm:text-xl md:text-2xl text-gray-900 dark:text-white tracking-tight transition-colors">
-          What would you like to order?
+          {t('home.whatToOrder', 'What would you like to order?')}
         </h2>
       </section>
 

@@ -12,11 +12,13 @@ import {
   X,
 } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
+import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 export default function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [showCartPopup, setShowCartPopup] = useState(false);
   const popupRef = useRef(null);
@@ -148,7 +150,7 @@ export default function BottomNav() {
           {/* Subtotal & Action CTA */}
           <div className="mt-3 pt-2.5 border-t border-gray-100 dark:border-white/10 flex items-center justify-between gap-3">
             <div>
-              <span className="text-[10px] text-gray-400 dark:text-slate-400 font-medium block">Total Amount</span>
+              <span className="text-[10px] text-gray-400 dark:text-slate-400 font-medium block">{t('cart.itemTotal', 'Total Amount')}</span>
               <span className="font-display font-black text-sm text-gray-900 dark:text-white">
                 ₹{subtotal}
               </span>
@@ -161,7 +163,7 @@ export default function BottomNav() {
               }}
               className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] active:scale-95 text-white text-xs font-extrabold py-2.5 px-4 rounded-xl shadow-md shadow-purple-500/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
-              <span>View Cart</span>
+              <span>{t('restaurant.viewCart', 'View Cart')}</span>
               <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
             </button>
           </div>
@@ -185,7 +187,7 @@ export default function BottomNav() {
             }`}
           >
             <Home className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
-            <span className="text-[10px] sm:text-[11px] font-medium leading-none">Home</span>
+            <span className="text-[10px] sm:text-[11px] font-medium leading-none">{t('nav.home', 'Home')}</span>
           </Link>
 
           {/* 2. FAVOURITES */}
@@ -198,7 +200,7 @@ export default function BottomNav() {
             }`}
           >
             <Heart className={`w-5 h-5 sm:w-5.5 sm:h-5.5 ${isActive('/favourites') ? 'fill-red-500 text-red-500' : ''}`} />
-            <span className="text-[10px] sm:text-[11px] font-medium leading-none">Favourites</span>
+            <span className="text-[10px] sm:text-[11px] font-medium leading-none">{t('nav.favourites', 'Favourites')}</span>
           </Link>
 
           {/* 3. CART (DYNAMIC HIGHLIGHT & POPUP) */}
@@ -223,7 +225,7 @@ export default function BottomNav() {
 
                 {/* Label */}
                 <span className="text-[10px] sm:text-[11px] font-bold text-red-600 dark:text-red-400 mt-0.5 leading-none">
-                  Cart
+                  {t('nav.cart', 'Cart')}
                 </span>
               </button>
             ) : (
@@ -237,7 +239,7 @@ export default function BottomNav() {
                 }`}
               >
                 <ShoppingBag className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
-                <span className="text-[10px] sm:text-[11px] font-medium leading-none">Cart</span>
+                <span className="text-[10px] sm:text-[11px] font-medium leading-none">{t('nav.cart', 'Cart')}</span>
               </Link>
             )}
           </div>
@@ -252,7 +254,7 @@ export default function BottomNav() {
             }`}
           >
             <ClipboardList className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
-            <span className="text-[10px] sm:text-[11px] font-medium leading-none text-center">Order History</span>
+            <span className="text-[10px] sm:text-[11px] font-medium leading-none text-center">{t('profile.orderHistory', 'Order History')}</span>
           </Link>
 
           {/* 5. PROFILE */}
@@ -265,7 +267,7 @@ export default function BottomNav() {
             }`}
           >
             <User className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
-            <span className="text-[10px] sm:text-[11px] font-medium leading-none">Profile</span>
+            <span className="text-[10px] sm:text-[11px] font-medium leading-none">{t('nav.profile', 'Profile')}</span>
           </Link>
 
         </div>

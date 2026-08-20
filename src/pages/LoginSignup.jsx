@@ -8,6 +8,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { uploadPublicFileToBackend } from '../utils/uploadUtil';
 import LocationPickerModal from '../components/LocationPickerModal';
+import jinkzoLogo from '../assets/branding/jinkzo-logo.png';
 
 
 
@@ -262,7 +263,7 @@ export default function LoginSignup() {
       {/* Brand Header */}
       <div className="flex flex-col items-center gap-2.5 text-center">
         <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg shadow-violet-500/20 bg-white border border-gray-100 flex items-center justify-center">
-          <img src="/jinkzo-favicon.jpg" alt="Jinkzo Logo" className="w-full h-full object-cover object-left" />
+          <img src={jinkzoLogo} alt="Jinkzo Logo" className="w-full h-full object-cover object-left" />
         </div>
         <h2 className="font-display font-black text-2xl text-main tracking-tight mt-1">Welcome to Jinkzo</h2>
         <p className="text-xs text-muted font-semibold max-w-[320px]">

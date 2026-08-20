@@ -1,21 +1,24 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, MapPin, ClipboardList, LogOut, ShoppingBag, Trash2, Calendar, Star, Sparkles, Pencil, AlertTriangle, Plus } from 'lucide-react';
+import { User, MapPin, ClipboardList, LogOut, ShoppingBag, Trash2, Calendar, Star, Sparkles, Pencil, AlertTriangle, Plus, Globe, ChevronRight } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
+import { useTranslation } from '../store/languageStore';
 import RiderFeedbackModal from '../components/RiderFeedbackModal';
 import LocationPickerModal from '../components/LocationPickerModal';
+import LanguageModal from '../components/LanguageModal';
 import { formatAppDate } from '../utils/dateUtils';
 
 export default function Profile() {
   const { user, token, logout, deleteAddress, editAddress, addAddress } = useAuthStore();
   const { addItem, clearCart, showToast } = useCartStore();
+  const { language, t } = useTranslation();
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState([]);
-
   const [isLoading, setIsLoading] = useState(true);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
 
   // Rider review modal states
   const [selectedReviewOrder, setSelectedReviewOrder] = useState(null);
@@ -268,16 +271,16 @@ export default function Profile() {
       <div className="border-b border-line pb-4 flex items-center justify-between">
         <div>
           <h1 className="font-display font-extrabold text-2xl text-main leading-tight">
-            My Account
+            {t('profile.title', 'My Account')}
           </h1>
-          <p className="text-xs text-muted font-medium">Manage your delivery profile and trace past orders</p>
+          <p className="text-xs text-muted font-medium">{t('profile.subtitle', 'Manage your delivery profile, addresses, and language')}</p>
         </div>
         <button
           onClick={handleLogout}
           className="flex items-center gap-1.5 text-xs text-muted hover:text-red-500 font-bold transition-colors cursor-pointer"
         >
           <LogOut className="w-4.5 h-4.5" />
-          <span>Log Out</span>
+          <span>{t('profile.logOut', 'Log Out')}</span>
         </button>
       </div>
 
@@ -290,7 +293,7 @@ export default function Profile() {
             <div className="flex items-center justify-between border-b border-line pb-2">
               <h3 className="font-display font-extrabold text-sm text-main flex items-center gap-2">
                 <User className="w-5 h-5 text-primary" />
-                <span>Personal Details</span>
+                <span>{t('profile.personalDetails', 'Personal Details')}</span>
               </h3>
               <button
                 onClick={() => {
@@ -307,20 +310,20 @@ export default function Profile() {
                 }}
                 className="flex items-center gap-1 text-[10px] font-bold text-primary hover:bg-violet-50 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
               >
-                <Pencil className="w-3 h-3"/> Edit Profile
+                <Pencil className="w-3 h-3"/> {t('profile.editProfile', 'Edit Profile')}
               </button>
             </div>
             <div className="flex flex-col gap-3">
               <div>
-                <p className="text-[10px] text-muted font-bold uppercase">Name</p>
+                <p className="text-[10px] text-muted font-bold uppercase">{t('profile.name', 'Name')}</p>
                 <p className="text-sm font-bold text-main">{user.name}</p>
               </div>
               <div>
-                <p className="text-[10px] text-muted font-bold uppercase">Email</p>
+                <p className="text-[10px] text-muted font-bold uppercase">{t('profile.email', 'Email')}</p>
                 <p className="text-sm font-bold text-main">{user.email}</p>
               </div>
               <div>
-                <p className="text-[10px] text-muted font-bold uppercase">Phone Number</p>
+                <p className="text-[10px] text-muted font-bold uppercase">{t('profile.phone', 'Phone Number')}</p>
                 <p className="text-sm font-bold text-main">+91 {user.phone}</p>
               </div>
             </div>
@@ -331,21 +334,21 @@ export default function Profile() {
             <div className="flex items-center justify-between border-b border-line pb-2">
               <h3 className="font-display font-extrabold text-sm text-main flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-primary" />
-                <span>Saved Addresses</span>
+                <span>{t('profile.savedAddresses', 'Saved Addresses')}</span>
               </h3>
               <button
                 onClick={handleOpenAddAddress}
                 disabled={addressSaving}
                 className="flex items-center gap-1 text-[10px] font-bold text-primary hover:bg-violet-50 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
               >
-                <Plus className="w-3 h-3" /> Add New
+                <Plus className="w-3 h-3" /> {t('profile.addNewAddress', 'Add New')}
               </button>
             </div>
 
             {addressSaving && (
               <div className="flex items-center gap-2 text-xs text-primary font-bold bg-primary/5 px-3 py-2 rounded-xl">
                 <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                Saving address...
+                {t('common.saving', 'Saving address...')}
               </div>
             )}
 
@@ -355,7 +358,7 @@ export default function Profile() {
                   <div key={addr._id} className="p-3 bg-base rounded-xl border border-line/50 flex justify-between items-start gap-2.5">
                     <div className="flex-1 min-w-0">
                       {addr.isDefault && (
-                        <span className="text-[9px] bg-green-100 text-green-700 font-extrabold px-1.5 py-0.5 rounded-md mb-1.5 inline-block">Default</span>
+                        <span className="text-[9px] bg-green-100 text-green-700 font-extrabold px-1.5 py-0.5 rounded-md mb-1.5 inline-block">{t('common.default', 'Default')}</span>
                       )}
                       <p className="text-[11px] text-muted leading-relaxed font-semibold">
                         {[addr.street, addr.area, addr.city, addr.state, addr.zip].filter(Boolean).join(', ')}
@@ -392,31 +395,56 @@ export default function Profile() {
             ) : (
               <div className="flex flex-col items-center gap-2 py-4 text-center">
                 <MapPin className="w-8 h-8 text-gray-300" />
-                <p className="text-xs text-muted italic">No saved addresses yet.</p>
+                <p className="text-xs text-muted italic">{t('profile.noAddresses', 'No saved addresses yet.')}</p>
                 <button
                   onClick={handleOpenAddAddress}
                   className="text-xs font-bold text-primary hover:underline cursor-pointer"
                 >
-                  + Add your first address
+                  + {t('profile.addNewAddress', 'Add your first address')}
                 </button>
               </div>
             )}
           </div>
 
-      {/* Delete Account danger zone */}
+          {/* App Language Card */}
+          <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-3">
+            <div className="flex items-center justify-between border-b border-line pb-2">
+              <h3 className="font-display font-extrabold text-sm text-main flex items-center gap-2">
+                <Globe className="w-5 h-5 text-[#FC8019]" />
+                <span>{t('profile.appLanguage', 'App Language')}</span>
+              </h3>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] text-muted font-bold uppercase">{t('profile.language', 'Language')}</p>
+                <p className="text-sm font-extrabold text-main mt-0.5">
+                  {language === 'te' ? 'తెలుగు (Telugu)' : 'English'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLanguageModal(true)}
+                className="flex items-center gap-1.5 text-xs font-extrabold text-[#FC8019] hover:bg-orange-500/10 px-3 py-1.5 rounded-xl border border-orange-500/20 transition-all cursor-pointer hover:scale-105"
+              >
+                <span>{language === 'te' ? 'మార్చండి' : 'Change'}</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Delete Account danger zone */}
           <div className="bg-red-50 border border-red-100 rounded-3xl p-5 flex flex-col gap-3">
             <h3 className="font-display font-extrabold text-sm text-red-700 flex items-center gap-2">
-              <AlertTriangle className="w-4.5 h-4.5"/> Danger Zone
+              <AlertTriangle className="w-4.5 h-4.5"/> {t('profile.deleteAccount', 'Danger Zone')}
             </h3>
             <p className="text-xs text-red-600 font-semibold">Permanently deletes your account and all associated data. This cannot be undone.</p>
             <button
               onClick={() => { setDeletePassword(''); setDeleteError(''); setShowDeleteAccount(true); }}
               className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
             >
-              Delete My Account
+              {t('profile.deleteAccount', 'Delete My Account')}
             </button>
           </div>
-
 
         </div>
 
@@ -424,7 +452,7 @@ export default function Profile() {
         <div className="md:col-span-2 flex flex-col gap-5">
           <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2">
             <ClipboardList className="w-5.5 h-5.5 text-primary" />
-            <span>Order History</span>
+            <span>{t('profile.orderHistory', 'Order History')}</span>
           </h3>
 
           {isLoading ? (
@@ -475,7 +503,7 @@ export default function Profile() {
                           ? 'bg-red-100 text-red-700'
                           : 'bg-blue-100 text-blue-700'
                       }`}>
-                        {order.status}
+                        {t('orderStatus.' + order.status.toLowerCase(), order.status)}
                       </span>
                       <p className="text-xs font-bold text-main mt-0.5">₹{(order.total != null ? order.total : 0).toFixed(2)}</p>
                     </div>
@@ -532,7 +560,7 @@ export default function Profile() {
                         to={`/order-tracking/${order._id}`}
                         className="bg-primary-light text-primary hover:bg-violet-100 font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
                       >
-                        {order.status === 'Delivered' ? 'View details' : 'Track Live'}
+                        {order.status === 'Delivered' ? t('common.viewDetails', 'View details') : t('common.trackLive', 'Track Live')}
                       </Link>
 
                       {order.orderType !== 'ride' && (
@@ -540,7 +568,7 @@ export default function Profile() {
                           onClick={() => handleReorder(order)}
                           className="bg-primary hover:bg-primary-hover text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-colors cursor-pointer"
                         >
-                          Reorder
+                          {t('common.reorder', 'Reorder')}
                         </button>
                       )}
                     </div>
@@ -675,6 +703,12 @@ export default function Profile() {
           </div>
         </div>
       )}
+
+      {/* ── LANGUAGE SELECTION MODAL ─── */}
+      <LanguageModal
+        isOpen={showLanguageModal}
+        onClose={() => setShowLanguageModal(false)}
+      />
     </div>
   );
 }

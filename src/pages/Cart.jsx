@@ -3,12 +3,14 @@ import { useNavigate, Link } from 'react-router-dom';
 import { ShoppingCart, Trash2, Plus, Minus, Tag, Percent, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
+import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import VegBadge from '../components/VegBadge';
 
 export default function Cart() {
   const { items, restaurant, promoCode, promoDiscount, updateQuantity, removeItem, clearCart, applyPromo, removePromo, getCalculations, fetchPlatformSettings, platformSettings } = useCartStore();
   const { user } = useAuthStore();
+  const { t } = useTranslation();
   
   const [promoInput, setPromoInput] = useState('');
   const [promoError, setPromoError] = useState('');
@@ -70,15 +72,15 @@ export default function Cart() {
         <div className="w-18 h-18 rounded-full bg-violet-50 text-primary flex items-center justify-center mb-2 animate-bounce">
           <ShoppingCart className="w-8 h-8" />
         </div>
-        <h3 className="font-display font-extrabold text-xl text-main">Your cart is empty</h3>
+        <h3 className="font-display font-extrabold text-xl text-main">{t('cart.emptyTitle', 'Your cart is empty')}</h3>
         <p className="text-xs text-muted max-w-xs leading-relaxed font-medium">
-          Looks like you haven't added anything to your cart yet. Go ahead and explore our top cuisines!
+          {t('cart.emptyDesc', "Looks like you haven't added anything to your cart yet. Go ahead and explore our top cuisines!")}
         </p>
         <Link
           to="/restaurants"
           className="bg-primary hover:bg-primary-hover text-white font-bold text-xs px-6 py-3 rounded-xl shadow-md transition-colors mt-2"
         >
-          Browse Restaurants
+          {t('cart.browseRestaurants', 'Browse Restaurants')}
         </Link>
       </div>
     );
@@ -89,10 +91,10 @@ export default function Cart() {
       <div className="flex items-center justify-between border-b border-line pb-4">
         <div>
           <h1 className="font-display font-extrabold text-2xl text-main leading-tight">
-            Checkout Cart
+            {t('cart.title', 'Checkout Cart')}
           </h1>
           <p className="text-xs text-muted font-medium">
-            Ordering from <span className="text-primary font-bold">{restaurantNameText}</span>
+            {t('cart.orderingFrom', 'Ordering from')} <span className="text-primary font-bold">{restaurantNameText}</span>
           </p>
         </div>
         <button
@@ -100,7 +102,7 @@ export default function Cart() {
           className="flex items-center gap-1 text-xs text-muted hover:text-red-500 font-semibold cursor-pointer transition-colors"
         >
           <Trash2 className="w-4 h-4" />
-          <span>Clear Cart</span>
+          <span>{t('cart.clearCart', 'Clear Cart')}</span>
         </button>
       </div>
 
@@ -108,7 +110,7 @@ export default function Cart() {
         <div className="bg-red-50 border border-red-200 text-red-800 p-5 rounded-3xl flex gap-3 text-xs animate-fade-in shadow-2xs">
           <AlertCircle className="w-5.5 h-5.5 text-red-600 flex-shrink-0 mt-0.5" />
           <div>
-            <h5 className="font-display font-extrabold uppercase tracking-wider text-red-800 text-sm">Hotel Temporarily Closed</h5>
+            <h5 className="font-display font-extrabold uppercase tracking-wider text-red-800 text-sm">{t('restaurant.temporarilyClosed', 'Hotel Temporarily Closed')}</h5>
             <p className="mt-1 leading-relaxed font-semibold">
               The following restaurant(s) in your cart are currently closed and not accepting orders:
             </p>
@@ -134,7 +136,7 @@ export default function Cart() {
                   <span className="font-display font-extrabold text-xs tracking-wide uppercase text-muted">{group.restaurantName}</span>
                   {group.isClosed && (
                     <span className="bg-red-50 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-red-100">
-                      Temporarily Closed
+                      {t('restaurant.temporarilyClosed', 'Temporarily Closed')}
                     </span>
                   )}
                 </div>
@@ -195,7 +197,7 @@ export default function Cart() {
           <div className="bg-green-50/50 border border-green-100 rounded-2xl p-4 flex gap-3 text-green-800">
             <ShieldCheck className="w-5 h-5 text-green-700 flex-shrink-0 mt-0.5" />
             <div>
-              <h5 className="font-bold text-xs text-green-800">Zero Contact Delivery</h5>
+              <h5 className="font-bold text-xs text-green-800">{t('cart.zeroContactDelivery', 'Zero Contact Delivery')}</h5>
               <p className="text-[10px] text-green-700 mt-0.5 leading-relaxed font-medium">
                 Our delivery partner will leave your order at your doorstep securely. Standard sanitation guidelines followed.
               </p>
@@ -209,7 +211,7 @@ export default function Cart() {
           <div className="bg-surface rounded-2xl p-4 border border-line shadow-2xs flex flex-col gap-3">
             <h3 className="font-display font-semibold text-sm text-main flex items-center gap-1.5">
               <Tag className="w-4 h-4 text-primary" />
-              <span>Apply Promo Code</span>
+              <span>{t('cart.applyPromo', 'Apply Promo Code')}</span>
             </h3>
 
             {promoCode ? (
@@ -225,7 +227,7 @@ export default function Cart() {
                   onClick={removePromo}
                   className="text-[10px] font-bold text-red-500 hover:text-red-700 cursor-pointer uppercase transition-colors"
                 >
-                  Remove
+                  {t('cart.remove', 'Remove')}
                 </button>
               </div>
             ) : (
@@ -241,7 +243,7 @@ export default function Cart() {
                   type="submit"
                   className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition-colors cursor-pointer"
                 >
-                  Apply
+                  {t('cart.apply', 'Apply')}
                 </button>
               </form>
             )}
@@ -257,17 +259,17 @@ export default function Cart() {
           {/* Pricing Invoice card */}
           <div className="bg-surface rounded-2xl p-4 border border-line shadow-2xs flex flex-col gap-3.5">
             <h3 className="font-display font-semibold text-sm text-main border-b border-line pb-2">
-              Bill Summary
+              {t('cart.billSummary', 'Bill Summary')}
             </h3>
 
             <div className="flex flex-col gap-2.5 text-xs text-muted font-medium">
               <div className="flex items-center justify-between">
-                <span>Item Subtotal</span>
+                <span>{t('cart.itemSubtotal', 'Item Subtotal')}</span>
                 <span className="text-main">₹{subtotal}</span>
               </div>
               <div className="flex flex-col gap-1 border-t border-b border-line py-1.5 my-0.5">
                 <div className="flex items-center justify-between font-semibold">
-                  <span>Total Delivery Fee</span>
+                  <span>{t('cart.deliveryFee', 'Total Delivery Fee')}</span>
                   <span className="text-main">₹{deliveryFee}</span>
                 </div>
                 {groupedList.map(group => {
@@ -282,20 +284,20 @@ export default function Cart() {
               </div>
               {platformFee > 0 && (
                 <div className="flex items-center justify-between font-medium">
-                  <span>Platform Fee</span>
+                  <span>{t('cart.platformFee', 'Platform Fee')}</span>
                   <span className="text-main font-bold">₹{platformFee}</span>
                 </div>
               )}
               {promoDiscount > 0 && (
                 <div className="flex items-center justify-between text-green-700 font-bold bg-green-50 p-1.5 rounded-lg">
-                  <span>Promo Discount</span>
+                  <span>{t('cart.promoDiscount', 'Promo Discount')}</span>
                   <span>-₹{promoDiscount}</span>
                 </div>
               )}
             </div>
 
             <div className="border-t border-line pt-3 flex items-center justify-between text-sm font-bold text-main">
-              <span>Grand Total</span>
+              <span>{t('cart.grandTotal', 'Grand Total')}</span>
               <span className="text-primary text-base">₹{total.toFixed(2)}</span>
             </div>
 
@@ -305,7 +307,7 @@ export default function Cart() {
               disabled={isAnyClosed}
               className="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-violet-500/10 hover:shadow-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2 disabled:bg-gray-100 disabled:text-muted disabled:shadow-none disabled:cursor-not-allowed"
             >
-              <span>{isAnyClosed ? 'Restaurant Closed' : 'Proceed to Checkout'}</span>
+              <span>{isAnyClosed ? t('restaurant.closed', 'Restaurant Closed') : t('cart.proceedToCheckout', 'Proceed to Checkout')}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

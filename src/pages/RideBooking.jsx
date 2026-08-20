@@ -4,12 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import { Bike, Package, MapPin, ArrowRight, CreditCard, Sparkles, AlertCircle, Check, FileText } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
+import { useTranslation } from '../store/languageStore';
 import { getRoute } from '../services/routingService';
 import LocationPickerModal from '../components/LocationPickerModal';
 
 export default function RideBooking() {
   const { user, token } = useAuthStore();
   const { showToast, platformSettings, fetchPlatformSettings } = useCartStore();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const routeRequestIdRef = React.useRef(0);
 
@@ -295,10 +297,10 @@ export default function RideBooking() {
           </div>
           <div>
             <h1 className="font-display font-black text-2xl text-main leading-tight">
-              Ride Instant Taxi & Parcels
+              {t('ride.title', 'Ride Instant Taxi & Parcels')}
             </h1>
             <p className="text-xs text-muted font-semibold mt-0.5">
-              Book a Captain or dispatch packages across the city in minutes
+              {t('ride.subtitle', 'Book a Captain or dispatch packages across the city in minutes')}
             </p>
           </div>
         </div>
@@ -337,7 +339,7 @@ export default function RideBooking() {
               }`}
             >
               <Bike className="w-5 h-5" />
-              <span>Book a Bike Taxi</span>
+              <span>{t('ride.bookBikeTaxi', 'Book a Bike Taxi')}</span>
             </button>
             {isParcelEnabled && (
               <button
@@ -349,7 +351,7 @@ export default function RideBooking() {
                 }`}
               >
                 <Package className="w-5 h-5" />
-                <span>Send a Local Parcel</span>
+                <span>{t('ride.sendParcel', 'Send a Local Parcel')}</span>
               </button>
             )}
           </div>
@@ -368,7 +370,7 @@ export default function RideBooking() {
                 <div className="flex justify-between items-center">
                   <h4 className="text-xs font-bold text-main flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-                    <span>Pickup Location</span>
+                    <span>{t('ride.pickupLocation', 'Pickup Location')}</span>
                   </h4>
                 </div>
 
@@ -385,7 +387,7 @@ export default function RideBooking() {
                     ) : (
                       <div className="flex items-center gap-2 text-muted font-semibold">
                         <MapPin className="w-4 h-4 text-primary" />
-                        Set Pickup Location on Map
+                        {t('ride.setPickupOnMap', 'Set Pickup Location on Map')}
                       </div>
                     )}
                   </div>
@@ -416,7 +418,7 @@ export default function RideBooking() {
                 <div className="flex justify-between items-center">
                   <h4 className="text-xs font-bold text-main flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                    <span>Destination (Achieving)</span>
+                    <span>{t('ride.destination', 'Destination')}</span>
                   </h4>
                 </div>
 
@@ -433,7 +435,7 @@ export default function RideBooking() {
                     ) : (
                       <div className="flex items-center gap-2 text-muted font-semibold">
                         <MapPin className="w-4 h-4 text-red-500" />
-                        Set Destination on Map
+                        {t('ride.setDestinationOnMap', 'Set Destination on Map')}
                       </div>
                     )}
                   </div>
@@ -499,11 +501,11 @@ export default function RideBooking() {
           <div className="bg-surface rounded-3xl p-6 border border-line shadow-2xs flex flex-col gap-4">
             <h3 className="font-display font-extrabold text-sm text-main uppercase tracking-wider pb-1 border-b border-line flex items-center gap-1.5">
               <CreditCard className="w-4.5 h-4.5 text-primary" />
-              <span>Payment Method</span>
+              <span>{t('checkout.paymentMethod', 'Payment Method')}</span>
             </h3>
             <div className="p-3.5 rounded-xl border border-yellow-400 bg-yellow-500/5 flex items-center justify-between">
               <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] font-black text-main uppercase">💵 Cash On Delivery (COD)</span>
+                <span className="text-[10px] font-black text-main uppercase">💵 {t('checkout.cod', 'Cash On Delivery (COD)')}</span>
                 <span className="text-[9px] text-muted font-bold">Pay cash to captain on arrival</span>
               </div>
               <div className="w-4 h-4 rounded-full border border-yellow-500 bg-yellow-500 flex items-center justify-center">
@@ -539,7 +541,7 @@ export default function RideBooking() {
 
             {/* Vehicle Selection cards */}
             <div className="flex flex-col gap-2.5">
-              <span className="text-[9px] text-muted font-extrabold uppercase px-1">Select Ride Type</span>
+              <span className="text-[9px] text-muted font-extrabold uppercase px-1">{t('ride.chooseVehicle', 'Select Ride Type')}</span>
               
               {platformSettings?.rideServices?.bikeEnabled !== false && (
                 <button
@@ -554,7 +556,7 @@ export default function RideBooking() {
                       <Bike className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-main">Ride Bike</h4>
+                      <h4 className="text-xs font-bold text-main">{t('ride.bike', 'Ride Bike')}</h4>
                       <p className="text-[9px] text-muted font-semibold">Swift bike taxi dispatch</p>
                     </div>
                   </div>
@@ -586,7 +588,7 @@ export default function RideBooking() {
                       <Bike className="w-5 h-5 rotate-12" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-main">Ride Auto</h4>
+                      <h4 className="text-xs font-bold text-main">{t('ride.auto', 'Ride Auto')}</h4>
                       <p className="text-[9px] text-muted font-semibold">Spacious Auto-rickshaw</p>
                     </div>
                   </div>
@@ -653,7 +655,7 @@ export default function RideBooking() {
 
             {/* Total invoice block */}
             <div className="flex justify-between items-center text-sm font-bold text-main">
-              <span>Total to Pay</span>
+              <span>{t('checkout.totalPayable', 'Total to Pay')}</span>
               <span className="text-primary text-base font-black">₹{fare.toFixed(2)}</span>
             </div>
 
@@ -676,11 +678,11 @@ export default function RideBooking() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  <span>Assigning Captain...</span>
+                  <span>{t('ride.findingRider', 'Assigning Captain...')}</span>
                 </>
               ) : (
                 <>
-                  <span>Book Ride</span>
+                  <span>{t('ride.bookRide', 'Book Ride')}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { MapPin, CreditCard, ChevronRight, Check, AlertCircle, Sparkles, User, ShoppingBag, FileText, Trash2, AlertTriangle } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
+import { useTranslation } from '../store/languageStore';
 import { playOrderPlacedSound } from '../utils/audio';
 import LocationPickerModal from '../components/LocationPickerModal';
 import { getRoute } from '../services/routingService';
@@ -11,6 +12,7 @@ import { getRoute } from '../services/routingService';
 export default function Checkout() {
   const { items, restaurant, getCalculations, clearCart, showToast, promoCode, fetchPlatformSettings, platformSettings } = useCartStore();
   const { user, token, addAddress, deleteAddress } = useAuthStore();
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   // Address State
@@ -273,9 +275,9 @@ export default function Checkout() {
     <div className="max-w-5xl mx-auto px-4 md:px-8 pb-32 animate-fade-in flex flex-col gap-6 w-full">
       <div className="border-b border-line pb-4">
         <h1 className="font-display font-extrabold text-2xl text-main leading-tight">
-          Secure Checkout
+          {t('checkout.title', 'Secure Checkout')}
         </h1>
-        <p className="text-xs text-muted font-medium">Verify your address and choose a payment method</p>
+        <p className="text-xs text-muted font-medium">{t('checkout.subtitle', 'Verify your address and choose a payment method')}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
@@ -294,7 +296,7 @@ export default function Checkout() {
           <section className="bg-surface rounded-2xl p-5 border border-line shadow-2xs flex flex-col gap-4">
             <h3 className="font-display font-semibold text-sm md:text-base text-main flex items-center gap-2">
               <MapPin className="w-5 h-5 text-primary" />
-              <span>1. Delivery Address</span>
+              <span>1. {t('checkout.deliveryAddress', 'Delivery Address')}</span>
             </h3>
 
             {activeAddresses.length > 0 ? (
@@ -356,7 +358,7 @@ export default function Checkout() {
             ) : (
               <div className="bg-violet-50/50 border border-violet-100 rounded-xl p-4 flex gap-2.5 text-primary text-xs">
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <p className="font-semibold">No saved addresses found. Please add a shipping address to place your order.</p>
+                <p className="font-semibold">{t('profile.noAddresses', 'No saved addresses found. Please add a shipping address to place your order.')}</p>
               </div>
             )}
 
@@ -365,7 +367,7 @@ export default function Checkout() {
               onClick={handleOpenAddAddress}
               className="text-[13px] font-extrabold text-violet-600 hover:text-violet-700 flex items-center justify-start gap-1 cursor-pointer w-max px-1 bg-violet-50 hover:bg-violet-100 py-2.5 px-4 rounded-xl transition-colors"
             >
-              + Add New Delivery Location
+              + {t('profile.addNewAddress', 'Add New Delivery Location')}
             </button>
           </section>
 
@@ -397,16 +399,16 @@ export default function Checkout() {
           <section className="bg-surface rounded-2xl p-5 border border-line shadow-2xs flex flex-col gap-4">
             <h3 className="font-display font-semibold text-sm md:text-base text-main flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-primary" />
-              <span>2. Payment Method</span>
+              <span>2. {t('checkout.paymentMethod', 'Payment Method')}</span>
             </h3>
 
             <div className="p-4 rounded-xl border border-primary bg-violet-50/20 flex items-center justify-between">
               <div className="flex flex-col gap-1">
                 <span className="text-xs font-extrabold text-main uppercase flex items-center gap-2">
-                  💵 Cash On Delivery (COD)
+                  💵 {t('checkout.cod', 'Cash On Delivery (COD)')}
                 </span>
                 <span className="text-[11px] text-muted font-medium">
-                  Pay cash at your doorstep when your food arrives
+                  {t('checkout.codDesc', 'Pay cash at your doorstep when your food arrives')}
                 </span>
               </div>
               <div className="w-5 h-5 rounded-full border-2 border-primary bg-primary flex items-center justify-center">
@@ -415,8 +417,6 @@ export default function Checkout() {
             </div>
           </section>
 
-
-
         </div>
 
         {/* Order billing panel */}
@@ -424,7 +424,7 @@ export default function Checkout() {
           <div className="bg-surface rounded-2xl p-4 border border-line shadow-2xs flex flex-col gap-4">
             <h3 className="font-display font-semibold text-sm text-main border-b border-line pb-2 flex items-center gap-1.5">
               <ShoppingBag className="w-4.5 h-4.5 text-muted" />
-              <span>Order Summary</span>
+              <span>{t('checkout.orderSummary', 'Order Summary')}</span>
             </h3>
 
             {/* Collapsed Item list preview */}
@@ -457,12 +457,12 @@ export default function Checkout() {
                 </div>
               )}
               <div className="flex items-center justify-between">
-                <span>Subtotal</span>
+                <span>{t('cart.itemSubtotal', 'Subtotal')}</span>
                 <span className="text-main font-bold">₹{subtotal}</span>
               </div>
               <div className="flex flex-col gap-1 border-t border-b border-line py-1.5 my-0.5">
                 <div className="flex items-center justify-between font-semibold">
-                  <span>Total Delivery Fee</span>
+                  <span>{t('cart.deliveryFee', 'Total Delivery Fee')}</span>
                   <span className="text-main font-bold">{routeInfo ? `₹${deliveryFee}` : 'Calculating...'}</span>
                 </div>
                 {groupedList.map(group => {
@@ -490,26 +490,25 @@ export default function Checkout() {
               </div>
               {platformFee > 0 && (
                 <div className="flex items-center justify-between font-medium">
-                  <span>Platform Fee</span>
+                  <span>{t('cart.platformFee', 'Platform Fee')}</span>
                   <span className="text-main font-bold">₹{platformFee}</span>
                 </div>
               )}
               {promoDiscount > 0 && (
                 <div className="flex items-center justify-between text-green-700 font-bold bg-green-50 p-1.5 rounded-lg">
-                  <span>Promo Discount</span>
+                  <span>{t('cart.promoDiscount', 'Promo Discount')}</span>
                   <span>-₹{promoDiscount}</span>
                 </div>
               )}
               <div className="flex justify-between items-center text-lg text-primary font-bold mt-1.5">
-                <span>Total to Pay</span>
+                <span>{t('checkout.totalPayable', 'Total to Pay')}</span>
                 <span>{routeInfo ? `₹${total}` : 'Calculating...'}</span>
               </div>
-
 
             </div>
 
             <div className="flex items-center justify-between text-sm font-bold text-main">
-              <span>Total Payable</span>
+              <span>{t('checkout.totalPayable', 'Total Payable')}</span>
               <span className="text-primary text-base">{routeInfo ? `₹${total.toFixed(2)}` : 'Calculating...'}</span>
             </div>
 
@@ -539,11 +538,11 @@ export default function Checkout() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  <span>Processing Order...</span>
+                  <span>{t('checkout.processing', 'Processing Order...')}</span>
                 </>
               ) : (
                 <>
-                  <span>Place Order</span>
+                  <span>{t('checkout.placeOrder', 'Place Order')}</span>
                 </>
               )}
             </button>

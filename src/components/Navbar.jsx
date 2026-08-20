@@ -15,11 +15,12 @@ import {
   Sun,
   SlidersHorizontal
 } from 'lucide-react';
-import jinkzoLogo from '../assets/jinkzo-logo.jpg';
+import jinkzoLogo from '../assets/branding/jinkzo-logo.png';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { useThemeStore } from '../store/themeStore';
 import { useLocationStore } from '../store/locationStore';
+import { useTranslation } from '../store/languageStore';
 import LocationPickerModal from './LocationPickerModal';
 
 export default function Navbar() {
@@ -27,6 +28,7 @@ export default function Navbar() {
   const cartItems = useCartStore((state) => state.items);
   const { isDarkMode, toggleTheme } = useThemeStore();
   const { lat, lng, address: storeAddress, isDetecting, detectGpsLocation, setLocation: setStoreLocation } = useLocationStore();
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,8 +48,8 @@ export default function Navbar() {
 
   // Dynamic real GPS location with fallback to user saved address or prompt
   const deliveryAddress = isDetecting
-    ? 'Detecting location...'
-    : (storeAddress || (user?.addresses?.length > 0 ? (user.addresses.find(a => a.isDefault)?.street || user.addresses[0].street) : '') || 'Select location');
+    ? t('nav.detectingLocation', 'Detecting location...')
+    : (storeAddress || (user?.addresses?.length > 0 ? (user.addresses.find(a => a.isDefault)?.street || user.addresses[0].street) : '') || t('nav.selectLocation', 'Select location'));
 
   // Trigger GPS detection on mount
   useEffect(() => {
@@ -119,11 +121,11 @@ export default function Navbar() {
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-50/90 dark:bg-[#1C2233] hover:bg-gray-100 dark:hover:bg-[#232B40] border border-gray-200/80 dark:border-white/10 cursor-pointer transition-all min-w-0 group"
                   title="Click to change delivery location"
                 >
-                  <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-[#7C3AED]/20 text-[#7C3AED] dark:text-[#A78BFA] flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                    <MapPin className={`w-3.5 h-3.5 fill-[#7C3AED]/20 text-[#7C3AED] dark:text-[#A78BFA] ${isDetecting ? 'animate-bounce' : ''}`} />
+                  <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-[#7C3AED]/20 text-[#7C3AED] dark:text-[#A78BFA] flex items-center justify-center flex-shrink-0">
+                    <MapPin className={`w-3 h-3 fill-[#7C3AED]/20 text-[#7C3AED] dark:text-[#A78BFA] ${isDetecting ? 'animate-bounce' : ''}`} />
                   </div>
                   <div className="flex flex-col min-w-0 pr-0.5">
-                    <span className="text-[9px] text-gray-500 dark:text-slate-400 font-semibold leading-none">Deliver to</span>
+                    <span className="text-[9px] text-gray-500 dark:text-slate-400 font-semibold leading-none">{t('nav.deliverTo', 'Deliver to')}</span>
                     <span className={`text-[11px] sm:text-xs font-bold truncate max-w-[100px] xs:max-w-[140px] sm:max-w-[180px] leading-tight mt-0.5 ${isDetecting ? 'text-gray-400 dark:text-slate-400 animate-pulse' : 'text-gray-900 dark:text-white'}`}>
                       {deliveryAddress}
                     </span>
@@ -150,7 +152,7 @@ export default function Navbar() {
                   <button
                     onClick={() => setShowNotifications(!showNotifications)}
                     className="notif-toggle-btn w-7 h-7 rounded-full flex items-center justify-center text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 active:scale-95 transition-all relative cursor-pointer"
-                    title="Notifications"
+                    title={t('nav.notifications', 'Notifications')}
                   >
                     <Bell className="w-3.5 h-3.5 text-gray-700 dark:text-slate-200" />
                     {unreadNotifications.length > 0 && (
@@ -164,7 +166,7 @@ export default function Navbar() {
                   <button
                     onClick={() => setShowProfileMenu(!showProfileMenu)}
                     className="profile-toggle-btn w-7 h-7 rounded-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white flex items-center justify-center shadow-xs shadow-purple-500/20 active:scale-95 transition-all cursor-pointer"
-                    title={user ? user.name : 'Account & Menu'}
+                    title={user ? user.name : t('nav.myAccount', 'Account & Menu')}
                   >
                     <User className="w-3.5 h-3.5 text-white" />
                   </button>
@@ -184,7 +186,7 @@ export default function Navbar() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search for food, grocery, items..."
+                  placeholder={t('nav.searchPlaceholder', 'Search for food, grocery, items...')}
                   className="w-full bg-gray-50 dark:bg-[#1C2233] hover:bg-gray-100/70 dark:hover:bg-[#232B40] focus:bg-white dark:focus:bg-[#1E2538] text-gray-800 dark:text-white text-xs font-medium pl-10 pr-10 py-2 rounded-full border border-gray-200/80 dark:border-white/10 focus:border-[#7C3AED] dark:focus:border-[#A78BFA] focus:ring-2 focus:ring-purple-100 dark:focus:ring-purple-900/30 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500 shadow-inner"
                 />
                 <button
@@ -227,7 +229,7 @@ export default function Navbar() {
                   <MapPin className={`w-3.5 h-3.5 fill-[#7C3AED]/20 text-[#7C3AED] dark:text-[#A78BFA] ${isDetecting ? 'animate-bounce' : ''}`} />
                 </div>
                 <div className="flex flex-col min-w-0 pr-1">
-                  <span className="text-[10px] text-gray-500 dark:text-slate-400 font-medium leading-none">Deliver to</span>
+                  <span className="text-[10px] text-gray-500 dark:text-slate-400 font-medium leading-none">{t('nav.deliverTo', 'Deliver to')}</span>
                   <span className={`text-xs sm:text-sm font-bold truncate leading-tight mt-0.5 ${isDetecting ? 'text-gray-400 dark:text-slate-400 animate-pulse' : 'text-gray-900 dark:text-white'}`}>
                     {deliveryAddress}
                   </span>
@@ -247,7 +249,7 @@ export default function Navbar() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search for food, grocery, items..."
+                  placeholder={t('nav.searchPlaceholder', 'Search for food, grocery, items...')}
                   className="w-full bg-gray-50 dark:bg-[#1C2233] hover:bg-gray-100/70 dark:hover:bg-[#232B40] focus:bg-white dark:focus:bg-[#1E2538] text-gray-800 dark:text-white text-xs sm:text-sm font-medium pl-11 pr-11 py-2.5 sm:py-3 rounded-full border border-gray-200/80 dark:border-white/10 focus:border-[#7C3AED] dark:focus:border-[#A78BFA] focus:ring-2 focus:ring-purple-100 dark:focus:ring-purple-900/30 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500 shadow-inner"
                 />
                 <button
@@ -281,7 +283,7 @@ export default function Navbar() {
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
                 className="notif-toggle-btn w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 active:scale-95 transition-all relative cursor-pointer"
-                title="Notifications"
+                title={t('nav.notifications', 'Notifications')}
               >
                 <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-gray-700 dark:text-slate-200" />
                 {unreadNotifications.length > 0 && (
@@ -295,7 +297,7 @@ export default function Navbar() {
               <button
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
                 className="profile-toggle-btn w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white flex items-center justify-center shadow-md shadow-purple-500/20 active:scale-95 transition-all cursor-pointer"
-                title={user ? user.name : 'Account & Menu'}
+                title={user ? user.name : t('nav.myAccount', 'Account & Menu')}
               >
                 <User className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-white" />
               </button>
@@ -315,7 +317,7 @@ export default function Navbar() {
               className="absolute right-2 sm:right-6 top-full mt-2 w-80 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-[#141926] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden z-50 animate-fade-in"
             >
               <div className="p-4 bg-gray-50/80 dark:bg-[#1C2233] border-b border-gray-100 dark:border-white/10 flex items-center justify-between">
-                <span className="font-bold text-sm text-gray-900 dark:text-white">Notifications ({unreadNotifications.length})</span>
+                <span className="font-bold text-sm text-gray-900 dark:text-white">{t('nav.notifications', 'Notifications')} ({unreadNotifications.length})</span>
                 <button
                   onClick={() => setUnreadNotifications([])}
                   className="text-xs text-[#7C3AED] dark:text-[#A78BFA] font-semibold hover:underline cursor-pointer"
@@ -325,7 +327,7 @@ export default function Navbar() {
               </div>
               <div className="max-h-80 overflow-y-auto divide-y divide-gray-50 dark:divide-white/5">
                 {unreadNotifications.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-gray-400 dark:text-slate-400 font-medium">No new notifications</div>
+                  <div className="p-6 text-center text-xs text-gray-400 dark:text-slate-400 font-medium">{t('nav.noNotifications', 'No new notifications')}</div>
                 ) : (
                   unreadNotifications.map(n => (
                     <div key={n.id} className="p-3.5 hover:bg-purple-50/40 dark:hover:bg-white/5 transition-colors">
@@ -361,7 +363,7 @@ export default function Navbar() {
                     onClick={() => setShowProfileMenu(false)}
                     className="block w-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs py-2 rounded-xl transition-colors"
                   >
-                    Sign In / Register
+                    {t('nav.login', 'Sign In / Register')}
                   </Link>
                 </div>
               )}
@@ -372,14 +374,14 @@ export default function Navbar() {
                   onClick={() => setShowProfileMenu(false)}
                   className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-purple-50 dark:hover:bg-white/5 hover:text-[#7C3AED] dark:hover:text-[#A78BFA] transition-colors"
                 >
-                  Home
+                  {t('nav.home', 'Home')}
                 </Link>
                 <Link
                   to="/restaurants"
                   onClick={() => setShowProfileMenu(false)}
                   className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-purple-50 dark:hover:bg-white/5 hover:text-[#7C3AED] dark:hover:text-[#A78BFA] transition-colors"
                 >
-                  Order Food
+                  {t('nav.restaurants', 'Order Food')}
                 </Link>
                 <Link
                   to="/ride"
@@ -387,7 +389,7 @@ export default function Navbar() {
                   className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-purple-50 dark:hover:bg-white/5 hover:text-[#7C3AED] dark:hover:text-[#A78BFA] transition-colors"
                 >
                   <Bike className="w-3.5 h-3.5" />
-                  Book Ride & Courier
+                  {t('nav.ride', 'Book Ride & Courier')}
                 </Link>
                 <Link
                   to="/cart"
@@ -396,7 +398,7 @@ export default function Navbar() {
                 >
                   <div className="flex items-center gap-2.5">
                     <ShoppingBag className="w-3.5 h-3.5" />
-                    <span>Cart</span>
+                    <span>{t('nav.cart', 'Cart')}</span>
                   </div>
                   {totalQuantity > 0 && (
                     <span className="bg-[#7C3AED] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
@@ -414,7 +416,7 @@ export default function Navbar() {
                     className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-purple-50 dark:hover:bg-white/5 hover:text-[#7C3AED] dark:hover:text-[#A78BFA] transition-colors"
                   >
                     <User className="w-3.5 h-3.5" />
-                    My Profile & Addresses
+                    {t('nav.myAccount', 'My Profile & Addresses')}
                   </Link>
 
                   {user.role === 'admin' && (
@@ -424,7 +426,7 @@ export default function Navbar() {
                       className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                     >
                       <ShieldAlert className="w-3.5 h-3.5" />
-                      Admin Portal
+                      {t('nav.adminPortal', 'Admin Portal')}
                     </Link>
                   )}
 
@@ -435,7 +437,7 @@ export default function Navbar() {
                       className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-[#7C3AED] dark:text-[#A78BFA] hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-colors"
                     >
                       <Store className="w-3.5 h-3.5" />
-                      Restaurant Portal
+                      {t('nav.restaurantPortal', 'Restaurant Portal')}
                     </Link>
                   )}
 
@@ -446,7 +448,7 @@ export default function Navbar() {
                       className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
                     >
                       <Bike className="w-3.5 h-3.5" />
-                      Rider Portal
+                      {t('nav.riderPortal', 'Rider Portal')}
                     </Link>
                   )}
                 </div>
@@ -463,7 +465,7 @@ export default function Navbar() {
                     className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-left cursor-pointer"
                   >
                     <LogOut className="w-3.5 h-3.5" />
-                    Sign Out
+                    {t('nav.logout', 'Log Out')}
                   </button>
                 )}
               </div>

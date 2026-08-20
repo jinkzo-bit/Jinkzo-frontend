@@ -9,30 +9,25 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/favicon-32x32.png",
+      "src": "/jinkzo-favicon-32.png",
       "sizes": "32x32",
       "type": "image/png"
     },
     {
-      "src": "/favicon.png",
-      "sizes": "48x48",
-      "type": "image/png"
-    },
-    {
-      "src": "/pwa-192x192.png",
+      "src": "/jinkzo-pwa-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/pwa-512x512.png",
+      "src": "/jinkzo-pwa-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/apple-touch-icon.png",
-      "sizes": "512x512",
+      "src": "/jinkzo-apple-touch-icon.png",
+      "sizes": "180x180",
       "type": "image/png"
     }
   ]

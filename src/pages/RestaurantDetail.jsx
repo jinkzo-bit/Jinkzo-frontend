@@ -5,6 +5,7 @@ import { Star, Clock, AlertTriangle, ChevronRight, ShoppingBag, Search, X, Heart
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { useFavoriteStore } from '../store/favoriteStore';
+import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import VegBadge from '../components/VegBadge';
 
@@ -13,6 +14,7 @@ const menuCategories = ['Starters', 'Burgers', 'Pizza', 'Biryani', 'Main Course'
 export default function RestaurantDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const user = useAuthStore((state) => state.user);
 
@@ -187,7 +189,7 @@ export default function RestaurantDetail() {
           <section className="flex flex-col gap-3 animate-fade-in">
             <div className="flex items-center gap-1.5 px-1">
               <span className="text-[9px] uppercase font-extrabold tracking-widest text-primary bg-primary-light px-2.5 py-1 rounded-md">
-                Offers for You
+                {t('restaurant.offersForYou', 'Offers for You')}
               </span>
               <span className="text-[10px] text-muted font-semibold">• Tap a code to copy & apply at checkout</span>
             </div>
@@ -235,7 +237,7 @@ export default function RestaurantDetail() {
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search menu items..."
+          placeholder={t('restaurant.searchMenu', 'Search menu items...')}
           className="bg-transparent text-xs font-semibold text-main outline-none flex-grow placeholder-gray-400"
         />
         {searchQuery && (
@@ -252,7 +254,7 @@ export default function RestaurantDetail() {
       <div className="flex flex-col md:flex-row gap-8 items-start">
         {/* Sticky Sidebar Navigation (Desktop) */}
         <aside className="hidden md:block w-[200px] sticky top-24 bg-surface rounded-2xl p-3 border border-line shadow-xs flex-shrink-0">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-muted px-3 mb-2">Categories</p>
+          <p className="text-[10px] uppercase font-bold tracking-wider text-muted px-3 mb-2">{t('restaurant.categories', 'Categories')}</p>
           <div className="flex flex-col gap-1">
             {menuCategories.map((category) => {
               const hasItems = groupedMenu[category]?.length > 0;
@@ -307,8 +309,8 @@ export default function RestaurantDetail() {
           {filteredMenuItems.length === 0 ? (
             <div className="bg-surface rounded-3xl p-16 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
               <Search className="w-12 h-12 text-gray-300" />
-              <h4 className="font-display font-extrabold text-sm text-main">No matching dishes found</h4>
-              <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">Try searching for other dish names or keywords!</p>
+              <h4 className="font-display font-extrabold text-sm text-main">{t('restaurant.noMatchingDishes', 'No matching dishes found')}</h4>
+              <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">{t('restaurant.trySearchingOther', 'Try searching for other dish names or keywords!')}</p>
             </div>
           ) : (
             menuCategories.map((category) => {
@@ -361,7 +363,7 @@ export default function RestaurantDetail() {
                           {isItemUnavailable && (
                             <div className="absolute inset-0 bg-black/55 backdrop-blur-3xs rounded-2xl flex items-center justify-center z-10">
                               <span className="bg-gray-700 text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-1 rounded-md shadow-xs">
-                                Out of Stock
+                                {t('restaurant.outOfStock', 'Out of Stock')}
                               </span>
                             </div>
                           )}
@@ -384,7 +386,7 @@ export default function RestaurantDetail() {
                               });
                             }}
                             className="absolute top-1.5 right-1.5 p-1.5 rounded-full bg-white/90 dark:bg-[#141926]/90 shadow-sm border border-gray-100 dark:border-white/10 hover:scale-110 active:scale-95 transition-all cursor-pointer z-10"
-                            title={favouriteItems.some((i) => String(i._id) === String(item._id)) ? 'Remove from Favourites' : 'Add to Favourites'}
+                            title={favouriteItems.some((i) => String(i._id) === String(item._id)) ? t('favourites.removeFromFavourites', 'Remove from Favourites') : t('favourites.addToFavourites', 'Add to Favourites')}
                           >
                             <Heart className={`w-3.5 h-3.5 transition-colors ${
                               favouriteItems.some((i) => String(i._id) === String(item._id))
@@ -397,7 +399,7 @@ export default function RestaurantDetail() {
                           {isDisabled ? (
                             <div className="absolute -bottom-3.5 bg-gray-100 border border-line-strong rounded-xl flex items-center justify-center w-[85%] h-9 shadow-md">
                               <span className="text-[9px] font-black text-muted uppercase tracking-wider">
-                                {isRestClosed ? 'Closed' : 'Unavailable'}
+                                {isRestClosed ? t('restaurant.closed', 'Closed') : t('restaurant.unavailable', 'Unavailable')}
                               </span>
                             </div>
                           ) : (
@@ -423,7 +425,7 @@ export default function RestaurantDetail() {
                                   onClick={() => handleAddToCart(item)}
                                   className="w-full h-full text-center text-xs font-black text-primary hover:bg-violet-50/50 cursor-pointer uppercase transition-colors"
                                 >
-                                  Add
+                                  {t('restaurant.add', 'Add')}
                                 </button>
                               )}
                             </div>

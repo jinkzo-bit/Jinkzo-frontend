@@ -4,11 +4,13 @@ import { Heart, Building2, UtensilsCrossed, ArrowRight, ShoppingBag, Plus, Minus
 import RestaurantCard from '../components/RestaurantCard';
 import { useFavoriteStore } from '../store/favoriteStore';
 import { useCartStore } from '../store/cartStore';
+import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import VegBadge from '../components/VegBadge';
 
 export default function Favourites() {
   const [activeTab, setActiveTab] = useState('hotels'); // 'hotels' | 'items'
+  const { t } = useTranslation();
 
   const favouriteHotels = useFavoriteStore((state) => state.favouriteHotels);
   const favouriteItems = useFavoriteStore((state) => state.favouriteItems);
@@ -57,10 +59,10 @@ export default function Favourites() {
         <div>
           <h1 className="font-display font-black text-2xl md:text-3xl text-main tracking-tight flex items-center gap-2.5">
             <Heart className="w-7 h-7 text-red-500 fill-red-500" />
-            Favourites
+            {t('favourites.title', 'Favourites')}
           </h1>
           <p className="text-xs text-muted font-medium mt-1">
-            Your saved restaurants, hotels, and delicious dishes in one place.
+            {t('favourites.subtitle', 'Your saved restaurants, hotels, and delicious dishes in one place.')}
           </p>
         </div>
 
@@ -75,7 +77,7 @@ export default function Favourites() {
             }`}
           >
             <Building2 className="w-4 h-4" />
-            <span>Hotels</span>
+            <span>{t('favourites.restaurants', 'Hotels')}</span>
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
               activeTab === 'hotels' ? 'bg-white/20 text-white' : 'bg-surface text-muted'
             }`}>
@@ -92,7 +94,7 @@ export default function Favourites() {
             }`}
           >
             <UtensilsCrossed className="w-4 h-4" />
-            <span>Items</span>
+            <span>{t('favourites.dishes', 'Items')}</span>
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
               activeTab === 'items' ? 'bg-white/20 text-white' : 'bg-surface text-muted'
             }`}>
@@ -122,16 +124,16 @@ export default function Favourites() {
                 <Heart className="w-8 h-8 stroke-[1.5]" />
               </div>
               <h3 className="font-display font-extrabold text-lg text-main">
-                No favourite hotels yet
+                {t('favourites.noFavouriteRestaurants', 'No favourite hotels yet')}
               </h3>
               <p className="text-xs text-muted max-w-xs leading-relaxed font-medium">
-                Add hotels and restaurants to see them here for fast ordering.
+                {t('favourites.noFavouriteRestaurantsDesc', 'Add hotels and restaurants to see them here for fast ordering.')}
               </p>
               <Link
                 to="/restaurants"
                 className="mt-3 bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md shadow-red-500/20 flex items-center gap-2 transition-all cursor-pointer"
               >
-                <span>Explore Restaurants</span>
+                <span>{t('favourites.exploreRestaurants', 'Explore Restaurants')}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -176,7 +178,7 @@ export default function Favourites() {
                             toggleItem(dish);
                           }}
                           className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 dark:bg-[#141926]/90 shadow-sm border border-gray-100 dark:border-white/10 hover:scale-110 active:scale-95 transition-all cursor-pointer"
-                          title="Remove from Favourites"
+                          title={t('favourites.removeFromFavourites', 'Remove from Favourites')}
                         >
                           <Heart className={`w-4 h-4 transition-colors ${
                             isFav
@@ -211,7 +213,7 @@ export default function Favourites() {
                     {/* Sold by & Add to Cart */}
                     <div className="border-t border-line pt-3 mt-1 flex justify-between items-center">
                       <div className="flex flex-col gap-0.5 max-w-[60%]">
-                        <span className="text-[10px] text-muted font-bold uppercase tracking-wider">Sold by</span>
+                        <span className="text-[10px] text-muted font-bold uppercase tracking-wider">{t('restaurant.soldBy', 'Sold by')}</span>
                         <span className="text-xs font-bold text-main truncate">
                           {dish.restaurant?.name || 'Jinkzo Store'}
                         </span>
@@ -240,7 +242,7 @@ export default function Favourites() {
                             onClick={() => handleAddToCart(dish)}
                             className="w-full h-full flex items-center justify-center gap-1 text-xs font-black text-red-500 hover:bg-red-500 hover:text-white transition-all cursor-pointer"
                           >
-                            <span>ADD</span>
+                            <span>{t('restaurant.add', 'ADD')}</span>
                             <Plus className="w-3.5 h-3.5 stroke-[3]" />
                           </button>
                         )}
@@ -257,16 +259,16 @@ export default function Favourites() {
                 <UtensilsCrossed className="w-8 h-8 stroke-[1.5]" />
               </div>
               <h3 className="font-display font-extrabold text-lg text-main">
-                No favourite items yet
+                {t('favourites.noFavouriteDishes', 'No favourite items yet')}
               </h3>
               <p className="text-xs text-muted max-w-xs leading-relaxed font-medium">
-                Tap the heart on any food, beverage, or grocery item to save it here.
+                {t('favourites.noFavouriteDishesDesc', 'Tap the heart on any food, beverage, or grocery item to save it here.')}
               </p>
               <Link
                 to="/restaurants"
                 className="mt-3 bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md shadow-red-500/20 flex items-center gap-2 transition-all cursor-pointer"
               >
-                <span>Explore Items</span>
+                <span>{t('favourites.exploreDishes', 'Explore Items')}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>

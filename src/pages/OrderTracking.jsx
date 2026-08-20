@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Phone, Star, Shield, ArrowLeft, RefreshCw, Calendar, ShoppingBag, Check, Send, FileText } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import { useTranslation } from '../store/languageStore';
 import InteractiveMap from '../components/InteractiveMap';
 import { formatAppDateOnly, formatAppTimeOnly } from '../utils/dateUtils';
 import RiderFeedbackModal from '../components/RiderFeedbackModal';
@@ -13,6 +14,7 @@ import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 export default function OrderTracking() {
   const { id } = useParams();
   const { token } = useAuthStore();
+  const { t } = useTranslation();
   const [order, setOrder] = useState(null);
   const [siblingOrders, setSiblingOrders] = useState([]);
   const [restaurantAddress, setRestaurantAddress] = useState('');
@@ -336,7 +338,7 @@ export default function OrderTracking() {
                 ? 'bg-yellow-500 animate-ping' 
                 : 'bg-primary animate-ping'
             }`} />
-            <span>Active Status: <strong className="text-main font-bold">{order.status === 'Preparing' && order.orderType === 'ride' ? 'Captain at Pickup' : order.status}</strong></span>
+            <span>Active Status: <strong className="text-main font-bold">{order.status === 'Preparing' && order.orderType === 'ride' ? t('ride.captainAtPickup', 'Captain at Pickup') : t(`orderStatus.${order.status}`, order.status)}</strong></span>
           </p>
         </div>
 

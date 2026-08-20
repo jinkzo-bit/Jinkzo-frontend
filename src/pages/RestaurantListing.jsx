@@ -5,6 +5,7 @@ import { Search, SlidersHorizontal, ArrowUpDown, AlertTriangle, Heart } from 'lu
 import RestaurantCard from '../components/RestaurantCard';
 import { useCartStore } from '../store/cartStore';
 import { useFavoriteStore } from '../store/favoriteStore';
+import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import VegBadge from '../components/VegBadge';
 
@@ -124,6 +125,7 @@ const vegFruitsDataset = [
 
 export default function RestaurantListing() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { t } = useTranslation();
   const [restaurants, setRestaurants] = useState([]);
   const [dishes, setDishes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -378,14 +380,14 @@ export default function RestaurantListing() {
         <div className="flex-1 flex flex-col gap-4 min-w-0">
           <div className="flex items-center justify-between">
             <h2 className="font-display font-black text-lg sm:text-xl text-main tracking-tight">
-              What's on your mind?
+              {t('restaurant.whatsOnYourMind', "What's on your mind?")}
             </h2>
             {selectedCuisine !== 'All' && (
               <button
                 onClick={() => handleCuisineClick('All')}
                 className="text-xs font-bold text-primary hover:underline cursor-pointer"
               >
-                Reset Filter
+                {t('restaurant.resetFilter', 'Reset Filter')}
               </button>
             )}
           </div>
@@ -442,7 +444,7 @@ export default function RestaurantListing() {
               <span className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${isPureVeg ? 'border-green-600 dark:border-green-400' : 'border-gray-400'}`}>
                 {isPureVeg && <span className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-xs" />}
               </span>
-              <span>Pure Veg</span>
+              <span>{t('restaurant.pureVeg', 'Pure Veg')}</span>
             </button>
 
             {/* Sort Selector */}
@@ -453,10 +455,10 @@ export default function RestaurantListing() {
                 onChange={handleSortChange}
                 className="bg-transparent outline-none border-none text-main dark:text-white cursor-pointer text-xs font-bold pr-1 w-full"
               >
-                <option value="rating" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Rating (High to Low)</option>
-                <option value="deliveryTime" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Delivery Time</option>
-                <option value="costAsc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Price (Low to High)</option>
-                <option value="costDesc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Sort by: Price (High to Low)</option>
+                <option value="rating" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortRating', 'Sort by: Rating (High to Low)')}</option>
+                <option value="deliveryTime" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortDeliveryTime', 'Sort by: Delivery Time')}</option>
+                <option value="costAsc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortPriceLowHigh', 'Sort by: Price (Low to High)')}</option>
+                <option value="costDesc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortPriceHighLow', 'Sort by: Price (High to Low)')}</option>
               </select>
             </div>
 
@@ -485,8 +487,8 @@ export default function RestaurantListing() {
               <div className="w-16 h-16 rounded-full bg-violet-50 dark:bg-violet-950/40 text-primary flex items-center justify-center mb-2">
                 <SlidersHorizontal className="w-8 h-8" />
               </div>
-              <h3 className="font-display font-extrabold text-xl text-main">No restaurants match your filters</h3>
-              <p className="text-sm text-muted max-w-xs">Try clearing vegetarian checks or sorting filters to load results.</p>
+              <h3 className="font-display font-extrabold text-xl text-main">{t('restaurant.noRestaurantsMatch', 'No restaurants match your filters')}</h3>
+              <p className="text-sm text-muted max-w-xs">{t('restaurant.tryClearingFilters', 'Try clearing vegetarian checks or sorting filters to load results.')}</p>
               <button
                 onClick={() => {
                   setSelectedCuisine('All');
@@ -496,7 +498,7 @@ export default function RestaurantListing() {
                 }}
                 className="bg-primary text-white font-bold text-xs px-5 py-2.5 rounded-xl mt-3 shadow-md cursor-pointer hover:bg-primary-hover"
               >
-                Clear All Filters
+                {t('restaurant.clearAllFilters', 'Clear All Filters')}
               </button>
             </div>
           )
@@ -522,14 +524,14 @@ export default function RestaurantListing() {
                         {isRestClosed && (
                           <div className="absolute inset-0 bg-black/55 backdrop-blur-3xs rounded-2xl flex items-center justify-center z-10">
                             <span className="bg-red-600 text-white text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-md shadow-xs">
-                              Temporarily Closed
+                              {t('restaurant.temporarilyClosed', 'Temporarily Closed')}
                             </span>
                           </div>
                         )}
                         {!isRestClosed && isItemUnavailable && (
                           <div className="absolute inset-0 bg-black/55 backdrop-blur-3xs rounded-2xl flex items-center justify-center z-10">
                             <span className="bg-gray-700 text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-1 rounded-md shadow-xs">
-                              Out of Stock
+                              {t('restaurant.outOfStock', 'Out of Stock')}
                             </span>
                           </div>
                         )}
@@ -553,7 +555,7 @@ export default function RestaurantListing() {
                             toggleItem(dish);
                           }}
                           className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 dark:bg-[#141926]/90 shadow-sm border border-gray-100 dark:border-white/10 hover:scale-110 active:scale-95 transition-all cursor-pointer z-10"
-                          title={isFav ? 'Remove from Favourites' : 'Add to Favourites'}
+                          title={isFav ? t('favourites.removeFromFavourites', 'Remove from Favourites') : t('favourites.addToFavourites', 'Add to Favourites')}
                         >
                           <Heart className={`w-3.5 h-3.5 transition-colors ${
                             isFav
@@ -588,7 +590,7 @@ export default function RestaurantListing() {
                     {/* Sold by & Add to Cart button */}
                     <div className="border-t border-line pt-3 mt-1 flex justify-between items-center">
                       <div className="flex flex-col gap-0.5 max-w-[60%]">
-                        <span className="text-[10px] text-muted font-bold uppercase tracking-wider">Sold by</span>
+                        <span className="text-[10px] text-muted font-bold uppercase tracking-wider">{t('restaurant.soldBy', 'Sold by')}</span>
                         <span className="text-xs font-bold text-main truncate">
                           {dish.restaurant?.name || 'Jinkzo Verified Store'}
                         </span>
@@ -597,7 +599,7 @@ export default function RestaurantListing() {
                       {isDisabled ? (
                         <div className="bg-gray-100 dark:bg-gray-800 border border-line-strong rounded-xl flex items-center justify-center px-3 h-9 flex-shrink-0">
                           <span className="text-[9px] font-black text-muted uppercase tracking-wider">
-                            {isRestClosed ? 'Closed' : 'Unavailable'}
+                            {isRestClosed ? t('restaurant.closed', 'Closed') : t('restaurant.unavailable', 'Unavailable')}
                           </span>
                         </div>
                       ) : (
@@ -623,7 +625,7 @@ export default function RestaurantListing() {
                               onClick={() => handleAddToCart(dish)}
                               className="w-full h-full text-center text-xs font-black text-primary hover:bg-violet-50/50 dark:hover:bg-violet-950/40 cursor-pointer uppercase transition-colors"
                             >
-                              Add
+                              {t('restaurant.add', 'Add')}
                             </button>
                           )}
                         </div>
@@ -639,8 +641,8 @@ export default function RestaurantListing() {
               <div className="w-16 h-16 rounded-full bg-violet-50 dark:bg-violet-950/40 text-primary flex items-center justify-center mb-2">
                 <SlidersHorizontal className="w-8 h-8" />
               </div>
-              <h3 className="font-display font-extrabold text-xl text-main">No items match your filters</h3>
-              <p className="text-sm text-muted max-w-xs">Try clearing vegetarian checks or selecting another category.</p>
+              <h3 className="font-display font-extrabold text-xl text-main">{t('restaurant.noItemsMatch', 'No items match your filters')}</h3>
+              <p className="text-sm text-muted max-w-xs">{t('restaurant.tryClearingFilters', 'Try clearing vegetarian checks or selecting another category.')}</p>
               <button
                 onClick={() => {
                   setSelectedCuisine('All');

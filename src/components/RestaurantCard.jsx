@@ -2,9 +2,11 @@ import React from 'react';
 import { Star, Clock, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useFavoriteStore } from '../store/favoriteStore';
+import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
 export default function RestaurantCard({ restaurant, isLoading }) {
+  const { t } = useTranslation();
   const favouriteHotels = useFavoriteStore((state) => state.favouriteHotels);
   const toggleHotel = useFavoriteStore((state) => state.toggleHotel);
   if (isLoading) {
@@ -46,9 +48,9 @@ export default function RestaurantCard({ restaurant, isLoading }) {
 
   // Map dollar price range to readable rupee string
   const getRupeeCost = (range) => {
-    if (range === '$') return '₹150 for one';
-    if (range === '$$$') return '₹600 for two';
-    return '₹300 for two'; // '$$' default
+    if (range === '$') return `₹150 ${t('restaurants.forOne', 'for one')}`;
+    if (range === '$$$') return `₹600 ${t('restaurants.forTwo', 'for two')}`;
+    return `₹300 ${t('restaurants.forTwo', 'for two')}`; // '$$' default
   };
 
   return (
@@ -61,7 +63,7 @@ export default function RestaurantCard({ restaurant, isLoading }) {
         {isClosed && (
           <div className="absolute inset-0 bg-black/55 backdrop-blur-3xs flex items-center justify-center z-10 transition-all">
             <span className="bg-red-600 text-white text-[10px] font-black uppercase tracking-widest px-3.5 py-1.5 rounded-full shadow-md">
-              Hotel Temporarily Closed
+              {t('restaurants.hotelClosed', 'Hotel Temporarily Closed')}
             </span>
           </div>
         )}
@@ -76,7 +78,7 @@ export default function RestaurantCard({ restaurant, isLoading }) {
         {/* Pure Veg Indicator overlay */}
         {isPureVeg && (
           <span className="absolute top-3 left-3 bg-green-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
-            Pure Veg
+            {t('common.pureVeg', 'Pure Veg')}
           </span>
         )}
 
@@ -88,7 +90,7 @@ export default function RestaurantCard({ restaurant, isLoading }) {
             toggleHotel(restaurant);
           }}
           className="absolute top-3 right-3 p-2 bg-white/90 dark:bg-[#141926]/90 hover:bg-white dark:hover:bg-[#1E2538] rounded-full shadow-md transition-all hover:scale-110 active:scale-95 cursor-pointer backdrop-blur-xs z-10"
-          title={isFav ? 'Remove from Favourites' : 'Add to Favourites'}
+          title={isFav ? t('favourites.removeFromFavourites', 'Remove from Favourites') : t('favourites.addToFavourites', 'Add to Favourites')}
         >
           <Heart className={`w-4 h-4 transition-colors ${
             isFav
@@ -114,7 +116,7 @@ export default function RestaurantCard({ restaurant, isLoading }) {
 
           <div className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5 text-muted" />
-            <span>{deliveryTime} mins</span>
+            <span>{deliveryTime} {t('restaurants.mins', 'mins')}</span>
           </div>
 
           <div className="w-1 h-1 bg-gray-300 rounded-full" />
