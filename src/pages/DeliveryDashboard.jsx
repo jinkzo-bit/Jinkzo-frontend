@@ -419,7 +419,7 @@ export default function DeliveryDashboard() {
           console.warn('[GPS SOCKET] Initial getCurrentPosition warning:', err.message);
           // Do not fail hard on initial timeout; watchPosition will continue trying
         },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
 
       // Continuous GPS tracking
@@ -449,7 +449,7 @@ export default function DeliveryDashboard() {
             setGpsStatus('unavailable');
           }
         },
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
       );
     } else {
       console.warn('[GPS SOCKET] Geolocation is not supported by this browser.');

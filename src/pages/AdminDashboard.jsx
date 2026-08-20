@@ -13,6 +13,7 @@ import InteractiveMap from '../components/InteractiveMap';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
+import ImageUploadInput from '../components/common/ImageUploadInput';
 
 export default function AdminDashboard() {
   const { user, token } = useAuthStore();
@@ -357,14 +358,12 @@ export default function AdminDashboard() {
     setIsAddingCategory(true);
     setAddCategoryError('');
     try {
-      if (!addCategoryFile) {
-        setAddCategoryError('Please upload a category image.');
-        setIsAddingCategory(false);
-        return;
+      let imageUrl = (addCategoryForm.image || '').trim();
+      if (addCategoryFile) {
+        imageUrl = await uploadFileToBackend(addCategoryFile);
       }
-      const imageUrl = await uploadFileToBackend(addCategoryFile);
       if (!imageUrl) {
-        setAddCategoryError('Please upload a category image.');
+        setAddCategoryError('Please choose an image file or provide an Image URL.');
         setIsAddingCategory(false);
         return;
       }
@@ -410,7 +409,7 @@ export default function AdminDashboard() {
         imageUrl = await uploadFileToBackend(editCategoryFile);
       }
       if (!imageUrl) {
-        setEditCategoryError('Please upload a category image.');
+        setEditCategoryError('Please choose an image file or provide an Image URL.');
         setIsEditingCategory(false);
         return;
       }
@@ -942,8 +941,11 @@ export default function AdminDashboard() {
     e.preventDefault();
     setAddBannerError('');
 
-    if (!addBannerFile) {
-      setAddBannerError('Please upload a banner artwork image.');
+    let finalImageUrl = (addBannerForm.imageUrl || '').trim();
+    if (addBannerFile) {
+      // New file selected, will upload below
+    } else if (!finalImageUrl) {
+      setAddBannerError('Please choose an image file or provide an Image URL.');
       return;
     }
     if (!addBannerForm.title.trim()) {
@@ -953,7 +955,9 @@ export default function AdminDashboard() {
 
     setIsAddingBanner(true);
     try {
-      const finalImageUrl = await uploadFileToBackend(addBannerFile);
+      if (addBannerFile) {
+        finalImageUrl = await uploadFileToBackend(addBannerFile);
+      }
 
       const res = await fetch(`${API_BASE}/admin/banners`, {
         method: 'POST',
@@ -1019,7 +1023,7 @@ export default function AdminDashboard() {
     if (editBannerFile) {
       // New file selected, will upload below
     } else if (!finalImageUrl) {
-      setEditBannerError('Please upload a banner artwork image.');
+      setEditBannerError('Please choose an image file or provide an Image URL.');
       return;
     }
     if (!editBannerForm.title.trim()) {
@@ -3579,29 +3583,17 @@ export default function AdminDashboard() {
                 />
               </div>
 
-              {/* Category Image Upload */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
-                  Category Image *
-                </label>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full overflow-hidden border border-line-strong bg-base flex-shrink-0 flex items-center justify-center shadow-xs">
-                    {addCategoryFile ? (
-                      <img src={URL.createObjectURL(addCategoryFile)} alt="Preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <ImagePlus className="w-5 h-5 text-muted/50" />
-                    )}
-                  </div>
-                  <div className="flex-1 flex flex-col gap-1.5">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => setAddCategoryFile(e.target.files[0])}
-                      className="text-xs text-muted file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
-                    />
-                  </div>
-                </div>
-              </div>
+              {/* Category Image */}
+              <ImageUploadInput
+                label="Category Image *"
+                imageType="category"
+                value={addCategoryForm.image}
+                file={addCategoryFile}
+                onFileChange={setAddCategoryFile}
+                onUrlChange={(url) => setAddCategoryForm(prev => ({ ...prev, image: url }))}
+                previewShape="round"
+                required
+              />
 
               {/* Display Order & Status */}
               <div className="grid grid-cols-2 gap-3">
@@ -3711,30 +3703,15 @@ export default function AdminDashboard() {
               </div>
 
               {/* Category Image */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
-                  Category Image
-                </label>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full overflow-hidden border border-line-strong bg-base flex-shrink-0 flex items-center justify-center shadow-xs">
-                    {editCategoryFile ? (
-                      <img src={URL.createObjectURL(editCategoryFile)} alt="Preview" className="w-full h-full object-cover" />
-                    ) : editCategoryForm.image ? (
-                      <img src={getImageUrl(editCategoryForm.image, 'category')} alt="Preview" className="w-full h-full object-cover" onError={(e) => handleImageError(e, 'category')} />
-                    ) : (
-                      <ImagePlus className="w-5 h-5 text-muted/50" />
-                    )}
-                  </div>
-                  <div className="flex-1 flex flex-col gap-1.5">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => setEditCategoryFile(e.target.files[0])}
-                      className="text-xs text-muted file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
-                    />
-                  </div>
-                </div>
-              </div>
+              <ImageUploadInput
+                label="Category Image"
+                imageType="category"
+                value={editCategoryForm.image}
+                file={editCategoryFile}
+                onFileChange={setEditCategoryFile}
+                onUrlChange={(url) => setEditCategoryForm(prev => ({ ...prev, image: url }))}
+                previewShape="round"
+              />
 
               {/* Display Order & Status */}
               <div className="grid grid-cols-2 gap-3">
@@ -3947,17 +3924,16 @@ export default function AdminDashboard() {
               </div>
 
               {/* Banner Artwork Image */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
-                  Banner Artwork Image *
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setAddBannerFile(e.target.files[0])}
-                  className="text-xs text-muted file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
-                />
-              </div>
+              <ImageUploadInput
+                label="Banner Artwork Image *"
+                imageType="banner"
+                value={addBannerForm.imageUrl}
+                file={addBannerFile}
+                onFileChange={setAddBannerFile}
+                onUrlChange={(url) => setAddBannerForm(prev => ({ ...prev, imageUrl: url }))}
+                previewShape="wide"
+                required
+              />
 
               {/* Live Preview Box */}
               <div className="flex flex-col gap-1 mt-1">
@@ -3979,6 +3955,8 @@ export default function AdminDashboard() {
                   <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 flex items-center justify-center">
                     {addBannerFile ? (
                       <img src={URL.createObjectURL(addBannerFile)} alt="Preview" className="w-full h-full object-cover" />
+                    ) : addBannerForm.imageUrl ? (
+                      <img src={getImageUrl(addBannerForm.imageUrl, 'banner')} alt="Preview" className="w-full h-full object-cover" onError={(e) => handleImageError(e, 'banner')} />
                     ) : (
                       <ImagePlus className="w-6 h-6 text-white/50" />
                     )}
@@ -4114,17 +4092,15 @@ export default function AdminDashboard() {
               </div>
 
               {/* Banner Artwork Image */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
-                  Banner Artwork Image
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setEditBannerFile(e.target.files[0])}
-                  className="text-xs text-muted file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
-                />
-              </div>
+              <ImageUploadInput
+                label="Banner Artwork Image"
+                imageType="banner"
+                value={editBannerForm.imageUrl}
+                file={editBannerFile}
+                onFileChange={setEditBannerFile}
+                onUrlChange={(url) => setEditBannerForm(prev => ({ ...prev, imageUrl: url }))}
+                previewShape="wide"
+              />
 
               {/* Live Preview Box */}
               <div className="flex flex-col gap-1 mt-1">

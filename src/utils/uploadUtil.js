@@ -158,7 +158,7 @@ const validateImageFile = (file) => {
     throw new Error('Image file is too large. Maximum allowed size is 5MB.');
   }
   if (file.type && !file.type.startsWith('image/')) {
-    throw new Error('Invalid file format. Please select a valid image (JPG, PNG, WebP).');
+    throw new Error('Invalid file format. Please select a valid image (JPG, PNG, WebP, GIF).');
   }
 };
 

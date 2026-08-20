@@ -522,11 +522,32 @@ export default function LocationPicker({
                 }}
               />
             </div>
-            <div className="absolute top-3 right-3 z-20 flex gap-1.5">
-              <div className="bg-violet-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg">
+            <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-1">
+              <div className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg ${
+                selectedLocation.accuracy <= 20 
+                  ? 'bg-emerald-600' 
+                  : selectedLocation.accuracy <= 50 
+                    ? 'bg-violet-600' 
+                    : selectedLocation.accuracy <= 100 
+                      ? 'bg-amber-600' 
+                      : 'bg-red-600'
+              }`}>
                 <MapPin className="w-3 h-3" />
-                ±{Math.round(selectedLocation.accuracy)}m
+                ±{Math.round(selectedLocation.accuracy)}m ({
+                  selectedLocation.accuracy <= 20 
+                    ? 'Excellent' 
+                    : selectedLocation.accuracy <= 50 
+                      ? 'Good' 
+                      : selectedLocation.accuracy <= 100 
+                        ? 'Moderate' 
+                        : 'Low accuracy'
+                })
               </div>
+              {selectedLocation.accuracy > 100 && (
+                <div className="bg-black/80 backdrop-blur-sm text-amber-300 text-[9px] font-medium px-2 py-0.5 rounded-md shadow-md max-w-[200px] text-right">
+                  Move pin manually to exact location
+                </div>
+              )}
             </div>
           </>
         )}

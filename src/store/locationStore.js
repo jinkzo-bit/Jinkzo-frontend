@@ -7,6 +7,9 @@ export const useLocationStore = create(
     (set, get) => ({
       lat: null,
       lng: null,
+      accuracy: null,
+      accuracyLevel: null, // 'Excellent' | 'Good' | 'Moderate' | 'Low'
+      accuracyWarning: null,
       placeName: '',
       address: '',
       formattedAddress: '',
@@ -39,6 +42,9 @@ export const useLocationStore = create(
         set({
           lat: locationData.lat ?? locationData.latitude,
           lng: locationData.lng ?? locationData.longitude,
+          accuracy: locationData.accuracy ?? locationData.gpsAccuracy ?? null,
+          accuracyLevel: locationData.accuracyLevel ?? null,
+          accuracyWarning: null,
           placeName,
           address: shortName,
           formattedAddress: locationData.formattedAddress || shortName,
@@ -71,7 +77,19 @@ export const useLocationStore = create(
 
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
-            const { latitude: lat, longitude: lng } = pos.coords;
+            const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+            let accuracyLevel = 'Good';
+            let accuracyWarning = null;
+            if (accuracy !== undefined && accuracy !== null) {
+              if (accuracy <= 20) accuracyLevel = 'Excellent';
+              else if (accuracy <= 50) accuracyLevel = 'Good';
+              else if (accuracy <= 100) accuracyLevel = 'Moderate';
+              else {
+                accuracyLevel = 'Low';
+                accuracyWarning = `Location accuracy is approximate (±${Math.round(accuracy)}m). Please verify on map.`;
+              }
+            }
+
             try {
               const res = await fetch(`${API_BASE}/maps/geocode?lat=${lat}&lng=${lng}`);
               const data = await res.json();
@@ -92,6 +110,9 @@ export const useLocationStore = create(
                 set({
                   lat,
                   lng,
+                  accuracy,
+                  accuracyLevel,
+                  accuracyWarning,
                   placeName: placeName || '',
                   address: shortName,
                   formattedAddress: formattedAddress || shortName,
@@ -110,6 +131,9 @@ export const useLocationStore = create(
                 set({
                   lat,
                   lng,
+                  accuracy,
+                  accuracyLevel,
+                  accuracyWarning,
                   placeName: '',
                   address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
                   formattedAddress: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
@@ -124,6 +148,9 @@ export const useLocationStore = create(
               set({
                 lat,
                 lng,
+                accuracy,
+                accuracyLevel,
+                accuracyWarning,
                 placeName: '',
                 address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
                 formattedAddress: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,

@@ -9,6 +9,7 @@ import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
 import LocationPickerModal from '../components/LocationPickerModal';
 import NotificationCenter from '../components/NotificationCenter';
 import VegBadge from '../components/VegBadge';
+import ImageUploadInput from '../components/common/ImageUploadInput';
 
 export default function RestaurantDashboard() {
   const { user, token, logout } = useAuthStore();
@@ -1427,35 +1428,14 @@ export default function RestaurantDashboard() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Kitchen Cover Image</label>
-                  <div className="flex items-center gap-3">
-                    <div className="w-14 h-14 rounded-2xl overflow-hidden border border-line-strong bg-base flex-shrink-0 flex items-center justify-center shadow-xs">
-                      {profileImageFile ? (
-                        <img src={URL.createObjectURL(profileImageFile)} alt="Preview" className="w-full h-full object-cover" />
-                      ) : profileImage ? (
-                        <img src={getImageUrl(profileImage, 'restaurant')} alt="Preview" className="w-full h-full object-cover" onError={(e) => handleImageError(e, 'restaurant')} />
-                      ) : (
-                        <ImagePlus className="w-6 h-6 text-muted/50" />
-                      )}
-                    </div>
-                    <div className="flex-1 flex flex-col gap-1.5">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => setProfileImageFile(e.target.files[0])}
-                        className="text-xs text-muted file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
-                      />
-                      <input
-                        type="url"
-                        placeholder="Or paste Cover Image URL (https://...)"
-                        value={profileImage}
-                        onChange={(e) => setProfileImage(e.target.value)}
-                        className="bg-base border border-line-strong rounded-lg px-2.5 py-1.5 text-[11px] text-main font-medium outline-none focus:border-primary w-full"
-                      />
-                    </div>
-                  </div>
-                </div>
+                <ImageUploadInput
+                  label="Kitchen Cover Image"
+                  imageType="restaurant"
+                  value={profileImage}
+                  file={profileImageFile}
+                  onFileChange={setProfileImageFile}
+                  onUrlChange={setProfileImage}
+                />
 
                 <div className="flex flex-col gap-3.5 mt-2">
                   <div className="flex items-center gap-2">
@@ -1666,36 +1646,15 @@ export default function RestaurantDashboard() {
                 />
               </div>
 
-              {/* Menu Item Image: Choose File OR Image URL with Live Preview */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Dish Image *</label>
-                <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-2xl overflow-hidden border border-line-strong bg-base flex-shrink-0 flex items-center justify-center shadow-xs">
-                    {itemImageFile ? (
-                      <img src={URL.createObjectURL(itemImageFile)} alt="Preview" className="w-full h-full object-cover" />
-                    ) : itemImage ? (
-                      <img src={getImageUrl(itemImage, 'food')} alt="Preview" className="w-full h-full object-cover" onError={(e) => handleImageError(e, 'food')} />
-                    ) : (
-                      <ImagePlus className="w-6 h-6 text-muted/50" />
-                    )}
-                  </div>
-                  <div className="flex-1 flex flex-col gap-1.5">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => setItemImageFile(e.target.files[0])}
-                      className="text-xs text-muted file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
-                    />
-                    <input
-                      type="url"
-                      placeholder="Or paste Image URL (https://...)"
-                      value={itemImage}
-                      onChange={(e) => setItemImage(e.target.value)}
-                      className="bg-base border border-line-strong rounded-lg px-2.5 py-1.5 text-[11px] text-main font-medium outline-none focus:border-primary w-full"
-                    />
-                  </div>
-                </div>
-              </div>
+              <ImageUploadInput
+                label="Dish Image *"
+                imageType="food"
+                value={itemImage}
+                file={itemImageFile}
+                onFileChange={setItemImageFile}
+                onUrlChange={setItemImage}
+                required
+              />
 
               <div className="flex flex-col gap-2 mt-1">
                 <div className="flex items-center gap-2">

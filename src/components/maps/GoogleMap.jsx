@@ -129,7 +129,7 @@ export default function GoogleMap({
           setMarkerPos(DEFAULT_CENTER);
           setGeoLocating(false);
         },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     }
     // Only run when prop coords change
