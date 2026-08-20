@@ -264,3 +264,68 @@ export const uploadPublicFileToBackend = async (file) => {
     throw error;
   }
 };
+
+/**
+ * Imports a remote image URL into Jinkzo storage via backend proxy.
+ * Resolves external hotlinking issues and SSRF safely.
+ *
+ * @param {string} url - The remote image URL (http/https)
+ * @returns {Promise<{ imageUrl: string, contentType?: string, size?: number }>}
+ */
+export const importImageFromUrl = async (url) => {
+  if (!url || typeof url !== 'string' || !url.trim()) {
+    throw new Error('Please enter a valid image URL.');
+  }
+
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    throw new Error('Image URL must start with http:// or https://');
+  }
+
+  const authState = useAuthStore.getState();
+  const token = authState.token;
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000); // 20-second timeout
+
+  try {
+    const res = await fetch(`${API_BASE}/upload/from-url`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ url: trimmed }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || `Image import failed with status ${res.status}`);
+    }
+
+    const data = await res.json();
+    const finalUrl = data.imageUrl || data.url;
+    if (!finalUrl) {
+      throw new Error('Image import succeeded but no storage URL was returned.');
+    }
+
+    return {
+      imageUrl: finalUrl,
+      url: finalUrl,
+      contentType: data.contentType,
+      size: data.size
+    };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Image import timed out. The remote website took too long to respond.');
+    }
+    console.error('[IMPORT FROM URL] Error:', error.message);
+    throw error;
+  }
+};
+

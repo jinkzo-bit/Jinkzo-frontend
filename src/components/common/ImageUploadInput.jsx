@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, Link as LinkIcon, Image as ImageIcon, X, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
-import { getImageUrl, handleImageError } from '../../utils/uploadUtil';
+import { Upload, Link as LinkIcon, Image as ImageIcon, X, AlertCircle, CheckCircle2, Loader2, ArrowDownToLine } from 'lucide-react';
+import { getImageUrl, handleImageError, importImageFromUrl } from '../../utils/uploadUtil';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
@@ -45,23 +45,17 @@ export default function ImageUploadInput({
   previewShape = 'square',
   helperText = '',
 }) {
-  // Determine initial mode based on whether value exists as external URL or empty
-  const [sourceType, setSourceType] = useState(file ? 'file' : (value && (value.startsWith('http://') || value.startsWith('https://')) ? 'url' : 'file'));
-  const [urlInput, setUrlInput] = useState(value && (value.startsWith('http://') || value.startsWith('https://')) ? value : '');
+  const [sourceType, setSourceType] = useState('file');
+  const [urlInput, setUrlInput] = useState('');
   const [fileError, setFileError] = useState('');
   const [urlError, setUrlError] = useState('');
   const [blobPreview, setBlobPreview] = useState(null);
-  const [urlImageLoadError, setUrlImageLoadError] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importSuccess, setImportSuccess] = useState(false);
+  const [importMetadata, setImportMetadata] = useState(null);
 
   const fileInputRef = useRef(null);
-
-  // Sync external value when changed
-  useEffect(() => {
-    if (value && (value.startsWith('http://') || value.startsWith('https://'))) {
-      setUrlInput(value);
-    }
-  }, [value]);
 
   // Manage blob preview lifecycle
   useEffect(() => {
@@ -147,50 +141,55 @@ export default function ImageUploadInput({
     }
   };
 
-  // ── URL Input & Validation ────────────────────────────────────────────────
-  const validateAndSetUrl = (urlStr) => {
-    const trimmed = (urlStr || '').trim();
-    setUrlInput(trimmed);
-    setUrlImageLoadError(false);
+  // ── URL Import Handling ───────────────────────────────────────────────────
+  const handleImportUrl = async (urlToImport) => {
+    const targetUrl = (urlToImport || urlInput || '').trim();
+    setUrlError('');
+    setImportSuccess(false);
+    setImportMetadata(null);
 
-    if (!trimmed) {
-      setUrlError('');
-      onUrlChange?.('');
+    if (!targetUrl) {
+      setUrlError('Please enter an image URL.');
       return;
     }
 
-    // Validate protocol
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      setUrlError('URL must start with http:// or https://');
-      onUrlChange?.('');
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      setUrlError('Image URL must start with http:// or https://');
       return;
     }
 
+    setIsImporting(true);
     try {
-      new URL(trimmed);
-      setUrlError('');
-      onUrlChange?.(trimmed);
-    } catch {
-      setUrlError('Please enter a valid URL.');
-      onUrlChange?.('');
+      const res = await importImageFromUrl(targetUrl);
+      if (res && res.imageUrl) {
+        onUrlChange?.(res.imageUrl);
+        setImportSuccess(true);
+        setImportMetadata({
+          contentType: res.contentType,
+          size: res.size
+        });
+        setUrlError('');
+      }
+    } catch (err) {
+      setUrlError(err.message || 'Unable to import image. Please check the URL.');
+      setImportSuccess(false);
+    } finally {
+      setIsImporting(false);
     }
-  };
-
-  const handleUrlChange = (e) => {
-    validateAndSetUrl(e.target.value);
   };
 
   const handleClearUrl = () => {
     setUrlInput('');
     setUrlError('');
-    setUrlImageLoadError(false);
+    setImportSuccess(false);
+    setImportMetadata(null);
     onUrlChange?.('');
   };
 
   // Determine current active preview
   const hasSelectedFile = Boolean(file && blobPreview);
-  const hasValidUrl = Boolean(sourceType === 'url' && urlInput && !urlError);
-  const hasExistingImage = Boolean(value && !hasSelectedFile && (sourceType === 'file' || !urlInput));
+  const hasImportedImage = Boolean(importSuccess && value);
+  const hasExistingImage = Boolean(value && !hasSelectedFile);
 
   let previewSrc = null;
   let previewBadge = null;
@@ -204,9 +203,9 @@ export default function ImageUploadInput({
       previewBadge = 'Current Image';
     }
   } else {
-    if (hasValidUrl) {
-      previewSrc = urlInput;
-      previewBadge = 'Remote URL';
+    if (hasImportedImage) {
+      previewSrc = getImageUrl(value, imageType);
+      previewBadge = 'Imported';
     } else if (hasExistingImage) {
       previewSrc = getImageUrl(value, imageType);
       previewBadge = 'Current Image';
@@ -262,12 +261,7 @@ export default function ImageUploadInput({
               src={previewSrc}
               alt="Preview"
               className="w-full h-full object-cover"
-              onError={(e) => {
-                if (sourceType === 'url') {
-                  setUrlImageLoadError(true);
-                }
-                handleImageError(e, imageType);
-              }}
+              onError={(e) => handleImageError(e, imageType)}
             />
           ) : (
             <div className="flex flex-col items-center justify-center text-muted/40 p-1">
@@ -341,36 +335,84 @@ export default function ImageUploadInput({
               </div>
             </div>
           ) : (
-            /* ── METHOD B: USE IMAGE URL ──────────────────────────────── */
+            /* ── METHOD B: USE IMAGE URL (SERVER-SIDE IMPORT) ─────────── */
             <div className="flex flex-col gap-1.5">
-              <div className="relative flex items-center">
-                <input
-                  type="text"
-                  placeholder="Paste image URL (https://...)"
-                  value={urlInput}
-                  onChange={handleUrlChange}
-                  className={`w-full bg-base border ${
-                    urlError ? 'border-red-500/70 focus:border-red-500' : 'border-line-strong focus:border-primary'
-                  } rounded-xl pl-3 pr-8 py-2 text-xs text-main font-medium outline-none transition-colors placeholder:text-muted/60`}
-                />
-                {urlInput ? (
-                  <button
-                    type="button"
-                    onClick={handleClearUrl}
-                    title="Clear URL"
-                    className="absolute right-2.5 p-1 text-muted hover:text-main rounded-md transition-colors cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                ) : null}
+              <div className="flex items-center gap-1.5">
+                <div className="relative flex-1 flex items-center">
+                  <input
+                    type="text"
+                    placeholder="Paste image URL (https://...)"
+                    value={urlInput}
+                    onChange={(e) => {
+                      setUrlInput(e.target.value);
+                      setUrlError('');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleImportUrl();
+                      }
+                    }}
+                    disabled={isImporting}
+                    className={`w-full bg-base border ${
+                      urlError ? 'border-red-500/70 focus:border-red-500' : 'border-line-strong focus:border-primary'
+                    } rounded-xl pl-3 pr-8 py-2 text-xs text-main font-medium outline-none transition-colors placeholder:text-muted/60 disabled:opacity-50`}
+                  />
+                  {urlInput && !isImporting ? (
+                    <button
+                      type="button"
+                      onClick={handleClearUrl}
+                      title="Clear URL"
+                      className="absolute right-2 p-1 text-muted hover:text-main rounded-md transition-colors cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleImportUrl()}
+                  disabled={isImporting || !urlInput.trim()}
+                  className="flex items-center gap-1 bg-primary hover:bg-primary-hover disabled:opacity-40 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:cursor-not-allowed flex-shrink-0"
+                >
+                  {isImporting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Importing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDownToLine className="w-3.5 h-3.5" />
+                      <span>Import</span>
+                    </>
+                  )}
+                </button>
               </div>
 
-              {urlImageLoadError && urlInput && !urlError && (
-                <span className="text-[10px] text-amber-500 font-medium flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                  Preview not loading (remote server may block direct access). You can still save it or upload a file.
+              {/* Status & Feedback */}
+              {isImporting && (
+                <span className="text-[11px] text-primary font-medium flex items-center gap-1 animate-pulse px-0.5">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Downloading and importing to Jinkzo storage...
                 </span>
               )}
+
+              {importSuccess && !urlError && (
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-500 font-bold px-0.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>Image imported successfully</span>
+                  {importMetadata?.size ? (
+                    <span className="text-[10px] text-muted font-normal">
+                      ({formatFileSize(importMetadata.size)})
+                    </span>
+                  ) : null}
+                </div>
+              )}
+
+              <span className="text-[10px] text-muted/80 px-0.5">
+                Tip: From Google Images, right-click the image and choose "Copy image address", then paste it here and click Import.
+              </span>
             </div>
           )}
 
@@ -398,3 +440,4 @@ export default function ImageUploadInput({
     </div>
   );
 }
+
