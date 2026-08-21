@@ -10,6 +10,10 @@ import {
   Minus,
   ChevronRight,
   X,
+  Store,
+  List,
+  Tag,
+  Shield,
 } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useTranslation } from '../store/languageStore';
@@ -34,7 +38,13 @@ export default function BottomNav() {
 
   const isCartEmpty = totalQuantity === 0;
 
-  // Active check
+  // Check if current page is the Restaurant Partner context
+  const isRestaurantPartner =
+    location.pathname.startsWith('/restaurant-dashboard') ||
+    location.pathname.startsWith('/my-restaurant') ||
+    location.pathname.startsWith('/restaurant-partner');
+
+  // Active check for customer routes
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
@@ -59,15 +69,56 @@ export default function BottomNav() {
   // Handle Cart Button Click
   const handleCartClick = (e) => {
     if (isCartEmpty) {
-      // Normal navigation if empty
       setShowCartPopup(false);
       navigate('/cart');
     } else {
-      // Highlighted state: toggle preview popup above the bar
       e.preventDefault();
       setShowCartPopup((prev) => !prev);
     }
   };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  RESTAURANT PARTNER NAVIGATION (ONLY SHOWN INSIDE RESTAURANT PARTNER PAGE)
+  // ══════════════════════════════════════════════════════════════════════════
+  if (isRestaurantPartner) {
+    const searchParams = new URLSearchParams(location.search);
+    const currentTab = searchParams.get('tab') || 'orders';
+
+    const partnerTabs = [
+      { id: 'orders', label: 'Order Pipeline', icon: ShoppingBag },
+      { id: 'menu', label: 'Menu & Food Items', icon: List },
+      { id: 'offers', label: 'Discounts & Offers', icon: Tag },
+      { id: 'profile', label: 'Kitchen Profile', icon: Store },
+      { id: 'kyc', label: 'KYC Document Verification', icon: Shield },
+    ];
+
+    return (
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0E121C]/95 backdrop-blur-md border-t border-gray-200/80 dark:border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_25px_rgba(0,0,0,0.5)] px-2 sm:px-6 py-2 transition-colors duration-300">
+        <div className="max-w-md mx-auto flex items-center justify-between relative">
+          {partnerTabs.map((tab) => {
+            const Icon = tab.icon;
+            const active = currentTab === tab.id;
+            return (
+              <Link
+                key={tab.id}
+                to={`/restaurant-dashboard?tab=${tab.id}`}
+                className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all duration-200 ${
+                  active
+                    ? 'text-[#7C3AED] dark:text-[#A78BFA] font-bold'
+                    : 'text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200'
+                }`}
+              >
+                <Icon className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
+                <span className="text-[9px] sm:text-[10px] font-medium leading-tight text-center truncate max-w-[65px] sm:max-w-none">
+                  {tab.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <>

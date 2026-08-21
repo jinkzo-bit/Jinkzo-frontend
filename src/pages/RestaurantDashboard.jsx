@@ -1,8 +1,8 @@
 import { API_BASE } from '../config/api';
 import { io } from 'socket.io-client';
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus, Pencil, AlertTriangle } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus, Pencil, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
@@ -107,7 +107,20 @@ export default function RestaurantDashboard() {
     finally { setIsDeletingAccount(false); }
   };
 
-  const [activeSubTab, setActiveSubTab] = useState('orders'); // 'orders', 'menu', 'offers', 'profile', 'kyc'
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
+  const [activeSubTab, setActiveSubTabState] = useState(tabFromUrl || 'orders');
+
+  useEffect(() => {
+    if (tabFromUrl && ['orders', 'menu', 'offers', 'profile', 'kyc'].includes(tabFromUrl)) {
+      setActiveSubTabState(tabFromUrl);
+    }
+  }, [tabFromUrl]);
+
+  const setActiveSubTab = (tab) => {
+    setActiveSubTabState(tab);
+    setSearchParams({ tab }, { replace: true });
+  };
   
   // Dashboard Metrics
   const [metrics, setMetrics] = useState(null);
@@ -770,10 +783,20 @@ export default function RestaurantDashboard() {
       {/* Upper header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-5">
         <div className="flex items-center gap-3">
+          {/* Back button returning to Restaurants Home / Listing */}
+          <button
+            type="button"
+            onClick={() => navigate('/restaurants')}
+            title="Back to Restaurants Home"
+            className="w-11 h-11 rounded-2xl border border-line bg-surface hover:bg-base text-main transition-colors flex items-center justify-center cursor-pointer shadow-3xs flex-shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5 text-main" />
+          </button>
+
           {restaurantProfile?.image ? (
-            <img src={getImageUrl(restaurantProfile.image, 'restaurant')} alt="Restaurant Cover" onError={(e) => handleImageError(e, 'restaurant')} className="w-14 h-14 rounded-2xl object-cover shadow-sm border border-line" />
+            <img src={getImageUrl(restaurantProfile.image, 'restaurant')} alt="Restaurant Cover" onError={(e) => handleImageError(e, 'restaurant')} className="w-14 h-14 rounded-2xl object-cover shadow-sm border border-line flex-shrink-0" />
           ) : (
-            <div className="p-2.5 bg-primary/10 text-primary rounded-2xl">
+            <div className="p-2.5 bg-primary/10 text-primary rounded-2xl flex-shrink-0">
               <Store className="w-8 h-8" />
             </div>
           )}
@@ -898,8 +921,8 @@ export default function RestaurantDashboard() {
       {/* Main Tab Controls */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
         
-        {/* Left Column: Horizontal tabs selector on mobile, vertical on desktop */}
-        <div className="lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex flex-row overflow-x-auto lg:flex-col gap-1.5 scrollbar-none">
+        {/* Left Column: Vertical sidebar navigation on desktop (mobile uses fixed bottom navigation bar) */}
+        <div className="hidden lg:flex lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex-col gap-1.5">
           {[
             { id: 'orders', label: 'Order Pipeline', icon: ShoppingBag, badge: orders.filter(o => !['Delivered', 'Completed', 'Cancelled'].includes(o.status)).length },
             { id: 'menu', label: 'Menu & Food Items', icon: List, badge: menuItems.length },
