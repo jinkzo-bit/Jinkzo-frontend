@@ -1,13 +1,13 @@
 import { API_BASE } from '../config/api';
 import { io } from 'socket.io-client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShieldAlert, DollarSign, ShoppingBag, Users, Store, Bike, CheckCircle, Check,
   XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare,
   AlertCircle, ChevronLeft, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2,
   Pencil, Plus, UserCircle, Activity, FileText, Star, TrendingUp, Search, Menu, Filter, Info, Shield, RefreshCw,
-  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical, Save
+  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical, Save, Sparkles, Utensils
 } from 'lucide-react';
 import InteractiveMap from '../components/InteractiveMap';
 import { useAuthStore } from '../store/authStore';
@@ -22,6 +22,112 @@ import {
   HistoryEmptyState
 } from '../components/history';
 
+const defaultPlatformSettings = {
+  allSectionsMaxItems: 10,
+  sectionChangeFee: 15,
+  foodBaseItemLimit: 4,
+  foodExtraItemLimit: 3,
+  foodExtraItemCharge: 10,
+  foodMaxHotels: 3,
+  foodHotelChangeFee: 15,
+  groceryMaxItems: 10,
+  vegetableFruitMaxItems: 5,
+  vegetableFruitMaxWeightKg: 5,
+  meatMaxItems: 5,
+  meatMaxWeightKg: 5,
+  hotCoolMaxItems: 5,
+  commissionPercent: 15,
+  deliveryBaseFee: 40,
+  platformFee: 5,
+  taxPercent: 5,
+  isOpen: true,
+  globalServiceRadiusKm: 5,
+  riderAssignmentMode: 'manual',
+  foodDeliveryPricing: {
+    tier1: { maxDistanceKm: 2, fee: 20 },
+    tier2: { maxDistanceKm: 3.5, fee: 25 },
+    tier3: { maxDistanceKm: 6, fee: 40 },
+    tier4: { maxDistanceKm: 12, fee: 80 },
+    tier5: { maxDistanceKm: 20, fee: 120 }
+  },
+  rideBikePricing: {
+    tier1: { maxDistanceKm: 2, fee: 20 },
+    tier2: { maxDistanceKm: 3.5, fee: 25 },
+    tier3: { maxDistanceKm: 6, fee: 40 },
+    tier4: { maxDistanceKm: 12, fee: 80 },
+    tier5: { maxDistanceKm: 20, fee: 120 }
+  },
+  rideAutoPricing: {
+    tier1: { maxDistanceKm: 2, fee: 30 },
+    tier2: { maxDistanceKm: 3.5, fee: 40 },
+    tier3: { maxDistanceKm: 6, fee: 70 },
+    tier4: { maxDistanceKm: 12, fee: 120 },
+    tier5: { maxDistanceKm: 20, fee: 200 },
+    tier6: { maxDistanceKm: 40, fee: 400 }
+  },
+  rideServices: {
+    bikeEnabled: true,
+    autoEnabled: true,
+    parcelEnabled: true
+  },
+  sameAddressMultiOrder: {
+    enabled: true,
+    maxOrders: 3,
+    eligibleTiers: ["tier4", "tier5"]
+  },
+  surcharges: {
+    rain: { enabled: false, fee: 10 },
+    lateNight: { enabled: false, fee: 20 },
+    festival: { enabled: false, fee: 15 }
+  },
+  serviceTypeLimits: {
+    food:       { enabled: true, maxItemsPerOrder: 20, minOrderAmount: 0,   deliveryFeeMultiplier: 1.0 },
+    grocery:    { enabled: true, maxItemsPerOrder: 10, minOrderAmount: 99,  deliveryFeeMultiplier: 1.0 },
+    vegetables: { enabled: true, maxItemsPerOrder: 5,  minOrderAmount: 49,  deliveryFeeMultiplier: 1.0, maxWeightKg: 5 },
+    meat:       { enabled: true, maxItemsPerOrder: 5,  minOrderAmount: 149, deliveryFeeMultiplier: 1.2, maxWeightKg: 5 },
+    cool_hot:   { enabled: true, maxItemsPerOrder: 5,  minOrderAmount: 49,  deliveryFeeMultiplier: 1.1 }
+  }
+};
+
+const normalizeSettings = (incoming) => {
+  if (!incoming) return { ...defaultPlatformSettings };
+  return {
+    ...defaultPlatformSettings,
+    ...incoming,
+    foodDeliveryPricing: {
+      ...defaultPlatformSettings.foodDeliveryPricing,
+      ...(incoming.foodDeliveryPricing || {})
+    },
+    rideBikePricing: {
+      ...defaultPlatformSettings.rideBikePricing,
+      ...(incoming.rideBikePricing || {})
+    },
+    rideAutoPricing: {
+      ...defaultPlatformSettings.rideAutoPricing,
+      ...(incoming.rideAutoPricing || {})
+    },
+    rideServices: {
+      ...defaultPlatformSettings.rideServices,
+      ...(incoming.rideServices || {})
+    },
+    sameAddressMultiOrder: {
+      ...defaultPlatformSettings.sameAddressMultiOrder,
+      ...(incoming.sameAddressMultiOrder || {})
+    },
+    surcharges: {
+      ...defaultPlatformSettings.surcharges,
+      ...(incoming.surcharges || {})
+    },
+    serviceTypeLimits: {
+      food:       { ...defaultPlatformSettings.serviceTypeLimits.food,       ...(incoming.serviceTypeLimits?.food || {}) },
+      grocery:    { ...defaultPlatformSettings.serviceTypeLimits.grocery,    ...(incoming.serviceTypeLimits?.grocery || {}) },
+      vegetables: { ...defaultPlatformSettings.serviceTypeLimits.vegetables, ...(incoming.serviceTypeLimits?.vegetables || {}) },
+      meat:       { ...defaultPlatformSettings.serviceTypeLimits.meat,       ...(incoming.serviceTypeLimits?.meat || {}) },
+      cool_hot:   { ...defaultPlatformSettings.serviceTypeLimits.cool_hot,   ...(incoming.serviceTypeLimits?.cool_hot || {}) }
+    }
+  };
+};
+
 export default function AdminDashboard() {
   const { user, token } = useAuthStore();
   const navigate = useNavigate();
@@ -30,13 +136,9 @@ export default function AdminDashboard() {
 
   // States
   const [metrics, setMetrics] = useState(null);
-  const [platformSettings, setPlatformSettings] = useState({
-    commissionPercent: 15,
-    deliveryBaseFee: 40,
-    taxPercent: 5,
-    isOpen: true,
-    globalServiceRadiusKm: 5
-  });
+  const [platformSettings, setPlatformSettings] = useState(defaultPlatformSettings);
+  const [settingsForm, setSettingsForm] = useState(defaultPlatformSettings);
+  const settingsInitializedRef = useRef(false);
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(true);
   const [restaurantsList, setRestaurantsList] = useState([]);
 
@@ -640,7 +742,12 @@ export default function AdminDashboard() {
       if (res.ok) {
         const data = await res.json();
         setMetrics(data.metrics);
-        setPlatformSettings(data.settings);
+        const normalized = normalizeSettings(data.settings);
+        setPlatformSettings(normalized);
+        if (!settingsInitializedRef.current && data.settings) {
+          settingsInitializedRef.current = true;
+          setSettingsForm(normalized);
+        }
       }
     } catch (err) {
       console.error('Error fetching analytics:', err);
@@ -926,9 +1033,12 @@ export default function AdminDashboard() {
   };
 
   // Save platform settings parameters
-  const handleSaveSettings = async (e) => {
+  const handleSaveSettings = async (e, customData = null) => {
     if (e && e.preventDefault) e.preventDefault();
-    const radius = parseFloat(platformSettings?.globalServiceRadiusKm);
+    const dataToSave = customData || settingsForm;
+    if (!dataToSave) return;
+
+    const radius = parseFloat(dataToSave.globalServiceRadiusKm);
     if (!Number.isFinite(radius) || radius < 0.1 || radius > 500) {
       alert('Please enter a valid Service Radius between 0.1 KM and 500 KM.');
       return;
@@ -941,14 +1051,16 @@ export default function AdminDashboard() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(platformSettings)
+        body: JSON.stringify(dataToSave)
       });
       if (res.ok) {
         const updated = await res.json();
-        setPlatformSettings(updated);
-        alert('Platform settings parameters updated successfully!');
+        const normalized = normalizeSettings(updated);
+        setPlatformSettings(normalized);
+        setSettingsForm(normalized);
+        alert('Platform settings updated successfully!');
       } else {
-        const errData = await res.json();
+        const errData = await res.json().catch(() => ({}));
         alert(errData.message || 'Failed to update settings');
       }
     } catch (err) {
@@ -2491,25 +2603,419 @@ export default function AdminDashboard() {
               {/* Top Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
                 <div>
-                  <h3 className="font-display font-extrabold text-xl text-main">Operational Parameters</h3>
-                  <p className="text-xs text-muted font-medium mt-0.5">Configure platform operational settings and pricing parameters</p>
+                  <h3 className="font-display font-extrabold text-xl text-main">Operational Parameters & Pricing Settings</h3>
+                  <p className="text-xs text-muted font-medium mt-0.5">Configure global item limits, section change fees, food pricing, and service parameters</p>
                 </div>
                 <button
                   type="button"
-                  onClick={handleSaveSettings}
+                  onClick={(e) => handleSaveSettings(e)}
                   disabled={isSettingsSaving}
                   className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-5 py-2.5 rounded-xl cursor-pointer shadow-md transition-all flex items-center justify-center gap-2 self-start sm:self-auto disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
-                  {isSettingsSaving ? 'Saving...' : 'Save Changes'}
+                  {isSettingsSaving ? 'Saving...' : 'Save All Changes'}
                 </button>
               </div>
 
               {/* Main 2-Column Grid */}
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
                 {/* Left Column: Settings Cards */}
-                <form onSubmit={handleSaveSettings} className="xl:col-span-2 flex flex-col gap-6">
-                  {/* CARD 1: SERVICE RADIUS SETTINGS */}
+                <form onSubmit={(e) => handleSaveSettings(e)} className="xl:col-span-2 flex flex-col gap-6">
+
+                  {/* 1. GLOBAL ORDER LIMIT */}
+                  <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-4">
+                    <div className="flex items-center justify-between border-b border-line pb-3">
+                      <div>
+                        <h4 className="font-display font-extrabold text-base text-primary flex items-center gap-2">
+                          <Sparkles className="w-5 h-5 text-primary" />
+                          GLOBAL ORDER LIMIT
+                        </h4>
+                        <p className="text-xs text-muted font-medium mt-0.5">
+                          Maximum total items allowed across all combined sections
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleSaveSettings(e)}
+                        disabled={isSettingsSaving}
+                        className="bg-primary/10 hover:bg-primary text-primary hover:text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Save className="w-3.5 h-3.5" /> Save
+                      </button>
+                    </div>
+
+                    <div className="border border-dashed border-primary/30 dark:border-primary/40 bg-purple-50/40 dark:bg-purple-950/20 p-5 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-5 items-center">
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider">
+                          ALL SECTIONS MAX ITEMS / ORDER
+                        </label>
+                        <div className="relative mt-1.5 flex items-center">
+                          <input
+                            type="number"
+                            min="1"
+                            max="999"
+                            required
+                            value={settingsForm?.allSectionsMaxItems ?? 10}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSettingsForm({ ...settingsForm, allSectionsMaxItems: val === '' ? '' : parseInt(val) || 1 });
+                            }}
+                            className="bg-surface border border-line-strong rounded-xl px-4 py-3 text-sm text-main font-bold outline-none w-full pr-16 focus:border-primary focus:ring-1 focus:ring-primary shadow-xs"
+                          />
+                          <span className="absolute right-3.5 text-xs font-bold text-muted uppercase pointer-events-none">items</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-purple-100/60 dark:bg-purple-900/30 border border-primary/20 rounded-2xl p-4 flex items-start gap-3">
+                        <div className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <Info className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <h5 className="text-xs font-black text-main">Helper Rule</h5>
+                          <p className="text-[11px] text-muted leading-relaxed mt-0.5">
+                            Maximum total items allowed according to the combined-section rule. This setting is independent from individual section limits.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. SECTION CHANGE PRICING */}
+                  <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-4">
+                    <div className="flex items-center justify-between border-b border-line pb-3">
+                      <div>
+                        <h4 className="font-display font-extrabold text-base text-primary flex items-center gap-2">
+                          <DollarSign className="w-5 h-5 text-primary" />
+                          SECTION CHANGE PRICING
+                        </h4>
+                        <p className="text-xs text-muted font-medium mt-0.5">
+                          When customer changes from one section to another
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleSaveSettings(e)}
+                        disabled={isSettingsSaving}
+                        className="bg-primary/10 hover:bg-primary text-primary hover:text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Save className="w-3.5 h-3.5" /> Save
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Section Change Fee</label>
+                        <div className="relative flex items-center">
+                          <span className="absolute left-3.5 text-xs font-bold text-muted pointer-events-none">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            required
+                            value={settingsForm?.sectionChangeFee ?? 15}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSettingsForm({ ...settingsForm, sectionChangeFee: val === '' ? '' : parseFloat(val) || 0 });
+                            }}
+                            className="bg-base border border-line-strong rounded-xl pl-8 pr-4 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary"
+                          />
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-muted leading-relaxed bg-base p-3 rounded-xl border border-line">
+                        Charged when a customer shifts or adds items across distinct marketplace sections.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. FOOD PRICING */}
+                  <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-5">
+                    <div className="flex items-center justify-between border-b border-line pb-3">
+                      <div>
+                        <h4 className="font-display font-extrabold text-base text-primary flex items-center gap-2">
+                          <Utensils className="w-5 h-5 text-primary" />
+                          FOOD PRICING
+                        </h4>
+                        <p className="text-xs text-muted font-medium mt-0.5">
+                          Base items, extra items, hotel selection cap and food hotel change fee
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleSaveSettings(e)}
+                        disabled={isSettingsSaving}
+                        className="bg-primary/10 hover:bg-primary text-primary hover:text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Save className="w-3.5 h-3.5" /> Save
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                      {/* Food Base Item Limit */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Food Base Item Limit</label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="1"
+                            value={settingsForm?.foodBaseItemLimit ?? 4}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSettingsForm({ ...settingsForm, foodBaseItemLimit: val === '' ? '' : parseInt(val) || 1 });
+                            }}
+                            className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full pr-12 focus:border-primary"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">items</span>
+                        </div>
+                        <span className="text-[9px] text-muted px-1">Default: 4</span>
+                      </div>
+
+                      {/* Food Extra Item Limit */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Food Extra Item Limit</label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            value={settingsForm?.foodExtraItemLimit ?? 3}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSettingsForm({ ...settingsForm, foodExtraItemLimit: val === '' ? '' : parseInt(val) || 0 });
+                            }}
+                            className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full pr-12 focus:border-primary"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">items</span>
+                        </div>
+                        <span className="text-[9px] text-muted px-1">Max Food Items = {(settingsForm?.foodBaseItemLimit || 4) + (settingsForm?.foodExtraItemLimit || 3)}</span>
+                      </div>
+
+                      {/* Food Extra Item Charge */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Food Extra Item Charge</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted pointer-events-none">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={settingsForm?.foodExtraItemCharge ?? 10}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSettingsForm({ ...settingsForm, foodExtraItemCharge: val === '' ? '' : parseFloat(val) || 0 });
+                            }}
+                            className="bg-base border border-line-strong rounded-xl pl-7 pr-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary"
+                          />
+                        </div>
+                        <span className="text-[9px] text-muted px-1">Charge per item beyond base limit</span>
+                      </div>
+
+                      {/* Maximum Food Hotel Selection */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Maximum Food Hotel Selection</label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="1"
+                            max="10"
+                            value={settingsForm?.foodMaxHotels ?? 3}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSettingsForm({ ...settingsForm, foodMaxHotels: val === '' ? '' : parseInt(val) || 1 });
+                            }}
+                            className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full pr-14 focus:border-primary"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">hotels</span>
+                        </div>
+                        <span className="text-[9px] text-muted px-1">Max unique restaurants per order (Default: 3)</span>
+                      </div>
+
+                      {/* Food Hotel Change Fee */}
+                      <div className="flex flex-col gap-1 sm:col-span-2">
+                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Food Section - Hotel Change Fee</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted pointer-events-none">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={settingsForm?.foodHotelChangeFee ?? 15}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSettingsForm({ ...settingsForm, foodHotelChangeFee: val === '' ? '' : parseFloat(val) || 0 });
+                            }}
+                            className="bg-base border border-line-strong rounded-xl pl-7 pr-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary"
+                          />
+                        </div>
+                        <span className="text-[9px] text-muted px-1">Extra fee for selecting another hotel for food (Default: ₹15)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. SECTION SETTINGS (Advanced Service Type Limits) */}
+                  <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-display font-extrabold text-base text-primary flex items-center gap-2">
+                          <SlidersHorizontal className="w-5 h-5 text-primary" />
+                          SECTION SETTINGS — Service Type Limits
+                        </h4>
+                        <p className="text-xs text-muted font-medium mt-1 leading-relaxed">
+                          Configure independent per-section ordering limits, minimum amounts, maximum weights, and delivery fee adjustments.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleSaveSettings(e)}
+                        disabled={isSettingsSaving}
+                        className="bg-primary/10 hover:bg-primary text-primary hover:text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Save className="w-3.5 h-3.5" /> Save
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                      {[
+                        { key: 'food',       label: '🍔 Food',               color: 'bg-orange-500', defaults: { maxItemsPerOrder: 20, minOrderAmount: 0,   deliveryFeeMultiplier: 1.0 }, hasWeight: false },
+                        { key: 'grocery',    label: '🛒 Grocery',            color: 'bg-blue-500',   defaults: { maxItemsPerOrder: 10, minOrderAmount: 99,  deliveryFeeMultiplier: 1.0 }, hasWeight: false },
+                        { key: 'vegetables', label: '🥦 Vegetables & Fruits', color: 'bg-green-500',  defaults: { maxItemsPerOrder: 5,  minOrderAmount: 49,  deliveryFeeMultiplier: 1.0, maxWeightKg: 5 }, hasWeight: true },
+                        { key: 'meat',       label: '🥩 Meat',               color: 'bg-red-500',    defaults: { maxItemsPerOrder: 5,  minOrderAmount: 149, deliveryFeeMultiplier: 1.2, maxWeightKg: 5 }, hasWeight: true },
+                        { key: 'cool_hot',   label: '🧊 Hot & Cool',         color: 'bg-cyan-500',   defaults: { maxItemsPerOrder: 5,  minOrderAmount: 49,  deliveryFeeMultiplier: 1.1 }, hasWeight: false },
+                      ].map(({ key, label, color, defaults, hasWeight }) => {
+                        const cur = settingsForm?.serviceTypeLimits?.[key] || { enabled: true, ...defaults };
+                        const update = (patch) => {
+                          const updatedLimits = {
+                            ...settingsForm.serviceTypeLimits,
+                            [key]: { ...cur, ...patch }
+                          };
+                          // Also sync top-level section limits if matching key
+                          const topSync = {};
+                          if (key === 'grocery' && patch.maxItemsPerOrder !== undefined) topSync.groceryMaxItems = patch.maxItemsPerOrder;
+                          if (key === 'vegetables' && patch.maxItemsPerOrder !== undefined) topSync.vegetableFruitMaxItems = patch.maxItemsPerOrder;
+                          if (key === 'vegetables' && patch.maxWeightKg !== undefined) topSync.vegetableFruitMaxWeightKg = patch.maxWeightKg;
+                          if (key === 'meat' && patch.maxItemsPerOrder !== undefined) topSync.meatMaxItems = patch.maxItemsPerOrder;
+                          if (key === 'meat' && patch.maxWeightKg !== undefined) topSync.meatMaxWeightKg = patch.maxWeightKg;
+                          if (key === 'cool_hot' && patch.maxItemsPerOrder !== undefined) topSync.hotCoolMaxItems = patch.maxItemsPerOrder;
+
+                          setSettingsForm({
+                            ...settingsForm,
+                            ...topSync,
+                            serviceTypeLimits: updatedLimits
+                          });
+                        };
+
+                        return (
+                          <div key={key} className={`border border-line rounded-2xl overflow-hidden transition-all ${cur.enabled ? 'opacity-100' : 'opacity-50'}`}>
+                            {/* Row Header */}
+                            <div className="flex items-center justify-between px-4 py-3 bg-base border-b border-line">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${color}`} />
+                                <span className="text-xs font-extrabold text-main uppercase tracking-wide">{label}</span>
+                              </div>
+                              <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <span className="text-[10px] font-bold text-muted uppercase">{cur.enabled ? 'Active' : 'Disabled'}</span>
+                                <div
+                                  onClick={() => update({ enabled: !cur.enabled })}
+                                  className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${cur.enabled ? 'bg-primary' : 'bg-line-strong'}`}
+                                >
+                                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-xs transition-transform ${cur.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                </div>
+                              </label>
+                            </div>
+
+                            {/* Row Fields */}
+                            <div className={`grid grid-cols-1 ${hasWeight ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-3 p-4`}>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">
+                                  Max Items / Order
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="999"
+                                    disabled={!cur.enabled}
+                                    value={cur.maxItemsPerOrder ?? defaults.maxItemsPerOrder}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      update({ maxItemsPerOrder: val === '' ? '' : parseInt(val) || 1 });
+                                    }}
+                                    className="bg-base border border-line-strong rounded-xl px-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                  />
+                                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">items</span>
+                                </div>
+                              </div>
+
+                              {hasWeight && (
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">
+                                    Max Weight (KG)
+                                  </label>
+                                  <div className="relative">
+                                    <input
+                                      type="number"
+                                      min="0.5"
+                                      step="0.5"
+                                      disabled={!cur.enabled}
+                                      value={cur.maxWeightKg ?? defaults.maxWeightKg ?? 5}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        update({ maxWeightKg: val === '' ? '' : parseFloat(val) || 1 });
+                                      }}
+                                      className="bg-base border border-line-strong rounded-xl px-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                    />
+                                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">kg</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">
+                                  Min Order Amount (₹)
+                                </label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted pointer-events-none">₹</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    disabled={!cur.enabled}
+                                    value={cur.minOrderAmount ?? defaults.minOrderAmount}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      update({ minOrderAmount: val === '' ? '' : parseInt(val) || 0 });
+                                    }}
+                                    className="bg-base border border-line-strong rounded-xl pl-7 pr-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                  />
+                                </div>
+                                <span className="text-[9px] text-muted px-1">0 = no minimum</span>
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">
+                                  Delivery Multiplier
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    min="0.1"
+                                    max="5"
+                                    step="0.05"
+                                    disabled={!cur.enabled}
+                                    value={cur.deliveryFeeMultiplier ?? defaults.deliveryFeeMultiplier}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      update({ deliveryFeeMultiplier: val === '' ? '' : parseFloat(val) || 1 });
+                                    }}
+                                    className="bg-base border border-line-strong rounded-xl px-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                  />
+                                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">×</span>
+                                </div>
+                                <span className="text-[9px] text-muted px-1">1.0 = normal</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 5. SERVICE RADIUS SETTINGS */}
                   <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-4">
                     <div>
                       <h4 className="font-display font-extrabold text-base text-primary flex items-center gap-2">
@@ -2533,10 +3039,10 @@ export default function AdminDashboard() {
                             min="0.1"
                             max="500"
                             required
-                            value={platformSettings?.globalServiceRadiusKm ?? 5}
+                            value={settingsForm?.globalServiceRadiusKm ?? 5}
                             onChange={(e) => {
                               const val = parseFloat(e.target.value);
-                              setPlatformSettings({ ...platformSettings, globalServiceRadiusKm: isNaN(val) ? '' : val });
+                              setSettingsForm({ ...settingsForm, globalServiceRadiusKm: isNaN(val) ? '' : val });
                             }}
                             className="bg-surface border border-line-strong rounded-xl px-4 py-3 text-sm text-main font-bold outline-none w-full pr-12 focus:border-primary focus:ring-1 focus:ring-primary shadow-xs"
                           />
@@ -2563,7 +3069,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* CARD 2: PRICING & COMMISSION */}
+                  {/* 6. PRICING & COMMISSION */}
                   <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-5">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="flex flex-col gap-1">
@@ -2572,9 +3078,12 @@ export default function AdminDashboard() {
                           <input
                             type="number"
                             required
-                            value={platformSettings.commissionPercent}
-                            onChange={(e) => setPlatformSettings({ ...platformSettings, commissionPercent: parseFloat(e.target.value) })}
-                            className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full"
+                            value={settingsForm?.commissionPercent ?? 15}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSettingsForm({ ...settingsForm, commissionPercent: val === '' ? '' : parseFloat(val) || 0 });
+                            }}
+                            className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary"
                           />
                         </div>
                       </div>
@@ -2586,9 +3095,12 @@ export default function AdminDashboard() {
                           required
                           min="0"
                           step="1"
-                          value={platformSettings.platformFee ?? 5}
-                          onChange={(e) => setPlatformSettings({ ...platformSettings, platformFee: parseFloat(e.target.value) || 0 })}
-                          className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full"
+                          value={settingsForm?.platformFee ?? 5}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSettingsForm({ ...settingsForm, platformFee: val === '' ? '' : parseFloat(val) || 0 });
+                          }}
+                          className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary"
                         />
                       </div>
                     </div>
@@ -2610,16 +3122,34 @@ export default function AdminDashboard() {
                               <div>
                                 <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Max (km)</label>
                                 <input type="number" step="0.1"
-                                  value={platformSettings?.foodDeliveryPricing?.[tier]?.maxDistanceKm || defaults[idx].max}
-                                  onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, [tier]: { ...platformSettings.foodDeliveryPricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
+                                  value={settingsForm?.foodDeliveryPricing?.[tier]?.maxDistanceKm ?? defaults[idx].max}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setSettingsForm({
+                                      ...settingsForm,
+                                      foodDeliveryPricing: {
+                                        ...settingsForm.foodDeliveryPricing,
+                                        [tier]: { ...settingsForm.foodDeliveryPricing?.[tier], maxDistanceKm: val }
+                                      }
+                                    });
+                                  }}
                                   className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
                                 />
                               </div>
                               <div>
                                 <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Fee (₹)</label>
                                 <input type="number"
-                                  value={platformSettings?.foodDeliveryPricing?.[tier]?.fee || defaults[idx].fee}
-                                  onChange={(e) => setPlatformSettings({ ...platformSettings, foodDeliveryPricing: { ...platformSettings.foodDeliveryPricing, [tier]: { ...platformSettings.foodDeliveryPricing?.[tier], fee: parseFloat(e.target.value) } } })}
+                                  value={settingsForm?.foodDeliveryPricing?.[tier]?.fee ?? defaults[idx].fee}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setSettingsForm({
+                                      ...settingsForm,
+                                      foodDeliveryPricing: {
+                                        ...settingsForm.foodDeliveryPricing,
+                                        [tier]: { ...settingsForm.foodDeliveryPricing?.[tier], fee: val }
+                                      }
+                                    });
+                                  }}
                                   className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
                                 />
                               </div>
@@ -2646,16 +3176,34 @@ export default function AdminDashboard() {
                               <div>
                                 <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Max (km)</label>
                                 <input type="number" step="0.1"
-                                  value={platformSettings?.rideBikePricing?.[tier]?.maxDistanceKm || defaults[idx].max}
-                                  onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
+                                  value={settingsForm?.rideBikePricing?.[tier]?.maxDistanceKm ?? defaults[idx].max}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setSettingsForm({
+                                      ...settingsForm,
+                                      rideBikePricing: {
+                                        ...settingsForm.rideBikePricing,
+                                        [tier]: { ...settingsForm.rideBikePricing?.[tier], maxDistanceKm: val }
+                                      }
+                                    });
+                                  }}
                                   className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
                                 />
                               </div>
                               <div>
                                 <label className="text-[10px] uppercase font-bold text-muted">Tier {idx+1} Fee (₹)</label>
                                 <input type="number"
-                                  value={platformSettings?.rideBikePricing?.[tier]?.fee || defaults[idx].fee}
-                                  onChange={(e) => setPlatformSettings({ ...platformSettings, rideBikePricing: { ...platformSettings.rideBikePricing, [tier]: { ...platformSettings.rideBikePricing?.[tier], fee: parseFloat(e.target.value) } } })}
+                                  value={settingsForm?.rideBikePricing?.[tier]?.fee ?? defaults[idx].fee}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setSettingsForm({
+                                      ...settingsForm,
+                                      rideBikePricing: {
+                                        ...settingsForm.rideBikePricing,
+                                        [tier]: { ...settingsForm.rideBikePricing?.[tier], fee: val }
+                                      }
+                                    });
+                                  }}
                                   className="bg-base border border-line-strong rounded-lg px-2 py-2 text-xs font-bold w-full"
                                 />
                               </div>
@@ -2683,16 +3231,34 @@ export default function AdminDashboard() {
                               <div>
                                 <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Max (km)</label>
                                 <input type="number" step="0.1"
-                                  value={platformSettings?.rideAutoPricing?.[tier]?.maxDistanceKm || defaults[idx].max}
-                                  onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], maxDistanceKm: parseFloat(e.target.value) } } })}
+                                  value={settingsForm?.rideAutoPricing?.[tier]?.maxDistanceKm ?? defaults[idx].max}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setSettingsForm({
+                                      ...settingsForm,
+                                      rideAutoPricing: {
+                                        ...settingsForm.rideAutoPricing,
+                                        [tier]: { ...settingsForm.rideAutoPricing?.[tier], maxDistanceKm: val }
+                                      }
+                                    });
+                                  }}
                                   className="bg-base border border-line-strong rounded-lg px-2 py-2 text-[10px] font-bold w-full"
                                 />
                               </div>
                               <div>
                                 <label className="text-[10px] uppercase font-bold text-muted">T{idx+1} Fee (₹)</label>
                                 <input type="number"
-                                  value={platformSettings?.rideAutoPricing?.[tier]?.fee || defaults[idx].fee}
-                                  onChange={(e) => setPlatformSettings({ ...platformSettings, rideAutoPricing: { ...platformSettings.rideAutoPricing, [tier]: { ...platformSettings.rideAutoPricing?.[tier], fee: parseFloat(e.target.value) } } })}
+                                  value={settingsForm?.rideAutoPricing?.[tier]?.fee ?? defaults[idx].fee}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setSettingsForm({
+                                      ...settingsForm,
+                                      rideAutoPricing: {
+                                        ...settingsForm.rideAutoPricing,
+                                        [tier]: { ...settingsForm.rideAutoPricing?.[tier], fee: val }
+                                      }
+                                    });
+                                  }}
                                   className="bg-base border border-line-strong rounded-lg px-2 py-2 text-[10px] font-bold w-full"
                                 />
                               </div>
@@ -2709,8 +3275,11 @@ export default function AdminDashboard() {
                         <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox"
-                              checked={platformSettings?.rideServices?.bikeEnabled ?? true}
-                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, bikeEnabled: e.target.checked } })}
+                              checked={settingsForm?.rideServices?.bikeEnabled ?? true}
+                              onChange={(e) => setSettingsForm({
+                                ...settingsForm,
+                                rideServices: { ...settingsForm.rideServices, bikeEnabled: e.target.checked }
+                              })}
                               className="w-4 h-4 text-primary"
                             />
                             <span className="text-[11px] font-bold uppercase">Bike Taxi ON</span>
@@ -2720,8 +3289,11 @@ export default function AdminDashboard() {
                         <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox"
-                              checked={platformSettings?.rideServices?.autoEnabled ?? true}
-                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, autoEnabled: e.target.checked } })}
+                              checked={settingsForm?.rideServices?.autoEnabled ?? true}
+                              onChange={(e) => setSettingsForm({
+                                ...settingsForm,
+                                rideServices: { ...settingsForm.rideServices, autoEnabled: e.target.checked }
+                              })}
                               className="w-4 h-4 text-primary"
                             />
                             <span className="text-[11px] font-bold uppercase">Auto Taxi ON</span>
@@ -2731,8 +3303,11 @@ export default function AdminDashboard() {
                         <div className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox"
-                              checked={platformSettings?.rideServices?.parcelEnabled ?? true}
-                              onChange={(e) => setPlatformSettings({ ...platformSettings, rideServices: { ...platformSettings.rideServices, parcelEnabled: e.target.checked } })}
+                              checked={settingsForm?.rideServices?.parcelEnabled ?? true}
+                              onChange={(e) => setSettingsForm({
+                                ...settingsForm,
+                                rideServices: { ...settingsForm.rideServices, parcelEnabled: e.target.checked }
+                              })}
                               className="w-4 h-4 text-primary"
                             />
                             <span className="text-[11px] font-bold uppercase">Parcel Delivery ON</span>
@@ -2742,8 +3317,11 @@ export default function AdminDashboard() {
                         <div className="flex flex-col gap-2 bg-base border border-line-strong rounded-lg p-3">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox"
-                              checked={platformSettings?.sameAddressMultiOrder?.enabled ?? true}
-                              onChange={(e) => setPlatformSettings({ ...platformSettings, sameAddressMultiOrder: { ...platformSettings.sameAddressMultiOrder, enabled: e.target.checked } })}
+                              checked={settingsForm?.sameAddressMultiOrder?.enabled ?? true}
+                              onChange={(e) => setSettingsForm({
+                                ...settingsForm,
+                                sameAddressMultiOrder: { ...settingsForm.sameAddressMultiOrder, enabled: e.target.checked }
+                              })}
                               className="w-4 h-4 text-primary"
                             />
                             <span className="text-[11px] font-bold uppercase">Multi-Order Discount ON</span>
@@ -2751,8 +3329,11 @@ export default function AdminDashboard() {
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] font-bold text-muted uppercase">Max Orders:</span>
                             <input type="number" min="1"
-                              value={platformSettings?.sameAddressMultiOrder?.maxOrders || 3}
-                              onChange={(e) => setPlatformSettings({ ...platformSettings, sameAddressMultiOrder: { ...platformSettings.sameAddressMultiOrder, maxOrders: parseInt(e.target.value) } })}
+                              value={settingsForm?.sameAddressMultiOrder?.maxOrders || 3}
+                              onChange={(e) => setSettingsForm({
+                                ...settingsForm,
+                                sameAddressMultiOrder: { ...settingsForm.sameAddressMultiOrder, maxOrders: parseInt(e.target.value) || 1 }
+                              })}
                               className="bg-white border border-line-strong rounded-md px-2 py-1 text-xs font-bold w-16 text-center"
                             />
                           </div>
@@ -2764,16 +3345,19 @@ export default function AdminDashboard() {
                     <div className="border border-line p-4 rounded-xl flex flex-col gap-3">
                       <h4 className="text-xs font-bold text-main mb-1 flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500" />Optional Surcharges</h4>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {['rain', 'lateNight', 'festival'].map((sc, idx) => {
+                        {['rain', 'lateNight', 'festival'].map((sc) => {
                           const labels = { rain: 'Rain Charge', lateNight: 'Late Night Charge', festival: 'Festival Charge' };
                           const defaultFees = { rain: 10, lateNight: 20, festival: 15 };
-                          const cur = platformSettings?.surcharges?.[sc] || { enabled: false, fee: defaultFees[sc] };
+                          const cur = settingsForm?.surcharges?.[sc] || { enabled: false, fee: defaultFees[sc] };
                           return (
                             <div key={sc} className="flex items-center gap-4 bg-base border border-line-strong rounded-lg p-3">
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox"
                                   checked={cur.enabled}
-                                  onChange={(e) => setPlatformSettings({ ...platformSettings, surcharges: { ...platformSettings.surcharges, [sc]: { ...cur, enabled: e.target.checked } } })}
+                                  onChange={(e) => setSettingsForm({
+                                    ...settingsForm,
+                                    surcharges: { ...settingsForm.surcharges, [sc]: { ...cur, enabled: e.target.checked } }
+                                  })}
                                   className="w-4 h-4 text-primary"
                                 />
                                 <span className="text-[11px] font-bold uppercase">{labels[sc]}</span>
@@ -2782,7 +3366,10 @@ export default function AdminDashboard() {
                                 <span className="text-xs font-bold">₹</span>
                                 <input type="number"
                                   value={cur.fee}
-                                  onChange={(e) => setPlatformSettings({ ...platformSettings, surcharges: { ...platformSettings.surcharges, [sc]: { ...cur, fee: parseFloat(e.target.value) } } })}
+                                  onChange={(e) => setSettingsForm({
+                                    ...settingsForm,
+                                    surcharges: { ...settingsForm.surcharges, [sc]: { ...cur, fee: parseFloat(e.target.value) || 0 } }
+                                  })}
                                   className="bg-white border border-line-strong rounded-md px-2 py-1 text-xs font-bold w-16"
                                 />
                               </div>
@@ -2791,136 +3378,17 @@ export default function AdminDashboard() {
                         })}
                       </div>
                     </div>
-
-                    {/* ── ADVANCED SECTION: SERVICE TYPE PRICING & ITEM LIMITS ── */}
                   </div>
 
-                  {/* ADVANCED SECTION CARD */}
-                  <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-display font-extrabold text-base text-primary flex items-center gap-2">
-                          <SlidersHorizontal className="w-5 h-5 text-primary" />
-                          Advanced Section — Service Type Limits
-                        </h4>
-                        <p className="text-xs text-muted font-medium mt-1 leading-relaxed">
-                          Configure per-service-type ordering limits, minimum amounts, and delivery fee adjustments for Food, Grocery, Vegetables, Meat and Hot & Cool.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-3">
-                      {[
-                        { key: 'food',       label: '🍔 Food',               color: 'bg-orange-500', defaults: { maxItemsPerOrder: 20, minOrderAmount: 0,   deliveryFeeMultiplier: 1.0 } },
-                        { key: 'grocery',    label: '🛒 Grocery',            color: 'bg-blue-500',   defaults: { maxItemsPerOrder: 50, minOrderAmount: 99,  deliveryFeeMultiplier: 1.0 } },
-                        { key: 'vegetables', label: '🥦 Vegetables & Fruits', color: 'bg-green-500',  defaults: { maxItemsPerOrder: 30, minOrderAmount: 49,  deliveryFeeMultiplier: 1.0 } },
-                        { key: 'meat',       label: '🥩 Meat',               color: 'bg-red-500',    defaults: { maxItemsPerOrder: 20, minOrderAmount: 149, deliveryFeeMultiplier: 1.2 } },
-                        { key: 'cool_hot',   label: '🧊 Hot & Cool',         color: 'bg-cyan-500',   defaults: { maxItemsPerOrder: 15, minOrderAmount: 49,  deliveryFeeMultiplier: 1.1 } },
-                      ].map(({ key, label, color, defaults }) => {
-                        const cur = platformSettings?.serviceTypeLimits?.[key] || { enabled: true, ...defaults };
-                        const update = (patch) => setPlatformSettings({
-                          ...platformSettings,
-                          serviceTypeLimits: {
-                            ...platformSettings.serviceTypeLimits,
-                            [key]: { ...cur, ...patch }
-                          }
-                        });
-                        return (
-                          <div key={key} className={`border border-line rounded-2xl overflow-hidden transition-all ${cur.enabled ? 'opacity-100' : 'opacity-50'}`}>
-                            {/* Row Header */}
-                            <div className="flex items-center justify-between px-4 py-3 bg-base border-b border-line">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${color}`} />
-                                <span className="text-xs font-extrabold text-main uppercase tracking-wide">{label}</span>
-                              </div>
-                              <label className="flex items-center gap-2 cursor-pointer select-none">
-                                <span className="text-[10px] font-bold text-muted uppercase">{cur.enabled ? 'Active' : 'Disabled'}</span>
-                                <div
-                                  onClick={() => update({ enabled: !cur.enabled })}
-                                  className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${cur.enabled ? 'bg-primary' : 'bg-line-strong'}`}
-                                >
-                                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-xs transition-transform ${cur.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                                </div>
-                              </label>
-                            </div>
-                            {/* Row Fields */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4">
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">
-                                  Max Items / Order
-                                </label>
-                                <div className="relative">
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="999"
-                                    disabled={!cur.enabled}
-                                    value={cur.maxItemsPerOrder ?? defaults.maxItemsPerOrder}
-                                    onChange={(e) => update({ maxItemsPerOrder: parseInt(e.target.value) || 1 })}
-                                    className="bg-base border border-line-strong rounded-xl px-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                                  />
-                                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">items</span>
-                                </div>
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">
-                                  Min Order Amount (₹)
-                                </label>
-                                <div className="relative">
-                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted pointer-events-none">₹</span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    disabled={!cur.enabled}
-                                    value={cur.minOrderAmount ?? defaults.minOrderAmount}
-                                    onChange={(e) => update({ minOrderAmount: parseInt(e.target.value) || 0 })}
-                                    className="bg-base border border-line-strong rounded-xl pl-7 pr-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                                  />
-                                </div>
-                                <span className="text-[9px] text-muted px-1">0 = no minimum</span>
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">
-                                  Delivery Fee Multiplier
-                                </label>
-                                <div className="relative">
-                                  <input
-                                    type="number"
-                                    min="0.1"
-                                    max="5"
-                                    step="0.05"
-                                    disabled={!cur.enabled}
-                                    value={cur.deliveryFeeMultiplier ?? defaults.deliveryFeeMultiplier}
-                                    onChange={(e) => update({ deliveryFeeMultiplier: parseFloat(e.target.value) || 1 })}
-                                    className="bg-base border border-line-strong rounded-xl px-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                                  />
-                                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">×</span>
-                                </div>
-                                <span className="text-[9px] text-muted px-1">1.0 = no change · 1.2 = +20%</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="flex items-start gap-3 bg-amber-50/60 border border-amber-200/60 rounded-2xl p-3.5 text-xs">
-                      <Activity className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-bold text-amber-800">These settings apply to restaurant-side configurations</p>
-                        <p className="text-amber-700 font-medium mt-0.5">Item limits and minimum amounts are enforced at order placement. The delivery fee multiplier adjusts the computed delivery fee for that service category.</p>
-                      </div>
-                    </div>
-                  </div>
-
+                  {/* 7. PLATFORM OPERATIONAL CONTROLS */}
                   <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-5">
                     {/* Ecosystem Ordering Active */}
                     <div className="flex items-center gap-3">
                       <input
                         type="checkbox"
                         id="isOpen"
-                        checked={platformSettings.isOpen}
-                        onChange={(e) => setPlatformSettings({ ...platformSettings, isOpen: e.target.checked })}
+                        checked={settingsForm?.isOpen ?? true}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, isOpen: e.target.checked })}
                         className="w-4.5 h-4.5 border-line-strong rounded text-primary focus:ring-primary cursor-pointer"
                       />
                       <label htmlFor="isOpen" className="text-xs text-muted font-bold cursor-pointer uppercase">
@@ -2941,8 +3409,8 @@ export default function AdminDashboard() {
                             type="radio"
                             name="riderAssignmentMode"
                             value="manual"
-                            checked={(platformSettings.riderAssignmentMode || 'manual') === 'manual'}
-                            onChange={() => setPlatformSettings({ ...platformSettings, riderAssignmentMode: 'manual' })}
+                            checked={(settingsForm?.riderAssignmentMode || 'manual') === 'manual'}
+                            onChange={() => setSettingsForm({ ...settingsForm, riderAssignmentMode: 'manual' })}
                             className="w-4 h-4 text-primary"
                           />
                           <span className="text-xs font-bold uppercase">Manual</span>
@@ -2953,8 +3421,8 @@ export default function AdminDashboard() {
                             type="radio"
                             name="riderAssignmentMode"
                             value="auto"
-                            checked={(platformSettings.riderAssignmentMode || 'manual') === 'auto'}
-                            onChange={() => setPlatformSettings({ ...platformSettings, riderAssignmentMode: 'auto' })}
+                            checked={(settingsForm?.riderAssignmentMode || 'manual') === 'auto'}
+                            onChange={() => setSettingsForm({ ...settingsForm, riderAssignmentMode: 'auto' })}
                             className="w-4 h-4 text-primary"
                           />
                           <span className="text-xs font-bold uppercase">Auto</span>

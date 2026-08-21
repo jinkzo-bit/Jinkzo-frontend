@@ -21,7 +21,20 @@ export const useCartStore = create(
     platformFee: 5,
     taxPercent: 0,
     isOpen: true,
-    globalServiceRadiusKm: 5
+    globalServiceRadiusKm: 5,
+    allSectionsMaxItems: 10,
+    sectionChangeFee: 15,
+    foodBaseItemLimit: 4,
+    foodExtraItemLimit: 3,
+    foodExtraItemCharge: 10,
+    foodMaxHotels: 3,
+    foodHotelChangeFee: 15,
+    groceryMaxItems: 10,
+    vegetableFruitMaxItems: 5,
+    vegetableFruitMaxWeightKg: 5,
+    meatMaxItems: 5,
+    meatMaxWeightKg: 5,
+    hotCoolMaxItems: 5
   },
 
   showToast: (message, type = 'success') => {
