@@ -11,7 +11,7 @@ const DEFAULT_CENTER = { lat: 15.8562, lng: 78.2700 };
 const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
 
 // ── Map container style ───────────────────────────────────────────────────────
-const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
+const MAP_CONTAINER_STYLE = { width: '100%', height: '100%', position: 'relative', overflow: 'hidden' };
 
 // ── Map base options ──────────────────────────────────────────────────────────
 const MAP_OPTIONS = {
@@ -218,6 +218,9 @@ export default function GoogleMapContainer({
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
+    if (window.google?.maps?.event) {
+      window.google.maps.event.trigger(map, 'resize');
+    }
     if (window.google) {
       trafficLayerRef.current = new window.google.maps.TrafficLayer();
     }

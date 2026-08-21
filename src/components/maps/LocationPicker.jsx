@@ -12,7 +12,7 @@ const INDIA_CENTER_LAT = 20.5937;
 const INDIA_CENTER_LNG = 78.9629;
 const HIGH_ZOOM    = 17;
 
-const MAP_CONTAINER_STYLE = { height: '100%', width: '100%' };
+const MAP_CONTAINER_STYLE = { width: '100%', height: '100%', position: 'relative', overflow: 'hidden' };
 
 const MAP_OPTIONS = {
   disableDefaultUI: true,
@@ -207,6 +207,9 @@ export default function LocationPicker({
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
+    if (window.google?.maps?.event) {
+      window.google.maps.event.trigger(map, 'resize');
+    }
     // Temporary Vector diagnostics — remove once VECTOR is confirmed
     if (process.env.NODE_ENV !== 'production') {
       console.log('[Jinkzo LocationPicker] Rendering Type:', map.getRenderingType?.() ?? 'N/A');
@@ -434,7 +437,7 @@ export default function LocationPicker({
   const { primary: displayTitle, subtitle: displaySubtitle } = getDisplayLocation();
 
   return (
-    <div className="flex flex-col h-full w-full">
+    <div className="flex flex-col h-full w-full min-h-0">
       {/* Search Bar & GPS */}
       <div className="px-4 pb-3 pt-2 flex-shrink-0">
         <div className="flex gap-2">
@@ -461,11 +464,12 @@ export default function LocationPicker({
       </div>
 
       {/* Map Section */}
-      <div
-        ref={mapContainerRef}
-        className="relative flex-shrink-0 mx-4 rounded-2xl overflow-hidden border border-white/10"
-        style={{ height: '260px' }}
-      >
+      <div className="px-4 flex-shrink-0 w-full">
+        <div
+          ref={mapContainerRef}
+          className="relative w-full rounded-2xl overflow-hidden border border-white/10"
+          style={{ height: '260px', width: '100%', position: 'relative' }}
+        >
         {!isLoaded || loadError ? (
           <div className="w-full h-full flex items-center justify-center bg-[#1a1a2e]">
             {loadError ? (
@@ -617,6 +621,7 @@ export default function LocationPicker({
           </div>
         </div>
       </div>
+    </div>
 
       {/* Simplified Address Form */}
       <div className="overflow-y-auto flex-1 px-4 pt-3.5 pb-2" style={{ minHeight: 0 }}>

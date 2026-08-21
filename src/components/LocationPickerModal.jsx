@@ -24,7 +24,7 @@ export default function LocationPickerModal({ isOpen, onClose, onConfirm, initia
         </div>
 
         {/* REUSABLE PICKER COMPONENT */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
           <LocationPicker
             initialAddress={initialAddress}
             onConfirm={onConfirm}

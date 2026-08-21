@@ -52,7 +52,7 @@ const PICKER_ICON = {
 };
 
 // Container style — fills parent; parent must have explicit height
-const CONTAINER_STYLE = { width: '100%', height: '100%' };
+const CONTAINER_STYLE = { width: '100%', height: '100%', position: 'relative', overflow: 'hidden' };
 
 /**
  * Reusable Google Map component.
@@ -137,6 +137,9 @@ export default function GoogleMap({
   const onLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
+    if (window.google?.maps?.event) {
+      window.google.maps.event.trigger(map, 'resize');
+    }
     // Temporary Vector diagnostics — remove once VECTOR is confirmed
     if (process.env.NODE_ENV !== 'production') {
       console.log('[Jinkzo GoogleMap] Rendering Type:', map.getRenderingType?.() ?? 'N/A');

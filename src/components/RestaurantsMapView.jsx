@@ -8,7 +8,7 @@ import MapRotationControls from './maps/MapRotationControls';
 
 const DEFAULT_CENTER = { lat: 15.8601, lng: 78.2618 };
 
-const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
+const MAP_CONTAINER_STYLE = { width: '100%', height: '100%', position: 'relative', overflow: 'hidden' };
 
 const MAP_OPTIONS = {
   disableDefaultUI: false,
@@ -49,6 +49,9 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
+    if (window.google?.maps?.event) {
+      window.google.maps.event.trigger(map, 'resize');
+    }
     // Temporary Vector diagnostics — remove once VECTOR is confirmed
     if (process.env.NODE_ENV !== 'production') {
       console.log('[Jinkzo RestaurantsMapView] Rendering Type:', map.getRenderingType?.() ?? 'N/A');

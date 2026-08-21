@@ -353,44 +353,22 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 3. CATEGORY CARDS (EXACT 2-COLUMN GRID, 3 ROWS, CENTER ALIGNED) */}
+      {/* 3. CATEGORY CARDS — image IS the complete card (title + tagline already inside approved images) */}
       <section className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
         {categories.map((cat) => (
           <Link
             key={cat.id}
             to={cat.link}
-            className={`${cat.bgGradient} ${cat.borderColor} border rounded-3xl sm:rounded-[32px] p-3.5 sm:p-5 md:p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group flex flex-col items-center justify-between text-center cursor-pointer relative overflow-hidden shadow-2xs`}
+            className="rounded-3xl sm:rounded-[32px] overflow-hidden cursor-pointer block relative shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
+            style={{ aspectRatio: '1 / 1' }}
           >
-            {/* Background Decorative Pattern / Watermark Details */}
-            <div className="absolute inset-0 pointer-events-none opacity-25 overflow-hidden">
-              <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full border border-black/10"></div>
-              <div className="absolute -bottom-8 -left-8 w-24 h-24 rounded-full border border-black/10"></div>
-            </div>
-
-            {/* Large Category Product Image (Top ~60% Dominant Visual) */}
-            <div className="w-full h-28 sm:h-36 md:h-44 flex items-center justify-center relative z-10 group-hover:scale-105 transition-transform duration-300">
-              <img
-                src={getImageUrl(cat.image, 'category')}
-                alt={cat.title}
-                onError={(e) => handleImageError(e, 'category')}
-                className="max-h-full max-w-full object-contain rounded-2xl drop-shadow-xs"
-              />
-            </div>
-
-            {/* Centered Content: Title, Tagline, Circular Arrow Button */}
-            <div className="flex flex-col items-center justify-center gap-0.5 z-10 w-full mt-2">
-              <h3 className={`font-display font-black text-sm sm:text-base md:text-xl ${cat.textColor} tracking-tight leading-tight`}>
-                {cat.title}
-              </h3>
-              <p className="text-[10px] sm:text-xs text-gray-800 dark:text-gray-900 font-semibold leading-snug line-clamp-2 max-w-[150px] sm:max-w-none">
-                {cat.subtitle}
-              </p>
-
-              {/* Centered Circular Arrow Button */}
-              <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full ${cat.btnBg} text-white flex items-center justify-center shadow-md shadow-black/10 mt-2 group-hover:scale-110 active:scale-95 transition-all duration-200`}>
-                <ChevronRight className="w-4 h-4 stroke-[3]" />
-              </div>
-            </div>
+            {/* The approved image IS the entire card — contains title, tagline, art */}
+            <img
+              src={getImageUrl(cat.image, 'category')}
+              alt={cat.title}
+              onError={(e) => handleImageError(e, 'category')}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            />
           </Link>
         ))}
       </section>
