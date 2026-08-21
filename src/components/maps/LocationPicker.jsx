@@ -12,7 +12,14 @@ const INDIA_CENTER_LAT = 20.5937;
 const INDIA_CENTER_LNG = 78.9629;
 const HIGH_ZOOM    = 17;
 
-const MAP_CONTAINER_STYLE = { width: '100%', height: '100%', position: 'relative', overflow: 'hidden' };
+const MAP_CONTAINER_STYLE = {
+  width: '100%',
+  height: '100%',
+  minWidth: '100%',
+  minHeight: '260px',
+  position: 'relative',
+  overflow: 'hidden'
+};
 
 const MAP_OPTIONS = {
   disableDefaultUI: true,
@@ -204,12 +211,44 @@ export default function LocationPicker({
     };
   }, []);
 
+  // Viewport resize observer: guarantees Google Maps updates its internal WebGL canvas
+  // when the modal finishes opening, resizing, or switching screen orientations.
+  useEffect(() => {
+    const container = mapContainerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          const map = mapRef.current;
+          if (map && window.google?.maps?.event) {
+            window.google.maps.event.trigger(map, 'resize');
+          }
+        }
+      }
+    });
+
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
+
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
-    if (window.google?.maps?.event) {
-      window.google.maps.event.trigger(map, 'resize');
-    }
+
+    // Multi-pass resize triggers ensuring vector canvas syncs after modal animation and layout reflow
+    const triggerResize = () => {
+      if (window.google?.maps?.event && map) {
+        window.google.maps.event.trigger(map, 'resize');
+      }
+    };
+
+    triggerResize();
+    requestAnimationFrame(triggerResize);
+    setTimeout(triggerResize, 60);
+    setTimeout(triggerResize, 180);
+    setTimeout(triggerResize, 350);
+
     // Temporary Vector diagnostics — remove once VECTOR is confirmed
     if (process.env.NODE_ENV !== 'production') {
       console.log('[Jinkzo LocationPicker] Rendering Type:', map.getRenderingType?.() ?? 'N/A');
@@ -467,8 +506,8 @@ export default function LocationPicker({
       <div className="px-4 flex-shrink-0 w-full">
         <div
           ref={mapContainerRef}
-          className="relative w-full rounded-2xl overflow-hidden border border-white/10"
-          style={{ height: '260px', width: '100%', position: 'relative' }}
+          className="location-map-viewport relative w-full rounded-2xl overflow-hidden border border-white/10 bg-[#1a1a2e]"
+          style={{ height: '260px', width: '100%', minHeight: '260px', position: 'relative', overflow: 'hidden' }}
         >
         {!isLoaded || loadError ? (
           <div className="w-full h-full flex items-center justify-center bg-[#1a1a2e]">
