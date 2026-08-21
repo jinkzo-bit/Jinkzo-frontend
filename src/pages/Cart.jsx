@@ -223,9 +223,9 @@ export default function Cart() {
                       </div>
                     </div>
 
-                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                      <span className="text-sm md:text-base font-bold text-main">
-                        ₹{item.price * item.quantity}
+                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                      <span className="text-xs md:text-sm font-bold text-main">
+                        ₹{item.price} × {item.quantity} = ₹{item.price * item.quantity}
                       </span>
                       <div className="flex items-center bg-base border border-line-strong rounded-xl overflow-hidden h-8">
                         <button
