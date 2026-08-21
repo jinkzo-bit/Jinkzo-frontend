@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShoppingCart, Trash2, Plus, Minus, Tag, Percent, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Trash2, Plus, Minus, Tag, Percent, ArrowRight, ShieldCheck, AlertCircle, UtensilsCrossed, ChevronUp, FileText } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from '../store/languageStore';
@@ -33,13 +33,14 @@ export default function Cart() {
     activeSurcharges
   } = getCalculations();
 
-  // Group items by restaurant
+  // Group items by restaurant with calculated subtotal and counts
   const groupedItems = items.reduce((acc, item) => {
     const rId = item.restaurantId || 'unknown';
     if (!acc[rId]) {
       acc[rId] = {
         restaurantId: rId,
         restaurantName: item.restaurantName || 'Unknown Restaurant',
+        restaurantImage: item.restaurantImage || '',
         isClosed: item.restaurantIsClosed || false,
         items: []
       };
@@ -48,9 +49,17 @@ export default function Cart() {
     return acc;
   }, {});
 
-  const groupedList = Object.values(groupedItems);
-  const uniqueRestaurantNames = Array.from(new Set(items.map(item => item.restaurantName).filter(Boolean)));
-  const restaurantNameText = uniqueRestaurantNames.length > 0 ? uniqueRestaurantNames.join(' & ') : (restaurant?.name || '');
+  const groupedList = Object.values(groupedItems).map(group => {
+    const groupSubtotal = group.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+    const groupItemsCount = group.items.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
+    const isAllVeg = group.items.every(i => i.isVeg === true);
+    return {
+      ...group,
+      subtotal: groupSubtotal,
+      itemsCount: groupItemsCount,
+      isAllVeg
+    };
+  });
 
   const closedRestaurants = groupedList.filter(g => g.isClosed);
   const isAnyClosed = closedRestaurants.length > 0;
@@ -70,7 +79,6 @@ export default function Cart() {
 
   const handleCheckout = () => {
     if (!user) {
-      // Redirect to login with redirect flag
       navigate('/login?redirect=checkout');
     } else {
       navigate('/checkout');
@@ -99,20 +107,26 @@ export default function Cart() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-8 pb-32 animate-fade-in flex flex-col gap-6 w-full">
-      <div className="flex items-center justify-between border-b border-line pb-4">
-        <div>
-          <h1 className="font-display font-extrabold text-2xl text-main leading-tight">
-            {t('cart.title', 'Checkout Cart')}
-          </h1>
-          <p className="text-xs text-muted font-medium">
-            {t('cart.orderingFrom', 'Ordering from')} <span className="text-primary font-bold">{restaurantNameText}</span>
-          </p>
+      {/* Header */}
+      <div className="flex items-center justify-between pb-2">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-violet-100/70 text-primary flex items-center justify-center flex-shrink-0">
+            <UtensilsCrossed className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="font-display font-extrabold text-2xl text-main leading-tight">
+              Your Order
+            </h1>
+            <p className="text-xs text-muted font-medium mt-0.5">
+              Review your items and order summary
+            </p>
+          </div>
         </div>
         <button
           onClick={clearCart}
-          className="flex items-center gap-1 text-xs text-muted hover:text-red-500 font-semibold cursor-pointer transition-colors"
+          className="flex items-center gap-1.5 text-xs text-muted hover:text-red-500 font-semibold cursor-pointer transition-colors px-3 py-1.5 rounded-xl hover:bg-red-50 border border-transparent hover:border-red-100"
         >
-          <Trash2 className="w-4 h-4" />
+          <Trash2 className="w-3.5 h-3.5" />
           <span>{t('cart.clearCart', 'Clear Cart')}</span>
         </button>
       </div>
@@ -138,100 +152,143 @@ export default function Cart() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        {/* Cart items list */}
+        {/* Left Column: Restaurant-Wise Order Cards */}
         <div className="lg:col-span-2 flex flex-col gap-5">
           {groupedList.map((group) => (
-            <div key={group.restaurantId} className="bg-surface rounded-2xl border border-line shadow-2xs overflow-hidden">
-              <div className="bg-base/50 px-4 py-3 border-b border-line flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="font-display font-extrabold text-xs tracking-wide uppercase text-muted">{group.restaurantName}</span>
-                  {group.isClosed && (
-                    <span className="bg-red-50 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-red-100">
-                      {t('restaurant.temporarilyClosed', 'Temporarily Closed')}
-                    </span>
+            <div key={group.restaurantId} className="bg-surface rounded-3xl border border-line shadow-2xs overflow-hidden p-5 flex flex-col gap-4 transition-all">
+              {/* Restaurant Header */}
+              <div className="flex items-center justify-between border-b border-line pb-3.5">
+                <div className="flex items-center gap-3">
+                  {group.restaurantImage ? (
+                    <img
+                      src={getImageUrl(group.restaurantImage, 'restaurant')}
+                      alt={group.restaurantName}
+                      onError={(e) => handleImageError(e, 'restaurant')}
+                      className="w-11 h-11 object-cover rounded-xl border border-line bg-base flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-11 h-11 rounded-xl border border-line bg-violet-50 text-primary flex items-center justify-center font-black text-sm flex-shrink-0 uppercase">
+                      {group.restaurantName.charAt(0)}
+                    </div>
                   )}
+                  <div className="flex flex-col gap-1">
+                    <h3 className="font-display font-black text-sm md:text-base text-main tracking-tight uppercase">
+                      {group.restaurantName}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      {group.isAllVeg ? (
+                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          Veg
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                          Non Veg
+                        </span>
+                      )}
+                      {group.isClosed && (
+                        <span className="bg-red-100 text-red-700 text-[10px] font-extrabold px-2 py-0.5 rounded-md">
+                          {t('restaurant.temporarilyClosed', 'Temporarily Closed')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <span className="text-[10px] text-muted font-semibold bg-surface border border-gray-150 px-2 py-0.5 rounded-md">
-                  {group.items.length} {group.items.length === 1 ? 'item' : 'items'}
-                </span>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-primary bg-violet-50 border border-violet-100 px-3 py-1 rounded-full">
+                    {group.itemsCount} {group.itemsCount === 1 ? 'Item' : 'Items'}
+                  </span>
+                  <ChevronUp className="w-4 h-4 text-muted" />
+                </div>
               </div>
-              <div className="divide-y divide-gray-100">
+
+              {/* Items List in Restaurant Card */}
+              <div className="flex flex-col divide-y divide-gray-100">
                 {group.items.map((item) => (
-                  <div key={item.menuItemId} className="p-4 flex items-center justify-between gap-4 hover:bg-base/20 transition-colors">
+                  <div key={item.menuItemId} className="py-3.5 first:pt-1 last:pb-1 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3.5 max-w-[65%]">
                       <img
                         src={getImageUrl(item.image, 'food')}
                         alt={item.name}
                         onError={(e) => handleImageError(e, 'food')}
-                        className="w-14 h-14 md:w-16 md:h-16 object-cover rounded-xl bg-base flex-shrink-0"
+                        className="w-16 h-16 md:w-18 md:h-18 object-cover rounded-2xl bg-base flex-shrink-0 border border-line"
                       />
                       <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <VegBadge isVeg={item.isVeg} size="xs" />
-                          <h3 className="font-display font-semibold text-sm md:text-base text-main line-clamp-1">
-                            {item.name}
-                          </h3>
-                        </div>
-                        <p className="text-xs font-bold text-main">₹{item.price}</p>
+                        <h4 className="font-display font-bold text-sm md:text-base text-main line-clamp-1">
+                          {item.name}
+                        </h4>
+                        <p className="text-[11px] text-muted font-medium">Serves 1</p>
                       </div>
                     </div>
 
-                    {/* Quantity Control block */}
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <div className="flex items-center bg-base border border-line-strong rounded-lg overflow-hidden h-8.5">
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                      <span className="text-sm md:text-base font-bold text-main">
+                        ₹{item.price * item.quantity}
+                      </span>
+                      <div className="flex items-center bg-base border border-line-strong rounded-xl overflow-hidden h-8">
                         <button
                           onClick={() => updateQuantity(item.menuItemId, item.quantity - 1)}
-                          className="px-2 hover:bg-gray-100 text-muted font-bold transition-colors cursor-pointer"
+                          className="px-2.5 hover:bg-gray-100 text-muted hover:text-main font-bold transition-colors cursor-pointer"
                         >
                           <Minus className="w-3 h-3" />
                         </button>
-                        <span className="px-2 text-xs font-bold text-main">{item.quantity}</span>
+                        <span className="px-2 text-xs font-bold text-main min-w-[20px] text-center">{item.quantity}</span>
                         <button
                           onClick={() => updateQuantity(item.menuItemId, item.quantity + 1)}
-                          className="px-2 hover:bg-gray-100 text-muted font-bold transition-colors cursor-pointer"
+                          className="px-2.5 hover:bg-gray-100 text-muted hover:text-main font-bold transition-colors cursor-pointer"
                         >
                           <Plus className="w-3 h-3" />
                         </button>
                       </div>
-
-                      <p className="text-xs md:text-sm font-bold text-main min-w-[50px] text-right">
-                        ₹{item.price * item.quantity}
-                      </p>
                     </div>
                   </div>
                 ))}
               </div>
+
+              {/* Restaurant Card Footer: Item Total */}
+              <div className="border-t border-dashed border-line pt-3 flex items-center justify-between">
+                <span className="text-xs md:text-sm text-muted font-medium">
+                  Item Total ({group.restaurantName})
+                </span>
+                <span className="text-sm md:text-base font-bold text-primary">
+                  ₹{group.subtotal}
+                </span>
+              </div>
             </div>
           ))}
 
-          {/* Tips / Safety Badge */}
-          <div className="bg-green-50/50 border border-green-100 rounded-2xl p-4 flex gap-3 text-green-800">
-            <ShieldCheck className="w-5 h-5 text-green-700 flex-shrink-0 mt-0.5" />
+          {/* Zero Contact Delivery Banner */}
+          <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 flex items-center gap-3.5 text-emerald-900 shadow-2xs">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
             <div>
-              <h5 className="font-bold text-xs text-green-800">{t('cart.zeroContactDelivery', 'Zero Contact Delivery')}</h5>
-              <p className="text-[10px] text-green-700 mt-0.5 leading-relaxed font-medium">
+              <h5 className="font-bold text-xs text-emerald-900">{t('cart.zeroContactDelivery', 'Zero Contact Delivery')}</h5>
+              <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed font-medium">
                 Our delivery partner will leave your order at your doorstep securely. Standard sanitation guidelines followed.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Invoice pricing panel */}
+        {/* Right Column: Promo & Bill Details */}
         <div className="flex flex-col gap-4 sticky top-24">
-          {/* Promo panel */}
-          <div className="bg-surface rounded-2xl p-4 border border-line shadow-2xs flex flex-col gap-3">
-            <h3 className="font-display font-semibold text-sm text-main flex items-center gap-1.5">
+          {/* Promo Card */}
+          <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-3">
+            <h3 className="font-display font-bold text-sm text-main flex items-center gap-2">
               <Tag className="w-4 h-4 text-primary" />
               <span>{t('cart.applyPromo', 'Apply Promo Code')}</span>
             </h3>
 
             {promoCode ? (
-              <div className="bg-green-50 border border-green-100 rounded-xl p-3.5 flex items-center justify-between">
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3.5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Percent className="w-4 h-4 text-green-700" />
+                  <Percent className="w-4 h-4 text-emerald-700" />
                   <div>
-                    <p className="text-xs font-bold text-green-800">{promoCode} Applied</p>
-                    <p className="text-[9px] text-green-700">Saved ₹{promoDiscount} on this order</p>
+                    <p className="text-xs font-bold text-emerald-800">{promoCode} Applied</p>
+                    <p className="text-[10px] text-emerald-700">Saved ₹{promoDiscount} on this order</p>
                   </div>
                 </div>
                 <button
@@ -245,14 +302,14 @@ export default function Cart() {
               <form onSubmit={handlePromoApply} className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="WELCOME50 or QUICK20"
+                  placeholder="WELCOME50 OR QUICK20"
                   value={promoInput}
                   onChange={(e) => setPromoInput(e.target.value)}
-                  className="bg-base border border-line-strong rounded-xl px-3 py-2 text-xs font-semibold text-main outline-none flex-grow placeholder:text-muted uppercase"
+                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-semibold text-main outline-none flex-grow placeholder:text-muted uppercase"
                 />
                 <button
                   type="submit"
-                  className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition-colors cursor-pointer"
+                  className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer"
                 >
                   {t('cart.apply', 'Apply')}
                 </button>
@@ -261,87 +318,131 @@ export default function Cart() {
 
             {promoError && <p className="text-[10px] font-bold text-red-500 px-1">{promoError}</p>}
             {!promoCode && (
-              <div className="text-[9px] text-muted mt-0.5 leading-relaxed font-medium px-1">
-                Use <strong className="text-muted">WELCOME50</strong> (flat ₹50 off on orders &gt; ₹200) or <strong className="text-muted">QUICK20</strong> (20% off on orders &gt; ₹400).
+              <div className="text-[10px] text-muted mt-0.5 leading-relaxed font-medium px-1">
+                Use <strong className="text-main">WELCOME50</strong> (flat ₹50 off on orders &gt; ₹200) or <strong className="text-main">QUICK20</strong> (20% off on orders &gt; ₹400).
               </div>
             )}
           </div>
 
-          {/* Pricing Invoice card */}
-          <div className="bg-surface rounded-2xl p-4 border border-line shadow-2xs flex flex-col gap-3.5">
-            <h3 className="font-display font-semibold text-sm text-main border-b border-line pb-2">
-              {t('cart.billSummary', 'Bill Summary')}
+          {/* Bill Details Card */}
+          <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4">
+            <h3 className="font-display font-bold text-sm text-main border-b border-line pb-2.5 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" />
+              <span>Bill Details</span>
             </h3>
 
-            <div className="flex flex-col gap-2.5 text-xs text-muted font-medium">
-              <div className="flex items-center justify-between">
-                <span>{t('cart.itemSubtotal', 'Subtotal')}</span>
-                <span className="text-main font-bold">₹{subtotal}</span>
+            {/* Subsection 1: Items from Restaurants */}
+            <div className="flex flex-col gap-2.5">
+              <h4 className="text-[11px] font-extrabold text-primary uppercase tracking-wider">
+                Items from Restaurants
+              </h4>
+              <div className="flex flex-col gap-2.5">
+                {groupedList.map((g) => (
+                  <div key={g.restaurantId} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2.5">
+                      {g.restaurantImage ? (
+                        <img
+                          src={getImageUrl(g.restaurantImage, 'restaurant')}
+                          alt={g.restaurantName}
+                          onError={(e) => handleImageError(e, 'restaurant')}
+                          className="w-7 h-7 rounded-lg object-cover bg-base border border-line flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-lg bg-violet-50 text-primary border border-line flex items-center justify-center font-bold text-xs flex-shrink-0 uppercase">
+                          {g.restaurantName.charAt(0)}
+                        </div>
+                      )}
+                      <div className="flex flex-col">
+                        <span className="font-bold text-main uppercase tracking-tight line-clamp-1">{g.restaurantName}</span>
+                        <span className="text-[10px] text-muted font-medium">{g.itemsCount} {g.itemsCount === 1 ? 'Item' : 'Items'}</span>
+                      </div>
+                    </div>
+                    <span className="text-main font-bold">₹{g.subtotal}</span>
+                  </div>
+                ))}
               </div>
-              {selectedHotelsCount >= 1 && (
-                <div className="flex items-center justify-between">
-                  <span>First Hotel Delivery Fee</span>
-                  <span className="text-main font-bold">+₹{baseFoodDeliveryFee}</span>
-                </div>
-              )}
-              {selectedHotelsCount >= 2 && (
-                <div className="flex items-center justify-between">
-                  <span>Second Hotel Delivery Fee</span>
-                  <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
-                </div>
-              )}
-              {selectedHotelsCount >= 3 && (
-                <div className="flex items-center justify-between">
-                  <span>Third Hotel Delivery Fee</span>
-                  <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
-                </div>
-              )}
-              {selectedHotelsCount > 3 && Array.from({ length: selectedHotelsCount - 3 }).map((_, idx) => (
-                <div key={idx} className="flex items-center justify-between">
-                  <span>Hotel {idx + 4} Delivery Fee</span>
-                  <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
-                </div>
-              ))}
-              {foodExtraItemCharge > 0 && (
-                <div className="flex items-center justify-between">
-                  <span>Food Extra Item Charge</span>
-                  <span className="text-main font-bold">+₹{foodExtraItemCharge}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between border-t border-b border-line py-1.5 font-semibold">
-                <span>Total Food Delivery Fees</span>
-                <span className="text-main font-bold">₹{deliveryFee}</span>
+
+              <div className="border-t border-line pt-2.5 flex items-center justify-between text-xs font-bold text-main">
+                <span>Subtotal (Items Total)</span>
+                <span>₹{subtotal}</span>
               </div>
-              {activeSurcharges && activeSurcharges.map((sc, idx) => (
-                <div key={idx} className="flex items-center justify-between font-semibold">
-                  <span>{sc.name}</span>
-                  <span className="text-main font-bold">+₹{sc.fee}</span>
-                </div>
-              ))}
-              {platformFee > 0 && (
-                <div className="flex items-center justify-between font-medium">
-                  <span>{t('cart.platformFee', 'Platform Fee')}</span>
-                  <span className="text-main font-bold">+₹{platformFee}</span>
-                </div>
-              )}
-              {promoDiscount > 0 && (
-                <div className="flex items-center justify-between text-green-700 font-bold bg-green-50 p-1.5 rounded-lg">
-                  <span>{t('cart.promoDiscount', 'Promo Discount')}</span>
-                  <span>-₹{promoDiscount}</span>
-                </div>
-              )}
             </div>
 
-            <div className="border-t border-line pt-3 flex items-center justify-between text-sm font-bold text-main">
-              <span>{t('cart.grandTotal', 'Total')}</span>
-              <span className="text-primary text-base">₹{total}</span>
+            {/* Subsection 2: Delivery & Other Charges */}
+            <div className="flex flex-col gap-2.5 border-t border-line pt-3">
+              <h4 className="text-[11px] font-extrabold text-primary uppercase tracking-wider">
+                Delivery & Other Charges
+              </h4>
+              
+              <div className="flex flex-col gap-2 text-xs text-muted font-medium">
+                {selectedHotelsCount >= 1 && (
+                  <div className="flex items-center justify-between">
+                    <span>First Hotel Delivery Fee</span>
+                    <span className="text-main font-bold">+₹{baseFoodDeliveryFee}</span>
+                  </div>
+                )}
+                {selectedHotelsCount >= 2 && (
+                  <div className="flex items-center justify-between">
+                    <span>Second Hotel Delivery Fee</span>
+                    <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
+                  </div>
+                )}
+                {selectedHotelsCount >= 3 && (
+                  <div className="flex items-center justify-between">
+                    <span>Third Hotel Delivery Fee</span>
+                    <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
+                  </div>
+                )}
+                {selectedHotelsCount > 3 && Array.from({ length: selectedHotelsCount - 3 }).map((_, idx) => (
+                  <div key={idx} className="flex items-center justify-between">
+                    <span>Hotel {idx + 4} Delivery Fee</span>
+                    <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
+                  </div>
+                ))}
+                {foodExtraItemCharge > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span>Food Extra Item Charge</span>
+                    <span className="text-main font-bold">+₹{foodExtraItemCharge}</span>
+                  </div>
+                )}
+                
+                <div className="flex items-center justify-between border-t border-b border-line py-1.5 font-semibold text-main">
+                  <span>Total Food Delivery Fees</span>
+                  <span className="font-bold">₹{deliveryFee}</span>
+                </div>
+
+                {activeSurcharges && activeSurcharges.map((sc, idx) => (
+                  <div key={idx} className="flex items-center justify-between font-semibold">
+                    <span>{sc.name}</span>
+                    <span className="text-main font-bold">+₹{sc.fee}</span>
+                  </div>
+                ))}
+                {platformFee > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span>{t('cart.platformFee', 'Platform Fee')}</span>
+                    <span className="text-main font-bold">+₹{platformFee}</span>
+                  </div>
+                )}
+                {promoDiscount > 0 && (
+                  <div className="flex items-center justify-between text-emerald-700 font-bold bg-emerald-50 p-2 rounded-lg">
+                    <span>{t('cart.promoDiscount', 'Promo Discount')}</span>
+                    <span>-₹{promoDiscount}</span>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Checkout Action Button */}
+            {/* Total Payable */}
+            <div className="border-t border-line pt-3.5 flex items-center justify-between">
+              <span className="font-display font-extrabold text-base text-main">Total Payable</span>
+              <span className="font-display font-black text-xl text-primary">₹{total}</span>
+            </div>
+
+            {/* Proceed to Checkout CTA Button */}
             <button
               onClick={handleCheckout}
               disabled={isAnyClosed}
-              className="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-violet-500/10 hover:shadow-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-2 disabled:bg-gray-100 disabled:text-muted disabled:shadow-none disabled:cursor-not-allowed"
+              className="w-full bg-primary hover:bg-primary-hover text-white text-xs md:text-sm font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-violet-500/10 hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer mt-1 disabled:bg-gray-100 disabled:text-muted disabled:shadow-none disabled:cursor-not-allowed"
             >
               <span>{isAnyClosed ? t('restaurant.closed', 'Restaurant Closed') : t('cart.proceedToCheckout', 'Proceed to Checkout')}</span>
               <ArrowRight className="w-4 h-4" />

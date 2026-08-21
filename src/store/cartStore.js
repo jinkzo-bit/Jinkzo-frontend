@@ -103,6 +103,7 @@ export const useCartStore = create(
         quantity: 1,
         restaurantId: restaurant._id,
         restaurantName: restaurant.name,
+        restaurantImage: restaurant.image || restaurant.logo || '',
         restaurantDeliveryTime: restaurant.deliveryTime || 30,
         restaurantOffers: restaurant.offers || [],
         restaurantIsClosed: restaurant.isClosed || false
