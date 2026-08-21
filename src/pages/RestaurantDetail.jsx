@@ -8,6 +8,7 @@ import { useFavoriteStore } from '../store/favoriteStore';
 import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import VegBadge from '../components/VegBadge';
+import { checkRestaurantOpenStatus, checkItemAvailability, formatTime12 } from '../utils/timingUtils';
 
 const menuCategories = ['Starters', 'Burgers', 'Pizza', 'Biryani', 'Main Course', 'Desserts', 'Drinks'];
 
@@ -167,15 +168,28 @@ export default function RestaurantDetail() {
         </div>
       </section>
 
-      {restaurant.isClosed && (
-        <div className="bg-red-50/70 border border-red-200 rounded-3xl p-5 text-red-800 flex items-center gap-3 animate-fade-in shadow-2xs">
-          <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
-          <div>
-            <h4 className="font-display font-extrabold text-sm uppercase tracking-wider">Hotel Temporarily Closed</h4>
-            <p className="text-xs mt-0.5 leading-relaxed font-semibold">We are not accepting orders at this time. You can explore the menu but adding items to the cart is disabled.</p>
+      {/* Dynamic Open / Closed Status Alert */}
+      {(() => {
+        const timingStatus = checkRestaurantOpenStatus(restaurant?.openingHours, restaurant?.isClosed);
+        const isRestClosed = !timingStatus.isOpen;
+        const nextOpeningText = restaurant?.nextOpeningText || timingStatus.nextOpeningText || '';
+
+        if (!isRestClosed) return null;
+
+        return (
+          <div className="bg-red-50/85 border border-red-200 rounded-3xl p-5 text-red-800 flex items-center gap-3.5 animate-fade-in shadow-2xs">
+            <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
+            <div>
+              <h4 className="font-display font-extrabold text-sm uppercase tracking-wider">
+                Hotel Currently Closed
+              </h4>
+              <p className="text-xs mt-0.5 leading-relaxed font-semibold">
+                {nextOpeningText ? `${nextOpeningText}. You can explore the menu but adding items to the cart is disabled.` : 'We are not accepting orders at this time. You can explore the menu but adding items to the cart is disabled.'}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Active Coupons / Offers Section */}
       {(() => {
@@ -333,9 +347,12 @@ export default function RestaurantDetail() {
                 <div className="flex flex-col gap-6">
                   {categoryItems.map((item) => {
                     const quantity = getItemQuantity(item._id);
-                    const isRestClosed = restaurant.isClosed;
-                    const isItemUnavailable = item.isAvailable === false;
-                    const isDisabled = isRestClosed || isItemUnavailable;
+                    const timingStatus = checkRestaurantOpenStatus(restaurant?.openingHours, restaurant?.isClosed);
+                    const isRestClosed = !timingStatus.isOpen;
+                    const itemTiming = checkItemAvailability(item, timingStatus.isOpen);
+                    const isItemOutOfStock = item.isAvailable === false;
+                    const isItemTimeRestricted = !itemTiming.isAvailable && itemTiming.reason === 'timing_restricted';
+                    const isDisabled = isRestClosed || isItemOutOfStock || isItemTimeRestricted;
 
                     return (
                       <div
@@ -344,9 +361,14 @@ export default function RestaurantDetail() {
                       >
                         {/* Food description info */}
                         <div className="flex-grow flex flex-col gap-1.5 max-w-[70%]">
-                          {/* Veg/Non-Veg Text Badge */}
-                          <div>
+                          {/* Veg/Non-Veg & Timing Badges */}
+                          <div className="flex items-center gap-2 flex-wrap">
                             <VegBadge isVeg={item.isVeg} />
+                            {item.availabilityMode === 'custom' && (
+                              <span className="text-[9px] font-bold text-muted bg-base px-2 py-0.5 rounded-md border border-line">
+                                🕒 {formatTime12(item.availableFrom)} – {formatTime12(item.availableTo)}
+                              </span>
+                            )}
                           </div>
 
                           <h3 className="font-display font-semibold text-base text-main">
@@ -360,10 +382,17 @@ export default function RestaurantDetail() {
 
                         {/* Dish photo with Add logic */}
                         <div className="relative flex flex-col items-center flex-shrink-0 w-24 h-24 md:w-28 md:h-28">
-                          {isItemUnavailable && (
+                          {isItemOutOfStock && (
                             <div className="absolute inset-0 bg-black/55 backdrop-blur-3xs rounded-2xl flex items-center justify-center z-10">
                               <span className="bg-gray-700 text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-1 rounded-md shadow-xs">
                                 {t('restaurant.outOfStock', 'Out of Stock')}
+                              </span>
+                            </div>
+                          )}
+                          {!isItemOutOfStock && isItemTimeRestricted && !isRestClosed && (
+                            <div className="absolute inset-0 bg-black/60 backdrop-blur-3xs rounded-2xl flex flex-col items-center justify-center p-1 text-center z-10">
+                              <span className="bg-amber-600 text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md shadow-xs">
+                                Available from {formatTime12(item.availableFrom)}
                               </span>
                             </div>
                           )}
@@ -397,9 +426,13 @@ export default function RestaurantDetail() {
 
                           {/* Quantity control overlays */}
                           {isDisabled ? (
-                            <div className="absolute -bottom-3.5 bg-gray-100 border border-line-strong rounded-xl flex items-center justify-center w-[85%] h-9 shadow-md">
-                              <span className="text-[9px] font-black text-muted uppercase tracking-wider">
-                                {isRestClosed ? t('restaurant.closed', 'Closed') : t('restaurant.unavailable', 'Unavailable')}
+                            <div className="absolute -bottom-3.5 bg-gray-100 dark:bg-gray-800 border border-line-strong rounded-xl flex items-center justify-center w-[85%] h-9 shadow-md px-1">
+                              <span className="text-[9px] font-black text-muted uppercase tracking-wider truncate">
+                                {isRestClosed
+                                  ? t('restaurant.closed', 'Closed')
+                                  : isItemOutOfStock
+                                    ? t('restaurant.outOfStock', 'Out of Stock')
+                                    : 'Unavailable'}
                               </span>
                             </div>
                           ) : (

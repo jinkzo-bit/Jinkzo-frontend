@@ -15,6 +15,14 @@ import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/upl
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
 import ImageUploadInput from '../components/common/ImageUploadInput';
 import {
+  DEFAULT_OPENING_HOURS,
+  normalizeOpeningHours,
+  formatTime12,
+  formatTime24,
+  parseTimeToMinutes,
+  DAYS_OF_WEEK
+} from '../utils/timingUtils';
+import {
   useHistoryFilter,
   HistoryFilterToolbar,
   HistoryCalendarModal,
@@ -182,6 +190,16 @@ export default function AdminDashboard() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editProfileError, setEditProfileError] = useState('');
   const [editProfileSuccess, setEditProfileSuccess] = useState('');
+
+  // Admin Restaurant Opening Hours Modal State
+  const [showRestaurantHoursModal, setShowRestaurantHoursModal] = useState(false);
+  const [selectedRestaurantForHours, setSelectedRestaurantForHours] = useState(null);
+  const [adminOpeningHours, setAdminOpeningHours] = useState(DEFAULT_OPENING_HOURS);
+  const [isAdminHoursSaving, setIsAdminHoursSaving] = useState(false);
+  const [adminBulkOpenTime, setAdminBulkOpenTime] = useState('09:00');
+  const [adminBulkCloseTime, setAdminBulkCloseTime] = useState('23:00');
+  const [adminHoursSuccess, setAdminHoursSuccess] = useState('');
+  const [adminHoursError, setAdminHoursError] = useState('');
 
   // Payout Approvals
   const [withdrawals, setWithdrawals] = useState([]);
@@ -1932,6 +1950,15 @@ export default function AdminDashboard() {
                           {/* Block / Edit / Delete Controls */}
                           {u.role !== 'admin' && (
                             <div className="flex items-center gap-1.5">
+                              {u.role === 'restaurant' && (
+                                <button
+                                  onClick={() => handleOpenRestaurantHoursModal(u)}
+                                  className="p-2 rounded-xl border border-line-strong bg-base text-muted hover:text-primary hover:bg-violet-50 hover:border-violet-200 flex items-center justify-center transition-all cursor-pointer"
+                                  title="Edit Restaurant Opening Hours"
+                                >
+                                  <Clock className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                               <button
                                 onClick={() => { setEditUserForm({ _id: u._id, name: u.name, email: u.email, phone: u.phone || '' }); setEditUserError(''); setShowEditUserModal(true); }}
                                 className="p-2 rounded-xl border border-line-strong bg-base text-muted hover:text-primary hover:bg-violet-50 hover:border-violet-200 flex items-center justify-center transition-all cursor-pointer"
@@ -4676,6 +4703,170 @@ export default function AdminDashboard() {
                 className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50"
               >
                 {isDeletingBanner ? 'Deleting...' : 'Delete Banner'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SUPER ADMIN RESTAURANT OPENING HOURS MODAL ─── */}
+      {showRestaurantHoursModal && selectedRestaurantForHours && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-line rounded-3xl shadow-2xl w-full max-w-2xl p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div>
+                <h3 className="font-display font-extrabold text-base text-main">
+                  Edit Restaurant Timings
+                </h3>
+                <p className="text-xs text-muted font-medium">
+                  {selectedRestaurantForHours.name} ({selectedRestaurantForHours.restaurant?.name || selectedRestaurantForHours.email})
+                </p>
+              </div>
+              <button
+                onClick={() => setShowRestaurantHoursModal(false)}
+                className="p-1.5 rounded-xl border border-line-strong bg-base text-muted hover:text-main cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {adminHoursSuccess && (
+              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2">
+                <Check className="w-4 h-4" /> {adminHoursSuccess}
+              </div>
+            )}
+
+            {adminHoursError && (
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" /> {adminHoursError}
+              </div>
+            )}
+
+            {/* Quick Fill Bar */}
+            <div className="bg-base border border-line p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-main">Apply to All Days</span>
+                <span className="text-[10px] text-muted">Quickly fill all 7 days with the same hours</span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1 bg-surface border border-line rounded-lg px-2.5 py-1">
+                  <span className="text-[9px] font-bold text-muted uppercase">Open:</span>
+                  <input
+                    type="time"
+                    value={adminBulkOpenTime}
+                    onChange={(e) => setAdminBulkOpenTime(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-main outline-none"
+                  />
+                </div>
+                <div className="flex items-center gap-1 bg-surface border border-line rounded-lg px-2.5 py-1">
+                  <span className="text-[9px] font-bold text-muted uppercase">Close:</span>
+                  <input
+                    type="time"
+                    value={adminBulkCloseTime}
+                    onChange={(e) => setAdminBulkCloseTime(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-main outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAdminApplyAllDays}
+                  className="bg-violet-100 hover:bg-violet-200 text-primary text-xs font-extrabold px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                >
+                  Apply All
+                </button>
+              </div>
+            </div>
+
+            {/* Schedule List */}
+            <div className="flex flex-col divide-y divide-line">
+              {DAYS_OF_WEEK.map(day => {
+                const dayConfig = adminOpeningHours[day] || { enabled: true, open: '09:00', close: '23:00' };
+                const dayLabel = day.charAt(0).toUpperCase() + day.slice(1);
+                const isOvernight = parseTimeToMinutes(dayConfig.open) > parseTimeToMinutes(dayConfig.close);
+
+                return (
+                  <div key={day} className="py-2.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-[130px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdminOpeningHours(prev => ({
+                            ...prev,
+                            [day]: { ...dayConfig, enabled: !dayConfig.enabled }
+                          }));
+                        }}
+                        className={`text-[9px] font-black px-2.5 py-0.5 rounded-full border transition-all cursor-pointer ${
+                          dayConfig.enabled
+                            ? 'bg-green-50 border-green-200 text-green-700'
+                            : 'bg-red-50 border-red-200 text-red-600'
+                        }`}
+                      >
+                        {dayConfig.enabled ? 'ON' : 'OFF'}
+                      </button>
+                      <span className="font-bold text-xs text-main">{dayLabel}</span>
+                    </div>
+
+                    {dayConfig.enabled ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1 bg-base border border-line-strong rounded-lg px-2.5 py-1">
+                          <span className="text-[9px] font-bold text-muted uppercase">Open:</span>
+                          <input
+                            type="time"
+                            value={dayConfig.open || '09:00'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setAdminOpeningHours(prev => ({
+                                ...prev,
+                                [day]: { ...dayConfig, open: val }
+                              }));
+                            }}
+                            className="bg-transparent text-xs font-bold text-main outline-none"
+                          />
+                        </div>
+                        <span className="text-muted font-bold text-xs">→</span>
+                        <div className="flex items-center gap-1 bg-base border border-line-strong rounded-lg px-2.5 py-1">
+                          <span className="text-[9px] font-bold text-muted uppercase">Close:</span>
+                          <input
+                            type="time"
+                            value={dayConfig.close || '23:00'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setAdminOpeningHours(prev => ({
+                                ...prev,
+                                [day]: { ...dayConfig, close: val }
+                              }));
+                            }}
+                            className="bg-transparent text-xs font-bold text-main outline-none"
+                          />
+                        </div>
+                        <span className="text-[10px] font-semibold text-muted">
+                          ({formatTime12(dayConfig.open)} – {formatTime12(dayConfig.close)}{isOvernight ? ' 🌙 Overnight' : ''})
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-bold text-muted italic">Closed</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex gap-2 border-t border-line pt-3 mt-1">
+              <button
+                type="button"
+                onClick={() => setShowRestaurantHoursModal(false)}
+                className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isAdminHoursSaving}
+                onClick={handleSaveAdminRestaurantHours}
+                className="flex-1 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {isAdminHoursSaving ? 'Saving...' : 'Update Timings'}
               </button>
             </div>
           </div>

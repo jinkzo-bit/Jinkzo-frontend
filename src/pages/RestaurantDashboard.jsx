@@ -11,6 +11,14 @@ import NotificationCenter from '../components/NotificationCenter';
 import VegBadge from '../components/VegBadge';
 import ImageUploadInput from '../components/common/ImageUploadInput';
 import {
+  DEFAULT_OPENING_HOURS,
+  normalizeOpeningHours,
+  formatTime12,
+  formatTime24,
+  parseTimeToMinutes,
+  DAYS_OF_WEEK
+} from '../utils/timingUtils';
+import {
   useHistoryFilter,
   HistoryFilterToolbar,
   HistoryCalendarModal,
@@ -119,7 +127,7 @@ export default function RestaurantDashboard() {
   const [activeSubTab, setActiveSubTabState] = useState(tabFromUrl || 'orders');
 
   useEffect(() => {
-    if (tabFromUrl && ['orders', 'menu', 'offers', 'profile', 'kyc'].includes(tabFromUrl)) {
+    if (tabFromUrl && ['orders', 'menu', 'hours', 'offers', 'profile', 'kyc'].includes(tabFromUrl)) {
       setActiveSubTabState(tabFromUrl);
     }
   }, [tabFromUrl]);
@@ -146,8 +154,18 @@ export default function RestaurantDashboard() {
   const [itemDesc, setItemDesc] = useState('');
   const [itemIsVeg, setItemIsVeg] = useState(true);
   const [itemIsAvailable, setItemIsAvailable] = useState(true);
+  const [itemAvailabilityMode, setItemAvailabilityMode] = useState('restaurant_hours');
+  const [itemAvailableFrom, setItemAvailableFrom] = useState('09:00');
+  const [itemAvailableTo, setItemAvailableTo] = useState('23:00');
   const [itemModalError, setItemModalError] = useState('');
   const [isItemSaving, setIsItemSaving] = useState(false);
+
+  // Opening Hours Management
+  const [openingHours, setOpeningHours] = useState(DEFAULT_OPENING_HOURS);
+  const [isHoursSaving, setIsHoursSaving] = useState(false);
+  const [hoursSuccessMsg, setHoursSuccessMsg] = useState('');
+  const [bulkOpenTime, setBulkOpenTime] = useState('09:00');
+  const [bulkCloseTime, setBulkCloseTime] = useState('23:00');
   
   // Orders Management
   const [orders, setOrders] = useState([]);
@@ -328,10 +346,59 @@ export default function RestaurantDashboard() {
         setProfileVeg(data.isPureVeg || false);
         setProfileClosed(data.isClosed || false);
         setOffers(data.offers || []);
+        if (data.openingHours) {
+          setOpeningHours(normalizeOpeningHours(data.openingHours));
+        }
       }
     } catch (err) {
       console.error(err);
     }
+  };
+
+  // Opening Hours actions
+  const handleSaveOpeningHours = async (e) => {
+    if (e) e.preventDefault();
+    setIsHoursSaving(true);
+    setHoursSuccessMsg('');
+    try {
+      const res = await fetch(`${API_BASE}/restaurant-partner/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          openingHours
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setRestaurantProfile(updated);
+        setOpeningHours(normalizeOpeningHours(updated.openingHours));
+        setHoursSuccessMsg('Opening hours saved successfully!');
+        setTimeout(() => setHoursSuccessMsg(''), 3500);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.message || 'Failed to save opening hours');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Server error saving opening hours');
+    } finally {
+      setIsHoursSaving(false);
+    }
+  };
+
+  const handleApplyAllDays = () => {
+    const updated = {};
+    DAYS_OF_WEEK.forEach(day => {
+      updated[day] = {
+        enabled: true,
+        open: bulkOpenTime || '09:00',
+        close: bulkCloseTime || '23:00'
+      };
+    });
+    setOpeningHours(updated);
   };
 
   // Add / Edit Menu Item
@@ -347,6 +414,9 @@ export default function RestaurantDashboard() {
       setItemDesc(item.description || '');
       setItemIsVeg(item.isVeg !== false);
       setItemIsAvailable(item.isAvailable !== false);
+      setItemAvailabilityMode(item.availabilityMode || 'restaurant_hours');
+      setItemAvailableFrom(item.availableFrom || '09:00');
+      setItemAvailableTo(item.availableTo || '23:00');
     } else {
       setEditingItem(null);
       setItemName('');
@@ -357,6 +427,9 @@ export default function RestaurantDashboard() {
       setItemDesc('');
       setItemIsVeg(true);
       setItemIsAvailable(true);
+      setItemAvailabilityMode('restaurant_hours');
+      setItemAvailableFrom('09:00');
+      setItemAvailableTo('23:00');
     }
     setShowItemModal(true);
   };
@@ -392,7 +465,10 @@ export default function RestaurantDashboard() {
       image: finalImageUrl,
       description: itemDesc.trim(),
       isVeg: itemIsVeg,
-      isAvailable: itemIsAvailable
+      isAvailable: itemIsAvailable,
+      availabilityMode: itemAvailabilityMode,
+      availableFrom: itemAvailableFrom || '09:00',
+      availableTo: itemAvailableTo || '23:00'
     };
 
     try {
@@ -913,6 +989,7 @@ export default function RestaurantDashboard() {
           {[
             { id: 'orders', label: 'Order Pipeline', icon: ShoppingBag, badge: orders.filter(o => !['Delivered', 'Completed', 'Cancelled'].includes(o.status)).length },
             { id: 'menu', label: 'Menu & Food Items', icon: List, badge: menuItems.length },
+            { id: 'hours', label: 'Opening Hours', icon: Clock },
             { id: 'offers', label: 'Discounts & Offers', icon: Tag },
             { id: 'profile', label: 'Kitchen Profile', icon: Store },
             { id: 'kyc', label: 'KYC Document Verification', icon: Shield }
@@ -1134,8 +1211,8 @@ export default function RestaurantDashboard() {
                         <span className="text-[10px] text-primary font-bold">₹{item.price}</span>
                         <p className="text-[9px] text-muted line-clamp-2 mt-0.5 font-medium leading-tight">{item.description || 'No description provided.'}</p>
                         
-                        {/* Quick Availability Toggler */}
-                        <div className="flex items-center gap-2 mt-1.5">
+                        {/* Quick Availability Toggler & Timing badge */}
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           <button
                             onClick={async () => {
                               const newAvail = item.isAvailable === false ? true : false;
@@ -1164,6 +1241,12 @@ export default function RestaurantDashboard() {
                           >
                             {item.isAvailable !== false ? '🟢 Available' : '🔴 Out of Stock'}
                           </button>
+
+                          <span className="text-[8px] font-bold px-2 py-0.5 rounded-md bg-base border border-line text-muted">
+                            🕒 {item.availabilityMode === 'custom'
+                              ? `${formatTime12(item.availableFrom)} – ${formatTime12(item.availableTo)}`
+                              : 'All Restaurant Hours'}
+                          </span>
                         </div>
                       </div>
                       
@@ -1192,6 +1275,156 @@ export default function RestaurantDashboard() {
                   <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">Click "Add Food Item" above to fill your digital kitchen menu card!</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* OPENING HOURS TAB */}
+          {activeSubTab === 'hours' && (
+            <div className="flex flex-col gap-6 animate-fade-in">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-line pb-4">
+                <div>
+                  <h3 className="font-display font-extrabold text-lg text-main">Opening Hours</h3>
+                  <p className="text-xs text-muted font-medium mt-0.5">Configure your restaurant's operating schedule for each weekday</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveOpeningHours}
+                  disabled={isHoursSaving}
+                  className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 w-fit"
+                >
+                  <Clock className="w-4 h-4" /> {isHoursSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+
+              {hoursSuccessMsg && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2">
+                  <Check className="w-4 h-4" /> {hoursSuccessMsg}
+                </div>
+              )}
+
+              {/* Quick Apply to All Days Bar */}
+              <div className="bg-surface border border-line p-5 rounded-3xl shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-bold text-main">Quick Fill: Apply to All Days</span>
+                  <span className="text-[11px] text-muted font-medium">Set time once and copy to all 7 days</span>
+                </div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 bg-base border border-line-strong rounded-xl px-3 py-1.5">
+                    <span className="text-[10px] font-extrabold uppercase text-muted">Open:</span>
+                    <input
+                      type="time"
+                      value={bulkOpenTime}
+                      onChange={(e) => setBulkOpenTime(e.target.value)}
+                      className="bg-transparent text-xs font-bold text-main outline-none"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-base border border-line-strong rounded-xl px-3 py-1.5">
+                    <span className="text-[10px] font-extrabold uppercase text-muted">Close:</span>
+                    <input
+                      type="time"
+                      value={bulkCloseTime}
+                      onChange={(e) => setBulkCloseTime(e.target.value)}
+                      className="bg-transparent text-xs font-bold text-main outline-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleApplyAllDays}
+                    className="bg-violet-100 hover:bg-violet-200 text-primary text-xs font-extrabold px-3.5 py-2 rounded-xl transition-all cursor-pointer"
+                  >
+                    Apply to All Days
+                  </button>
+                </div>
+              </div>
+
+              {/* Weekly Schedule List */}
+              <div className="bg-surface border border-line rounded-3xl shadow-2xs p-6 flex flex-col gap-4">
+                <h4 className="font-display font-black text-sm text-main uppercase tracking-wider">Weekly Schedule</h4>
+                
+                <div className="flex flex-col divide-y divide-line">
+                  {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => {
+                    const dayConfig = openingHours[day] || { enabled: true, open: '09:00', close: '23:00' };
+                    const dayLabel = day.charAt(0).toUpperCase() + day.slice(1);
+                    const isOvernight = parseTimeToMinutes(dayConfig.open) > parseTimeToMinutes(dayConfig.close);
+
+                    return (
+                      <div key={day} className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-[140px]">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpeningHours(prev => ({
+                                ...prev,
+                                [day]: { ...dayConfig, enabled: !dayConfig.enabled }
+                              }));
+                            }}
+                            className={`text-[10px] font-black px-3 py-1 rounded-full border transition-all cursor-pointer ${
+                              dayConfig.enabled
+                                ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
+                                : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
+                            }`}
+                          >
+                            {dayConfig.enabled ? 'ON' : 'OFF — CLOSED'}
+                          </button>
+                          <span className="font-display font-extrabold text-sm text-main">{dayLabel}</span>
+                        </div>
+
+                        {dayConfig.enabled ? (
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <div className="flex items-center gap-1.5 bg-base border border-line-strong rounded-xl px-3 py-1.5">
+                              <span className="text-[10px] font-bold text-muted uppercase">Opening:</span>
+                              <input
+                                type="time"
+                                value={dayConfig.open || '09:00'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setOpeningHours(prev => ({
+                                    ...prev,
+                                    [day]: { ...dayConfig, open: val }
+                                  }));
+                                }}
+                                className="bg-transparent text-xs font-bold text-main outline-none"
+                              />
+                            </div>
+                            <span className="text-muted font-bold text-xs">→</span>
+                            <div className="flex items-center gap-1.5 bg-base border border-line-strong rounded-xl px-3 py-1.5">
+                              <span className="text-[10px] font-bold text-muted uppercase">Closing:</span>
+                              <input
+                                type="time"
+                                value={dayConfig.close || '23:00'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setOpeningHours(prev => ({
+                                    ...prev,
+                                    [day]: { ...dayConfig, close: val }
+                                  }));
+                                }}
+                                className="bg-transparent text-xs font-bold text-main outline-none"
+                              />
+                            </div>
+                            <span className="text-[11px] font-semibold text-muted">
+                              ({formatTime12(dayConfig.open)} – {formatTime12(dayConfig.close)}{isOvernight ? ' 🌙 Overnight' : ''})
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs font-bold text-muted italic">Closed all day</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="border-t border-line pt-4 mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveOpeningHours}
+                    disabled={isHoursSaving}
+                    className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-6 py-3 rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50"
+                  >
+                    {isHoursSaving ? 'Saving Changes...' : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1577,6 +1810,65 @@ export default function RestaurantDashboard() {
                 onUrlChange={setItemImage}
                 required
               />
+
+              {/* Item Availability Section */}
+              <div className="bg-base border border-line-strong p-3.5 rounded-2xl flex flex-col gap-2.5 mt-1">
+                <span className="text-[10px] uppercase font-extrabold tracking-wider text-muted">Item Availability Schedule</span>
+                
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-main">
+                    <input
+                      type="radio"
+                      name="availabilityMode"
+                      value="restaurant_hours"
+                      checked={itemAvailabilityMode === 'restaurant_hours'}
+                      onChange={() => setItemAvailabilityMode('restaurant_hours')}
+                      className="text-primary focus:ring-primary"
+                    />
+                    <span>All Restaurant Hours</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-main">
+                    <input
+                      type="radio"
+                      name="availabilityMode"
+                      value="custom"
+                      checked={itemAvailabilityMode === 'custom'}
+                      onChange={() => setItemAvailabilityMode('custom')}
+                      className="text-primary focus:ring-primary"
+                    />
+                    <span>Custom Time</span>
+                  </label>
+                </div>
+
+                {itemAvailabilityMode === 'custom' && (
+                  <div className="flex flex-col gap-2 pt-2 border-t border-line animate-fade-in">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] uppercase font-extrabold text-muted">Available From</label>
+                        <input
+                          type="time"
+                          value={itemAvailableFrom}
+                          onChange={(e) => setItemAvailableFrom(e.target.value)}
+                          className="bg-surface border border-gray-250 rounded-xl px-3 py-2 text-xs text-main font-bold outline-none"
+                        />
+                        <span className="text-[9px] text-muted">{formatTime12(itemAvailableFrom)}</span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] uppercase font-extrabold text-muted">Available To</label>
+                        <input
+                          type="time"
+                          value={itemAvailableTo}
+                          onChange={(e) => setItemAvailableTo(e.target.value)}
+                          className="bg-surface border border-gray-250 rounded-xl px-3 py-2 text-xs text-main font-bold outline-none"
+                        />
+                        <span className="text-[9px] text-muted">{formatTime12(itemAvailableTo)}</span>
+                      </div>
+                    </div>
+                    <span className="text-[9px] text-primary font-bold">Repeat: Every Day</span>
+                  </div>
+                )}
+              </div>
 
               <div className="flex flex-col gap-2 mt-1">
                 <div className="flex items-center gap-2">

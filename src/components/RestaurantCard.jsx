@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useFavoriteStore } from '../store/favoriteStore';
 import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
+import { checkRestaurantOpenStatus } from '../utils/timingUtils';
 
 export default function RestaurantCard({ restaurant, isLoading }) {
   const { t } = useTranslation();
@@ -39,8 +40,13 @@ export default function RestaurantCard({ restaurant, isLoading }) {
     priceRange = '$$',
     cuisineTags = [],
     isPureVeg = false,
-    isClosed = false
+    isClosed = false,
+    openingHours
   } = restaurant || {};
+
+  const timingStatus = checkRestaurantOpenStatus(openingHours, isClosed);
+  const isEffectivelyClosed = !timingStatus.isOpen;
+  const nextOpeningText = restaurant?.nextOpeningText || timingStatus.nextOpeningText || '';
 
   const numRating = typeof rating === 'number' ? rating : parseFloat(rating || 4.0) || 4.0;
   const tagsList = Array.isArray(cuisineTags) ? cuisineTags : [];
@@ -56,15 +62,20 @@ export default function RestaurantCard({ restaurant, isLoading }) {
   return (
     <Link
       to={`/restaurant/${_id}`}
-      className={`group bg-surface rounded-2xl overflow-hidden shadow-sm hover:shadow-md border border-line transition-all duration-300 transform hover:-translate-y-1 flex flex-col h-full ${isClosed ? 'opacity-80' : ''}`}
+      className={`group bg-surface rounded-2xl overflow-hidden shadow-sm hover:shadow-md border border-line transition-all duration-300 transform hover:-translate-y-1 flex flex-col h-full ${isEffectivelyClosed ? 'opacity-85' : ''}`}
     >
       {/* Cover Image Container */}
       <div className="relative aspect-video w-full overflow-hidden bg-gray-100">
-        {isClosed && (
-          <div className="absolute inset-0 bg-black/55 backdrop-blur-3xs flex items-center justify-center z-10 transition-all">
-            <span className="bg-red-600 text-white text-[10px] font-black uppercase tracking-widest px-3.5 py-1.5 rounded-full shadow-md">
-              {t('restaurants.hotelClosed', 'Hotel Temporarily Closed')}
+        {isEffectivelyClosed && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-3xs flex flex-col items-center justify-center p-3 text-center z-10 transition-all">
+            <span className="bg-red-600 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-md">
+              CLOSED
             </span>
+            {nextOpeningText && (
+              <span className="text-[11px] font-bold text-white mt-1.5 drop-shadow-sm">
+                {nextOpeningText}
+              </span>
+            )}
           </div>
         )}
         <img

@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { useAuthStore } from './authStore';
 
 import { API_BASE } from '../config/api';
+import { checkRestaurantOpenStatus, checkItemAvailability, normalizeMenuItem } from '../utils/timingUtils';
 
 // NC16 FIX: Wrap store with persist middleware so cart survives page refreshes.
 // Only cart data is persisted — toasts and platformSettings are always re-fetched fresh.
@@ -53,6 +54,20 @@ export const useCartStore = create(
 
   addItem: (item, restaurant) => {
     const { items, platformSettings } = get();
+
+    // 0. Check restaurant open status and item custom availability
+    const timingStatus = checkRestaurantOpenStatus(restaurant?.openingHours, restaurant?.isClosed);
+    if (!timingStatus.isOpen) {
+      get().showToast('This restaurant is currently closed.', 'error');
+      return { success: false, message: 'This restaurant is currently closed.' };
+    }
+
+    const normItem = normalizeMenuItem(item);
+    const itemStatus = checkItemAvailability(normItem, timingStatus.isOpen);
+    if (!itemStatus.isAvailable) {
+      get().showToast(itemStatus.message || 'This item is currently unavailable.', 'error');
+      return { success: false, message: itemStatus.message || 'This item is currently unavailable.' };
+    }
 
     // 1. Check food item limit
     const currentTotalItems = items.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
