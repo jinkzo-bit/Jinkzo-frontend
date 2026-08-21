@@ -27,7 +27,7 @@ const MAP_OPTIONS = {
   tilt: 0,
   isFractionalZoomEnabled: true,
   mapTypeId: 'roadmap',
-  mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID',
+  ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
 };
 
 // ── SVG marker builders ───────────────────────────────────────────────────────
@@ -171,6 +171,7 @@ export default function GoogleMapContainer({
 
   const mapRef = useRef(null);
   const containerRef = useRef(null);
+  const [mapInstance, setMapInstance] = useState(null);
   const trafficLayerRef = useRef(null);
   const isAutoFollowRef = useRef(true);
   const isUserInteractingRef = useRef(false);
@@ -212,6 +213,7 @@ export default function GoogleMapContainer({
   // ── Map load callback ──────────────────────────────────────────────────────
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
+    setMapInstance(map);
     if (window.google) {
       trafficLayerRef.current = new window.google.maps.TrafficLayer();
     }
@@ -223,6 +225,7 @@ export default function GoogleMapContainer({
       trafficLayerRef.current = null;
     }
     mapRef.current = null;
+    setMapInstance(null);
   }, []);
 
   // ── Picker mode ───────────────────────────────────────────────────────────
@@ -828,6 +831,7 @@ export default function GoogleMapContainer({
 
         {/* ── Map Rotation, Compass & 3D Tilt Controls ── */}
         <MapRotationControls
+          map={mapInstance}
           mapRef={mapRef}
           containerRef={containerRef}
           position="bottom-right"

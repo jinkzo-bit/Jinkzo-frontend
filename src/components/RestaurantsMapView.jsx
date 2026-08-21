@@ -22,7 +22,7 @@ const MAP_OPTIONS = {
   heading: 0,
   tilt: 0,
   isFractionalZoomEnabled: true,
-  mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID',
+  ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
   styles: [
     { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
     { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
@@ -33,6 +33,7 @@ const MAP_OPTIONS = {
 export default function RestaurantsMapView({ restaurants = [], userLocation = null }) {
   const mapRef = useRef(null);
   const containerRef = useRef(null);
+  const [mapInstance, setMapInstance] = useState(null);
   const clustererRef = useRef(null);
   const [restaurantMarkers, setRestaurantMarkers] = useState([]);
   const [activeInfoWindow, setActiveInfoWindow] = useState(null);
@@ -45,6 +46,7 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
   // ── Map load callback ──────────────────────────────────────────────────────
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
+    setMapInstance(map);
     // Initialize marker clusterer
     if (window.google && !clustererRef.current) {
       clustererRef.current = new MarkerClusterer({
@@ -103,6 +105,7 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
       clustererRef.current = null;
     }
     mapRef.current = null;
+    setMapInstance(null);
   }, []);
 
   // ── Handle user location updates ──────────────────────────────────────────
@@ -315,6 +318,7 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
 
       {/* ── Map Rotation, Compass & 3D Tilt Controls ── */}
       <MapRotationControls
+        map={mapInstance}
         mapRef={mapRef}
         containerRef={containerRef}
         position="top-right"

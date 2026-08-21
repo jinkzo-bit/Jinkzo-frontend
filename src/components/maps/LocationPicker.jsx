@@ -25,9 +25,9 @@ const MAP_OPTIONS = {
   rotateControl: false,
   heading: 0,
   tilt: 0,
-  mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID',
   isFractionalZoomEnabled: true,
   mapTypeId: 'roadmap',
+  ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
 };
 
 export default function LocationPicker({ 
@@ -37,6 +37,7 @@ export default function LocationPicker({
 }) {
   const mapRef = useRef(null);
   const mapContainerRef = useRef(null);
+  const [mapInstance, setMapInstance] = useState(null);
   const idleListenerRef = useRef(null);
   const geocodeDebounceRef = useRef(null);
   const skipNextGeocodeRef = useRef(false);
@@ -201,6 +202,7 @@ export default function LocationPicker({
 
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
+    setMapInstance(map);
 
     const listener = map.addListener('idle', async () => {
       const center = map.getCenter();
@@ -242,6 +244,7 @@ export default function LocationPicker({
       idleListenerRef.current = null;
     }
     mapRef.current = null;
+    setMapInstance(null);
   }, []);
 
   const handlePlaceSelect = useCallback((placeResult) => {
@@ -470,6 +473,7 @@ export default function LocationPicker({
             />
             {/* Map Rotation, Compass & 3D Tilt Controls */}
             <MapRotationControls
+              map={mapInstance}
               mapRef={mapRef}
               containerRef={mapContainerRef}
               position="top-right"

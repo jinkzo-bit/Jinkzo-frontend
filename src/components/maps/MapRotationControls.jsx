@@ -1,21 +1,26 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Compass, RotateCw, RotateCcw } from 'lucide-react';
+import { RotateCw, RotateCcw } from 'lucide-react';
 
 /**
  * MapRotationControls
  *
- * Provides Google Maps-style interactive map rotation, compass indicator with North-reset,
- * two-finger mobile rotation & tilt gestures, and 2D/3D pitch toggling.
+ * Connects directly to the active Google Maps instance for camera control:
+ * - Two-finger touch gestures for bearing rotation and tilt/pitch
+ * - Compass button showing current bearing with 1-tap North-up reset (heading=0, tilt=0)
+ * - 3D / 2D perspective toggle button (tilt=45° ↔ tilt=0°)
+ * - Optional -45° / +45° step rotation buttons for mouse/desktop interaction
  *
  * Props:
+ *   map: The google.maps.Map instance (state)
  *   mapRef: React ref object containing the google.maps.Map instance
- *   containerRef: React ref object containing the map DOM wrapper (for 2-finger touch gestures)
+ *   containerRef: React ref object for the outer map container (for 2-finger touch listeners)
  *   position: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left' (default: 'bottom-right')
  *   showStepButtons: boolean (show -45° / +45° rotate buttons, default: false)
  *   show3DTilt: boolean (show 2D/3D tilt toggle, default: true)
  *   className: string (custom styling overrides)
  */
 export default function MapRotationControls({
+  map,
   mapRef,
   containerRef,
   position = 'bottom-right',
@@ -27,6 +32,11 @@ export default function MapRotationControls({
   const [tilt, setTilt] = useState(0);
   const [isRotating, setIsRotating] = useState(false);
 
+  // Active map reference helper
+  const getActiveMap = useCallback(() => {
+    return map || mapRef?.current || null;
+  }, [map, mapRef]);
+
   // Touch gesture tracking refs
   const touchStateRef = useRef({
     startAngle: 0,
@@ -37,32 +47,66 @@ export default function MapRotationControls({
     isTwoFinger: false,
   });
 
-  // ── Sync heading & tilt from map instance ───────────────────────────────────
+  // ── Apply Camera Orientation to Google Maps ──────────────────────────────────
+  const applyCamera = useCallback((newHeading, newTilt) => {
+    const activeMap = getActiveMap();
+    const cleanHeading = Math.round(((newHeading % 360) + 360) % 360);
+    const cleanTilt = Math.max(0, Math.min(67.5, Math.round(newTilt)));
+
+    if (activeMap) {
+      // 1. Primary: moveCamera (Google Maps Camera API)
+      try {
+        if (typeof activeMap.moveCamera === 'function') {
+          activeMap.moveCamera({
+            heading: cleanHeading,
+            tilt: cleanTilt,
+          });
+        }
+      } catch (_) {}
+
+      // 2. Secondary: setHeading
+      try {
+        if (typeof activeMap.setHeading === 'function') {
+          activeMap.setHeading(cleanHeading);
+        }
+      } catch (_) {}
+
+      // 3. Secondary: setTilt
+      try {
+        if (typeof activeMap.setTilt === 'function') {
+          activeMap.setTilt(cleanTilt);
+        }
+      } catch (_) {}
+    }
+
+    setHeading(cleanHeading);
+    setTilt(cleanTilt);
+  }, [getActiveMap]);
+
+  // ── Sync camera heading & tilt from live map instance ───────────────────────
   useEffect(() => {
-    const map = mapRef?.current;
-    if (!map || !window.google) return;
+    const activeMap = getActiveMap();
+    if (!activeMap || !window.google) return;
 
-    // Read initial heading/tilt
-    if (typeof map.getHeading === 'function') {
-      setHeading(map.getHeading() || 0);
-    }
-    if (typeof map.getTilt === 'function') {
-      setTilt(map.getTilt() || 0);
-    }
-
-    // Listen for heading changes from user gestures or API calls
-    const headingListener = map.addListener('heading_changed', () => {
-      if (typeof map.getHeading === 'function') {
-        setHeading(map.getHeading() || 0);
+    const updateCameraState = () => {
+      if (typeof activeMap.getHeading === 'function') {
+        const h = activeMap.getHeading();
+        if (typeof h === 'number' && !isNaN(h)) {
+          setHeading(Math.round(h));
+        }
       }
-    });
-
-    // Listen for tilt changes
-    const tiltListener = map.addListener('tilt_changed', () => {
-      if (typeof map.getTilt === 'function') {
-        setTilt(map.getTilt() || 0);
+      if (typeof activeMap.getTilt === 'function') {
+        const t = activeMap.getTilt();
+        if (typeof t === 'number' && !isNaN(t)) {
+          setTilt(Math.round(t));
+        }
       }
-    });
+    };
+
+    updateCameraState();
+
+    const headingListener = activeMap.addListener('heading_changed', updateCameraState);
+    const tiltListener = activeMap.addListener('tilt_changed', updateCameraState);
 
     return () => {
       if (window.google?.maps?.event) {
@@ -70,7 +114,7 @@ export default function MapRotationControls({
         window.google.maps.event.removeListener(tiltListener);
       }
     };
-  }, [mapRef]);
+  }, [map, mapRef?.current, getActiveMap]);
 
   // ── 2-Finger Touch Gesture Handling for Rotation & Tilt ──────────────────────
   useEffect(() => {
@@ -91,9 +135,13 @@ export default function MapRotationControls({
 
     const handleTouchStart = (e) => {
       if (e.touches.length === 2) {
-        const map = mapRef?.current;
-        const currentHeading = (map && typeof map.getHeading === 'function') ? (map.getHeading() || 0) : heading;
-        const currentTilt = (map && typeof map.getTilt === 'function') ? (map.getTilt() || 0) : tilt;
+        const activeMap = getActiveMap();
+        const currentHeading = (activeMap && typeof activeMap.getHeading === 'function')
+          ? (activeMap.getHeading() || 0)
+          : heading;
+        const currentTilt = (activeMap && typeof activeMap.getTilt === 'function')
+          ? (activeMap.getTilt() || 0)
+          : tilt;
 
         touchStateRef.current = {
           startAngle: getTouchAngle(e.touches[0], e.touches[1]),
@@ -112,36 +160,24 @@ export default function MapRotationControls({
 
     const handleTouchMove = (e) => {
       if (e.touches.length === 2 && touchStateRef.current.isTwoFinger) {
-        const map = mapRef?.current;
-        if (!map) return;
-
         const currentAngle = getTouchAngle(e.touches[0], e.touches[1]);
         const angleDelta = currentAngle - touchStateRef.current.startAngle;
 
-        // Calculate new bearing/heading
         let newHeading = (touchStateRef.current.startHeading - angleDelta) % 360;
         if (newHeading < 0) newHeading += 360;
         newHeading = Math.round(newHeading);
 
-        if (typeof map.setHeading === 'function') {
-          map.setHeading(newHeading);
-          setHeading(newHeading);
-        }
-
-        // Two-finger vertical drag for pitch / tilt
         const currentMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         const dy = currentMidY - touchStateRef.current.startMidY;
         const distChange = Math.abs(getTouchDistance(e.touches[0], e.touches[1]) - touchStateRef.current.startDistance);
 
-        // If pinch is small and vertical drag is significant, adjust tilt
-        if (distChange < 40 && Math.abs(dy) > 15) {
-          const tiltDelta = -dy * 0.4;
-          const newTilt = Math.max(0, Math.min(67.5, Math.round(touchStateRef.current.startTilt + tiltDelta)));
-          if (typeof map.setTilt === 'function') {
-            map.setTilt(newTilt);
-            setTilt(newTilt);
-          }
+        let newTilt = touchStateRef.current.startTilt;
+        if (distChange < 50 && Math.abs(dy) > 12) {
+          const tiltDelta = -dy * 0.35;
+          newTilt = Math.max(0, Math.min(67.5, Math.round(touchStateRef.current.startTilt + tiltDelta)));
         }
+
+        applyCamera(newHeading, newTilt);
       }
     };
 
@@ -161,52 +197,26 @@ export default function MapRotationControls({
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [containerRef, mapRef, heading, tilt]);
+  }, [containerRef, getActiveMap, applyCamera, heading, tilt]);
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
   // Reset to North (0° heading and 0° tilt)
   const resetNorth = useCallback(() => {
-    const map = mapRef?.current;
-    if (!map) return;
-
-    if (typeof map.setHeading === 'function') {
-      map.setHeading(0);
-    }
-    if (typeof map.setTilt === 'function') {
-      map.setTilt(0);
-    }
-    setHeading(0);
-    setTilt(0);
-  }, [mapRef]);
+    applyCamera(0, 0);
+  }, [applyCamera]);
 
   // Step rotation by delta degrees
   const rotateBy = useCallback((delta) => {
-    const map = mapRef?.current;
-    if (!map) return;
-
-    const currentHeading = typeof map.getHeading === 'function' ? (map.getHeading() || 0) : heading;
-    let newHeading = (currentHeading + delta) % 360;
-    if (newHeading < 0) newHeading += 360;
-    newHeading = Math.round(newHeading);
-
-    if (typeof map.setHeading === 'function') {
-      map.setHeading(newHeading);
-    }
-    setHeading(newHeading);
-  }, [mapRef, heading]);
+    const newHeading = (heading + delta + 360) % 360;
+    applyCamera(newHeading, tilt);
+  }, [applyCamera, heading, tilt]);
 
   // Toggle 3D tilt (0° flat ↔ 45° 3D perspective)
   const toggle3DTilt = useCallback(() => {
-    const map = mapRef?.current;
-    if (!map) return;
-
     const targetTilt = tilt > 0 ? 0 : 45;
-    if (typeof map.setTilt === 'function') {
-      map.setTilt(targetTilt);
-    }
-    setTilt(targetTilt);
-  }, [mapRef, tilt]);
+    applyCamera(heading, targetTilt);
+  }, [applyCamera, heading, tilt]);
 
   // Position CSS mapping
   const positionClasses = {
@@ -298,6 +308,26 @@ export default function MapRotationControls({
           </span>
         </button>
       )}
+
+      {/* ── Rotate Button (45° step) ── */}
+      <button
+        type="button"
+        onClick={() => rotateBy(45)}
+        title="Rotate map 45° clockwise"
+        aria-label="Rotate map 45 degrees clockwise"
+        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/95 dark:bg-[#141926]/95 backdrop-blur-md border border-gray-200/90 dark:border-white/10 shadow-md hover:shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer ${
+          'text-gray-700 dark:text-gray-200'
+        }`}
+        onMouseDown={(e) => {
+          // Optional press-and-hold continuous rotation
+          const interval = setInterval(() => rotateBy(5), 100);
+          const stop = () => clearInterval(interval);
+          e.currentTarget.addEventListener('mouseup', stop, { once: true });
+          e.currentTarget.addEventListener('mouseleave', stop, { once: true });
+        }}
+      >
+        <RotateCw className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }

@@ -22,8 +22,8 @@ const MAP_OPTIONS = {
   rotateControl: false,
   heading: 0,
   tilt: 0,
-  mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID',
   isFractionalZoomEnabled: true,
+  ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
   styles: [
     { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
     { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
@@ -102,6 +102,7 @@ export default function GoogleMap({
 
   const mapRef = useRef(null);
   const containerRef = useRef(null);
+  const [mapInstance, setMapInstance] = useState(null);
   const [markerPos, setMarkerPos] = useState(null);
   const [geoLocating, setGeoLocating] = useState(false);
 
@@ -152,10 +153,12 @@ export default function GoogleMap({
   // ── Map load callback ──────────────────────────────────────────────────────
   const onLoad = useCallback((map) => {
     mapRef.current = map;
+    setMapInstance(map);
   }, []);
 
   const onUnmount = useCallback(() => {
     mapRef.current = null;
+    setMapInstance(null);
   }, []);
 
   // ── Marker drag end ────────────────────────────────────────────────────────
@@ -251,6 +254,7 @@ export default function GoogleMap({
 
       {/* Floating Map Rotation, Compass & 3D Tilt Controls */}
       <MapRotationControls
+        map={mapInstance}
         mapRef={mapRef}
         containerRef={containerRef}
         position="top-right"
