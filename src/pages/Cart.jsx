@@ -279,13 +279,13 @@ export default function Cart() {
               {foodHotelChangeFee > 0 && (
                 <div className="flex items-center justify-between">
                   <span>Food Hotel Change Fee</span>
-                  <span className="text-main font-bold">+₹{foodHotelChangeFee}</span>
+                  <span className="text-main font-bold">₹{foodHotelChangeFee}</span>
                 </div>
               )}
               {foodExtraItemCharge > 0 && (
                 <div className="flex items-center justify-between">
                   <span>Food Extra Item Charge</span>
-                  <span className="text-main font-bold">+₹{foodExtraItemCharge}</span>
+                  <span className="text-main font-bold">₹{foodExtraItemCharge}</span>
                 </div>
               )}
               <div className="flex items-center justify-between border-t border-b border-line py-1.5 font-semibold">

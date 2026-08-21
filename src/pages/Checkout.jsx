@@ -473,18 +473,18 @@ export default function Checkout() {
               {foodHotelChangeFee > 0 && (
                 <div className="flex items-center justify-between">
                   <span>Food Hotel Change Fee</span>
-                  <span className="text-main font-bold">+₹{foodHotelChangeFee}</span>
+                  <span className="text-main font-bold">₹{foodHotelChangeFee}</span>
                 </div>
               )}
               {foodExtraItemCharge > 0 && (
                 <div className="flex items-center justify-between">
                   <span>Food Extra Item Charge</span>
-                  <span className="text-main font-bold">+₹{foodExtraItemCharge}</span>
+                  <span className="text-main font-bold">₹{foodExtraItemCharge}</span>
                 </div>
               )}
               <div className="flex items-center justify-between border-t border-b border-line py-1.5 font-semibold">
-                <span>{t('cart.deliveryFee', 'Delivery Fee')}</span>
-                <span className="text-main font-bold">{routeInfo ? `₹${deliveryFee}` : 'Calculating...'}</span>
+                <span>{t('cart.deliveryFee', 'Total Food Delivery Fee')}</span>
+                <span className="text-main font-bold">{routeInfo ? `₹${deliveryFee}` : `₹${deliveryFee}`}</span>
               </div>
               {activeSurcharges && activeSurcharges.map((sc, idx) => (
                 <div key={idx} className="flex items-center justify-between font-semibold">
@@ -504,16 +504,10 @@ export default function Checkout() {
                   <span>-₹{promoDiscount}</span>
                 </div>
               )}
-              <div className="flex justify-between items-center text-lg text-primary font-bold mt-1.5">
+              <div className="flex justify-between items-center text-lg text-primary font-bold mt-1.5 pt-2 border-t border-line">
                 <span>{t('checkout.totalPayable', 'Total to Pay')}</span>
-                <span>{routeInfo ? `₹${total}` : 'Calculating...'}</span>
+                <span>₹{total}</span>
               </div>
-
-            </div>
-
-            <div className="flex items-center justify-between text-sm font-bold text-main">
-              <span>{t('checkout.totalPayable', 'Total Payable')}</span>
-              <span className="text-primary text-base">{routeInfo ? `₹${total.toFixed(2)}` : 'Calculating...'}</span>
             </div>
 
             {routeInfo && routeInfo.distanceKm > (platformSettings?.globalServiceRadiusKm || 5) && !errorMsg && (
