@@ -14,6 +14,11 @@ import {
   List,
   Tag,
   Shield,
+  Bike,
+  DollarSign,
+  Clock,
+  ShieldCheck,
+  Pencil,
 } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useTranslation } from '../store/languageStore';
@@ -43,6 +48,12 @@ export default function BottomNav() {
     location.pathname.startsWith('/restaurant-dashboard') ||
     location.pathname.startsWith('/my-restaurant') ||
     location.pathname.startsWith('/restaurant-partner');
+
+  // Check if current page is the Delivery Partner context
+  const isDeliveryPartner =
+    location.pathname.startsWith('/delivery-dashboard') ||
+    location.pathname.startsWith('/my-deliveries') ||
+    location.pathname.startsWith('/delivery-partner');
 
   // Active check for customer routes
   const isActive = (path) => {
@@ -110,6 +121,50 @@ export default function BottomNav() {
               >
                 <Icon className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
                 <span className="text-[9px] sm:text-[10px] font-medium leading-tight text-center truncate max-w-[65px] sm:max-w-none">
+                  {tab.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  DELIVERY PARTNER NAVIGATION (ONLY SHOWN INSIDE DELIVERY PARTNER PAGE)
+  // ══════════════════════════════════════════════════════════════════════════
+  if (isDeliveryPartner) {
+    const searchParams = new URLSearchParams(location.search);
+    const currentTab = searchParams.get('tab') || 'pool';
+
+    const deliveryTabs = [
+      { id: 'pool', label: 'Order Pool', icon: ShoppingBag },
+      { id: 'orders', label: 'Claimed Runs', icon: Bike },
+      { id: 'wallet', label: 'Earnings', icon: DollarSign },
+      { id: 'history', label: 'Runs Log', icon: Clock },
+      { id: 'kyc', label: 'KYC Verify', icon: ShieldCheck },
+      { id: 'profile', label: 'My Profile', icon: Pencil },
+    ];
+
+    return (
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0E121C]/95 backdrop-blur-md border-t border-gray-200/80 dark:border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_25px_rgba(0,0,0,0.5)] px-1 sm:px-6 py-2 transition-colors duration-300">
+        <div className="max-w-md mx-auto flex items-center justify-between relative">
+          {deliveryTabs.map((tab) => {
+            const Icon = tab.icon;
+            const active = currentTab === tab.id;
+            return (
+              <Link
+                key={tab.id}
+                to={`/delivery-dashboard?tab=${tab.id}`}
+                className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all duration-200 ${
+                  active
+                    ? 'text-[#7C3AED] dark:text-[#A78BFA] font-bold'
+                    : 'text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200'
+                }`}
+              >
+                <Icon className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
+                <span className="text-[8.5px] sm:text-[10px] font-medium leading-tight text-center truncate max-w-[55px] sm:max-w-none">
                   {tab.label}
                 </span>
               </Link>

@@ -1,7 +1,7 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, ChevronRight, AlertCircle, ShoppingBag, Eye, LogOut, Send, FileText, Star, MessageSquare, Heart, Phone, Pencil, AlertTriangle, Camera } from 'lucide-react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, ChevronRight, AlertCircle, ShoppingBag, Eye, LogOut, Send, FileText, Star, MessageSquare, Heart, Phone, Pencil, AlertTriangle, Camera, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import InteractiveMap from '../components/InteractiveMap';
@@ -118,7 +118,20 @@ export default function DeliveryDashboard() {
     finally { setIsDeletingAccount(false); }
   };
 
-  const [activeSubTab, setActiveSubTab] = useState('pool'); // 'pool', 'orders', 'wallet', 'history', 'kyc'
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
+  const [activeSubTab, setActiveSubTabState] = useState(tabFromUrl || 'pool');
+
+  useEffect(() => {
+    if (tabFromUrl && ['pool', 'orders', 'wallet', 'history', 'kyc', 'profile'].includes(tabFromUrl)) {
+      setActiveSubTabState(tabFromUrl);
+    }
+  }, [tabFromUrl]);
+
+  const setActiveSubTab = (tab) => {
+    setActiveSubTabState(tab);
+    setSearchParams({ tab }, { replace: true });
+  };
   
   // Rider specific profile & availability
   const [riderProfile, setRiderProfile] = useState(null);
@@ -720,23 +733,33 @@ export default function DeliveryDashboard() {
       {/* Rider Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-5">
         <div className="flex items-center gap-3">
+          {/* Back button returning to Rider Home page */}
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            title="Back to Rider Home"
+            className="w-11 h-11 rounded-2xl border border-line bg-surface hover:bg-base text-main transition-colors flex items-center justify-center cursor-pointer shadow-3xs flex-shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5 text-main" />
+          </button>
+
           {user?.profileImage || riderProfile?.profileImage ? (
             <img
               src={getImageUrl(user?.profileImage || riderProfile?.profileImage, 'avatar')}
               alt="Profile"
               onError={(e) => handleImageError(e, 'avatar')}
-              className="w-12 h-12 rounded-2xl object-cover border border-line shadow-xs"
+              className="w-12 h-12 rounded-2xl object-cover border border-line shadow-xs flex-shrink-0"
             />
           ) : (
-            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
+            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100 flex-shrink-0">
               <Bike className="w-8 h-8" />
             </div>
           )}
           <div>
             <h1 className="font-display font-black text-2xl text-main leading-tight">
-              {riderProfile?.name || 'Rider Dashboard'}
+              {riderProfile?.name || user?.name || 'Rider Dashboard'}
             </h1>
-            <p className="text-xs text-muted font-semibold mt-0.5">Claim active runs, manage wallet and trace milestones</p>
+            <p className="text-xs text-muted font-semibold mt-0.5">Delivery Partner</p>
           </div>
         </div>
 
@@ -842,11 +865,11 @@ export default function DeliveryDashboard() {
       {/* Tabs */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
         
-        {/* Left Side: Navigation subtabs */}
-        <div className="lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex flex-col gap-1">
+        {/* Left Side: Navigation sidebar on desktop (mobile uses fixed bottom navigation bar) */}
+        <div className="hidden lg:flex lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex-col gap-1.5">
           {[
             { id: 'pool', label: 'Order Requests Pool', icon: ShoppingBag, badge: availableOrders.length },
-            { id: 'orders', label: 'Claimed runs', icon: Bike, badge: activeOrders.length },
+            { id: 'orders', label: 'Claimed Runs', icon: Bike, badge: activeOrders.length },
             { id: 'wallet', label: 'Earnings & Withdrawals', icon: DollarSign },
             { id: 'history', label: 'Runs History Log', icon: Clock },
             { id: 'kyc', label: 'KYC Partner Verification', icon: ShieldCheck },
