@@ -14,6 +14,13 @@ import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
 import ImageUploadInput from '../components/common/ImageUploadInput';
+import {
+  useHistoryFilter,
+  HistoryFilterToolbar,
+  HistoryCalendarModal,
+  ClearHistoryModal,
+  HistoryEmptyState
+} from '../components/history';
 
 export default function AdminDashboard() {
   const { user, token } = useAuthStore();
@@ -142,12 +149,27 @@ export default function AdminDashboard() {
 
   // Orders Pipeline sub-tabs and Date filtering
   const [orderPipelineTab, setOrderPipelineTab] = useState('new'); // 'new', 'ongoing', 'completed'
-  const [dateFilterType, setDateFilterType] = useState('all'); // 'all', 'today', 'yesterday', '7days', '30days', 'custom'
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [appliedDateFilter, setAppliedDateFilter] = useState({ type: 'all', start: '', end: '' });
-  const [calendarViewDate, setCalendarViewDate] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; });
+
+  // Global History Filter for Admin Order History
+  const historyFilter = useHistoryFilter(allOrders, {
+    dateKey: 'createdAt',
+    typeKey: 'orderType',
+    statusKey: 'status'
+  });
+  const [showOrderCalendarModal, setShowOrderCalendarModal] = useState(false);
+  const [showClearAllOrdersModal, setShowClearAllOrdersModal] = useState(false);
+
+  const handleClearAllOrderHistory = async () => {
+    const res = await fetch(`${API_BASE}/admin/orders/history`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to clear order history');
+    }
+    setAllOrders(prev => prev.filter(o => !['Delivered', 'Completed', 'Rejected', 'Cancelled', 'Rider_Rejected'].includes(o.status)));
+  };
 
   // Category Management
   const [categoriesList, setCategoriesList] = useState([]);
@@ -1206,45 +1228,11 @@ export default function AdminDashboard() {
     );
   };
 
-  const getOrdersByDate = (ordersList) => {
-    let list = Array.isArray(ordersList) ? [...ordersList] : [];
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
-    if (appliedDateFilter.type === 'today') {
-      list = list.filter(o => {
-        const t = new Date(o.createdAt).getTime();
-        return t >= todayStart;
-      });
-    } else if (appliedDateFilter.type === 'yesterday') {
-      const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
-      const yesterdayEnd = todayStart - 1;
-      list = list.filter(o => {
-        const t = new Date(o.createdAt).getTime();
-        return t >= yesterdayStart && t <= yesterdayEnd;
-      });
-    } else if (appliedDateFilter.type === '7days') {
-      const start = todayStart - 7 * 24 * 60 * 60 * 1000;
-      list = list.filter(o => new Date(o.createdAt).getTime() >= start);
-    } else if (appliedDateFilter.type === '30days') {
-      const start = todayStart - 30 * 24 * 60 * 60 * 1000;
-      list = list.filter(o => new Date(o.createdAt).getTime() >= start);
-    } else if (appliedDateFilter.type === 'custom') {
-      const start = appliedDateFilter.start ? new Date(appliedDateFilter.start).setHours(0,0,0,0) : 0;
-      const end = appliedDateFilter.end ? new Date(appliedDateFilter.end).setHours(23,59,59,999) : Infinity;
-      list = list.filter(o => {
-        const t = new Date(o.createdAt).getTime();
-        return t >= start && t <= end;
-      });
-    }
-    return list;
-  };
-
-  const dateFilteredOrders = getOrdersByDate(allOrders);
+  const dateFilteredOrders = historyFilter.filteredItems;
 
   const newOrdersCount = dateFilteredOrders.filter(o => o.status === 'Placed').length;
   const ongoingOrdersCount = dateFilteredOrders.filter(o => ['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status)).length;
-  const completedOrdersCount = dateFilteredOrders.filter(o => ['Delivered', 'Completed', 'Rejected', 'Cancelled'].includes(o.status)).length;
+  const completedOrdersCount = dateFilteredOrders.filter(o => ['Delivered', 'Completed', 'Rejected', 'Cancelled', 'Rider_Rejected'].includes(o.status)).length;
 
   const filteredOrders = dateFilteredOrders.filter(o => {
     if (orderPipelineTab === 'new') return o.status === 'Placed';
@@ -1969,120 +1957,32 @@ export default function AdminDashboard() {
             <div className="flex flex-col gap-4 animate-scale-up">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-2">
                 <h3 className="font-display font-extrabold text-base text-main">All Platform Orders History</h3>
-
-                {/* Date range picker selector */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowDatePicker(prev => !prev)}
-                    className="bg-surface border border-line-strong px-4 py-2.5 rounded-xl text-xs font-bold text-muted hover:bg-base flex items-center gap-2 cursor-pointer shadow-3xs"
-                  >
-                    <Calendar className="w-4 h-4 text-primary" />
-                    <span>{getDateLabel()}</span>
-                  </button>
-
-                  {showDatePicker && (
-                    <div className="absolute right-0 mt-2 z-50 bg-surface border border-gray-155 rounded-3xl shadow-xl p-5 flex flex-col gap-4 w-[290px] sm:w-[480px]">
-                      <div className="flex justify-between items-center border-b border-line pb-2">
-                        <span className="text-[11px] font-black text-gray-750 uppercase tracking-wider">Select Order Date Range</span>
-                        <button onClick={() => setShowDatePicker(false)} className="text-muted hover:text-muted cursor-pointer">
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-                        {/* Preset Toggles */}
-                        <div className="flex flex-col gap-1.5">
-                          {[
-                            { type: 'all', label: 'All Time' },
-                            { type: 'today', label: 'Today' },
-                            { type: 'yesterday', label: 'Yesterday' },
-                            { type: '7days', label: 'Last 7 Days' },
-                            { type: '30days', label: 'Last 30 Days' },
-                            { type: 'custom', label: 'Custom Date Range' }
-                          ].map(opt => (
-                            <label key={opt.type} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-base cursor-pointer text-xs font-bold text-muted">
-                              <input
-                                type="radio"
-                                name="dateFilter"
-                                checked={dateFilterType === opt.type}
-                                onChange={() => setDateFilterType(opt.type)}
-                                className="w-4 h-4 accent-primary cursor-pointer"
-                              />
-                              <span>{opt.label}</span>
-                            </label>
-                          ))}
-                        </div>
-
-                        {/* Calendar & Custom dates */}
-                        <div className="flex flex-col gap-3">
-                          {renderCalendar((dateStr) => {
-                            setDateFilterType('custom');
-                            setCustomStartDate(dateStr);
-                            setCustomEndDate(dateStr);
-                            setAppliedDateFilter({ type: 'custom', start: dateStr, end: dateStr });
-                            setShowDatePicker(false);
-                          })}
-
-                          {dateFilterType === 'custom' && (
-                            <div className="flex gap-2">
-                              <div className="flex flex-col gap-0.5 flex-grow">
-                                <span className="text-[9px] uppercase font-extrabold text-muted pl-1">From</span>
-                                <input
-                                  type="date"
-                                  value={customStartDate}
-                                  onChange={(e) => setCustomStartDate(e.target.value)}
-                                  className="bg-base border border-gray-250 rounded-xl px-2 py-1 text-xs text-main font-bold outline-none"
-                                />
-                              </div>
-                              <div className="flex flex-col gap-0.5 flex-grow">
-                                <span className="text-[9px] uppercase font-extrabold text-muted pl-1">To</span>
-                                <input
-                                  type="date"
-                                  value={customEndDate}
-                                  onChange={(e) => setCustomEndDate(e.target.value)}
-                                  className="bg-base border border-gray-250 rounded-xl px-2 py-1 text-xs text-main font-bold outline-none"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex justify-end gap-2 border-t border-line pt-3 mt-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDateFilterType(appliedDateFilter.type);
-                            setCustomStartDate(appliedDateFilter.start);
-                            setCustomEndDate(appliedDateFilter.end);
-                            setShowDatePicker(false);
-                          }}
-                          className="px-4 py-2 border border-gray-250 text-muted rounded-xl text-xs font-bold hover:bg-base cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAppliedDateFilter({
-                              type: dateFilterType,
-                              start: customStartDate,
-                              end: customEndDate
-                            });
-                            setShowDatePicker(false);
-                          }}
-                          className="px-5 py-2 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary-hover shadow-xs cursor-pointer"
-                        >
-                          Apply
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
               </div>
 
+              {/* Global History Filter Toolbar */}
+              <HistoryFilterToolbar
+                dateLabel={historyFilter.dateLabel}
+                isFiltered={historyFilter.isFiltered}
+                onOpenCalendar={() => setShowOrderCalendarModal(true)}
+                onReset={historyFilter.resetFilters}
+                onClearHistory={() => setShowClearAllOrdersModal(true)}
+                clearHistoryLabel="Clear All Order History"
+                availableYears={historyFilter.availableYears}
+                selectedYear={historyFilter.dateFilter.type === 'year' ? historyFilter.dateFilter.year : null}
+                onSelectYear={(yr) => (yr ? historyFilter.selectYear(yr) : historyFilter.resetFilters())}
+                typeFilter={historyFilter.typeFilter}
+                typeOptions={[
+                  { id: 'all', label: 'All Orders & Rides' },
+                  { id: 'food', label: 'Food Deliveries' },
+                  { id: 'ride', label: 'Bike Rides' },
+                ]}
+                onTypeChange={historyFilter.setTypeFilter}
+                totalCount={allOrders.length}
+                filteredCount={historyFilter.filteredItems.length}
+              />
+
               {/* Order pipeline sub-tabs */}
-              <div className="flex gap-2 border-b border-line pb-3">
+              <div className="flex gap-2 border-b border-line pb-3 overflow-x-auto no-scrollbar scroll-smooth">
                 {[
                   { id: 'new', label: 'New Orders', count: newOrdersCount, color: 'bg-violet-500' },
                   { id: 'ongoing', label: 'Ongoing Orders', count: ongoingOrdersCount, color: 'bg-primary' },
@@ -2091,7 +1991,7 @@ export default function AdminDashboard() {
                   <button
                     key={tab.id}
                     onClick={() => setOrderPipelineTab(tab.id)}
-                    className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border ${
+                    className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border flex-shrink-0 whitespace-nowrap ${
                       orderPipelineTab === tab.id
                         ? 'bg-surface border-primary text-primary shadow-xs'
                         : 'bg-base border-line text-muted hover:bg-gray-100'
@@ -2399,11 +2299,12 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               ) : (
-                <div className="bg-surface rounded-3xl p-16 text-center border border-line flex flex-col items-center justify-center gap-3">
-                  <ShoppingBag className="w-12 h-12 text-gray-300" />
-                  <h4 className="font-display font-extrabold text-sm text-main">No orders in this pipeline</h4>
-                  <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">Orders matching the selected date filters and status pipeline will render here.</p>
-                </div>
+                <HistoryEmptyState
+                  dateLabel={historyFilter.dateLabel}
+                  onReset={historyFilter.resetFilters}
+                  message="No orders in this pipeline"
+                  description="Orders matching the selected date filters and status pipeline will render here."
+                />
               )}
             </div>
           </div>
@@ -4191,6 +4092,25 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* ── ADMIN ORDER HISTORY CALENDAR MODAL ─── */}
+      <HistoryCalendarModal
+        isOpen={showOrderCalendarModal}
+        onClose={() => setShowOrderCalendarModal(false)}
+        dateFilter={historyFilter.dateFilter}
+        onApply={historyFilter.setDateFilter}
+        availableYears={historyFilter.availableYears}
+        datesWithRecords={historyFilter.datesWithRecords}
+      />
+
+      {/* ── CLEAR ALL ORDER HISTORY MODAL ─── */}
+      <ClearHistoryModal
+        isOpen={showClearAllOrdersModal}
+        onClose={() => setShowClearAllOrdersModal(false)}
+        onConfirm={handleClearAllOrderHistory}
+        title="Clear All Order History?"
+        description="This will permanently remove all completed and cancelled orders from the admin history view. Active ongoing orders, claimed runs, and lifetime platform accounting will not be affected."
+        confirmButtonText="Yes, Clear All"
+      />
     </div>
   );
 }

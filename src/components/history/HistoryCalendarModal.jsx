@@ -269,23 +269,55 @@ export default function HistoryCalendarModal({
           {/* Interactive Calendar / Month / Year Box */}
           <div className="border border-line rounded-2xl p-4 bg-base/30 space-y-4">
             {/* View Mode & Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               {calendarView === 'days' && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCalendarView('months')}
-                    className="font-display font-extrabold text-sm text-main hover:text-primary transition-colors cursor-pointer flex items-center gap-1 bg-surface px-2.5 py-1 rounded-xl border border-line"
-                  >
-                    <span>{MONTH_NAMES[calDisplayMonth]}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCalendarView('years')}
-                    className="font-display font-extrabold text-sm text-primary hover:underline cursor-pointer bg-surface px-2.5 py-1 rounded-xl border border-line"
-                  >
-                    <span>{calDisplayYear}</span>
-                  </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Month Dropdown */}
+                  <div className="relative">
+                    <select
+                      value={calDisplayMonth}
+                      onChange={(e) => {
+                        const m = Number(e.target.value);
+                        setCalDisplayMonth(m);
+                        setDraftMonth(m);
+                        setDraftType(prev => (prev === 'all' || prev === 'today' || prev === 'yesterday' ? 'month' : prev));
+                      }}
+                      className="appearance-none bg-surface border border-line hover:border-primary/40 text-main text-xs font-extrabold py-1.5 pl-3 pr-7 rounded-xl outline-none transition-colors cursor-pointer"
+                      title="Select Month"
+                    >
+                      {MONTH_NAMES.map((mName, idx) => (
+                        <option key={mName} value={idx}>{mName}</option>
+                      ))}
+                    </select>
+                    <ChevronRight className="w-3 h-3 text-muted absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+                  </div>
+
+                  {/* Year Dropdown */}
+                  <div className="relative">
+                    <select
+                      value={calDisplayYear}
+                      onChange={(e) => {
+                        const yr = Number(e.target.value);
+                        setCalDisplayYear(yr);
+                        setDraftYear(yr);
+                        setDraftType(prev => (prev === 'all' || prev === 'today' || prev === 'yesterday' ? 'year' : prev));
+                      }}
+                      className="appearance-none bg-surface border border-line hover:border-primary/40 text-primary font-black text-xs py-1.5 pl-3 pr-7 rounded-xl outline-none transition-colors cursor-pointer"
+                      title="Select Year"
+                    >
+                      {Array.from(new Set([
+                        ...availableYears,
+                        new Date().getFullYear() - 2,
+                        new Date().getFullYear() - 1,
+                        new Date().getFullYear(),
+                        new Date().getFullYear() + 1,
+                        new Date().getFullYear() + 2
+                      ])).sort((a, b) => b - a).map((yr) => (
+                        <option key={yr} value={yr}>{yr}</option>
+                      ))}
+                    </select>
+                    <ChevronRight className="w-3 h-3 text-muted absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+                  </div>
                 </div>
               )}
 
