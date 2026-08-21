@@ -374,6 +374,7 @@ export const useCartStore = create(
       subtotal,
       baseFoodDeliveryFee,
       foodHotelChangeFee: foodHotelChangeFeeTotal,
+      foodHotelChangeFeeRate,
       foodExtraItemCharge: foodExtraItemChargeTotal,
       deliveryFee,
       selectedHotelsCount,

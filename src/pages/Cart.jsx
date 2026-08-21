@@ -24,7 +24,9 @@ export default function Cart() {
     subtotal,
     baseFoodDeliveryFee,
     foodHotelChangeFee,
+    foodHotelChangeFeeRate,
     foodExtraItemCharge,
+    selectedHotelsCount,
     deliveryFee,
     platformFee,
     total,
@@ -273,35 +275,53 @@ export default function Cart() {
 
             <div className="flex flex-col gap-2.5 text-xs text-muted font-medium">
               <div className="flex items-center justify-between">
-                <span>{t('cart.itemSubtotal', 'Food Items Subtotal')}</span>
+                <span>{t('cart.itemSubtotal', 'Subtotal')}</span>
                 <span className="text-main font-bold">₹{subtotal}</span>
               </div>
-              {foodHotelChangeFee > 0 && (
+              {selectedHotelsCount >= 1 && (
                 <div className="flex items-center justify-between">
-                  <span>Food Hotel Change Fee</span>
-                  <span className="text-main font-bold">₹{foodHotelChangeFee}</span>
+                  <span>First Hotel Delivery Fee</span>
+                  <span className="text-main font-bold">+₹{baseFoodDeliveryFee}</span>
                 </div>
               )}
+              {selectedHotelsCount >= 2 && (
+                <div className="flex items-center justify-between">
+                  <span>Second Hotel Delivery Fee</span>
+                  <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
+                </div>
+              )}
+              {selectedHotelsCount >= 3 && (
+                <div className="flex items-center justify-between">
+                  <span>Third Hotel Delivery Fee</span>
+                  <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
+                </div>
+              )}
+              {selectedHotelsCount > 3 && Array.from({ length: selectedHotelsCount - 3 }).map((_, idx) => (
+                <div key={idx} className="flex items-center justify-between">
+                  <span>Hotel {idx + 4} Delivery Fee</span>
+                  <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
+                </div>
+              ))}
               {foodExtraItemCharge > 0 && (
                 <div className="flex items-center justify-between">
                   <span>Food Extra Item Charge</span>
-                  <span className="text-main font-bold">₹{foodExtraItemCharge}</span>
+                  <span className="text-main font-bold">+₹{foodExtraItemCharge}</span>
                 </div>
               )}
               <div className="flex items-center justify-between border-t border-b border-line py-1.5 font-semibold">
-                <span>{t('cart.deliveryFee', 'Total Food Delivery Fee')}</span>
+                <span>Total Food Delivery Fees</span>
                 <span className="text-main font-bold">₹{deliveryFee}</span>
               </div>
               {activeSurcharges && activeSurcharges.map((sc, idx) => (
                 <div key={idx} className="flex items-center justify-between font-semibold">
                   <span>{sc.name}</span>
-                  <span className="text-main font-bold">₹{sc.fee}</span>
+                  <span className="text-main font-bold">+₹{sc.fee}</span>
                 </div>
               ))}
               {platformFee > 0 && (
                 <div className="flex items-center justify-between font-medium">
                   <span>{t('cart.platformFee', 'Platform Fee')}</span>
-                  <span className="text-main font-bold">₹{platformFee}</span>
+                  <span className="text-main font-bold">+₹{platformFee}</span>
                 </div>
               )}
               {promoDiscount > 0 && (
@@ -313,8 +333,8 @@ export default function Cart() {
             </div>
 
             <div className="border-t border-line pt-3 flex items-center justify-between text-sm font-bold text-main">
-              <span>{t('cart.grandTotal', 'Grand Total')}</span>
-              <span className="text-primary text-base">₹{total.toFixed(2)}</span>
+              <span>{t('cart.grandTotal', 'Total')}</span>
+              <span className="text-primary text-base">₹{total}</span>
             </div>
 
             {/* Checkout Action Button */}
