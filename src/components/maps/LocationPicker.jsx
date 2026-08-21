@@ -27,7 +27,11 @@ const MAP_OPTIONS = {
   tilt: 0,
   isFractionalZoomEnabled: true,
   mapTypeId: 'roadmap',
-  ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
+  // Vector Map ID — required for real heading/tilt rotation
+  mapId: import.meta.env.VITE_GOOGLE_MAP_ID,
+  // Vector-only: enable heading and tilt camera interaction
+  headingInteractionEnabled: true,
+  tiltInteractionEnabled: true,
 };
 
 export default function LocationPicker({ 
@@ -203,6 +207,18 @@ export default function LocationPicker({
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
+    // Temporary Vector diagnostics — remove once VECTOR is confirmed
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Jinkzo LocationPicker] Rendering Type:', map.getRenderingType?.() ?? 'N/A');
+      console.log('[Jinkzo LocationPicker] Heading:', map.getHeading?.() ?? 'N/A');
+      console.log('[Jinkzo LocationPicker] Tilt:', map.getTilt?.() ?? 'N/A');
+      if (typeof map.getHeadingInteractionEnabled === 'function') {
+        console.log('[Jinkzo LocationPicker] Heading Interaction:', map.getHeadingInteractionEnabled());
+      }
+      if (typeof map.getTiltInteractionEnabled === 'function') {
+        console.log('[Jinkzo LocationPicker] Tilt Interaction:', map.getTiltInteractionEnabled());
+      }
+    }
 
     const listener = map.addListener('idle', async () => {
       const center = map.getCenter();

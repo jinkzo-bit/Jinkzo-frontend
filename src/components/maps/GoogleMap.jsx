@@ -23,30 +23,13 @@ const MAP_OPTIONS = {
   heading: 0,
   tilt: 0,
   isFractionalZoomEnabled: true,
-  ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
-  styles: [
-    { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
-    { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
-    { elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9e8f7' }] },
-    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
-    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e0e0e0' }] },
-    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dadada' }] },
-    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#c6c6c6' }] },
-    { featureType: 'road.arterial', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-    { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#e8f5e9' }] },
-    { featureType: 'park', elementType: 'geometry', stylers: [{ color: '#e5f2e5' }] },
-    { featureType: 'park', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
-    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#eeeeee' }] },
-    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#e5f2e5' }] },
-    { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#f2f2f2' }] },
-    { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-    { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },
-    { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
-  ],
+  // Vector Map ID — required for real heading/tilt rotation
+  mapId: import.meta.env.VITE_GOOGLE_MAP_ID,
+  // Vector-only: enable heading and tilt camera interaction
+  headingInteractionEnabled: true,
+  tiltInteractionEnabled: true,
+  // NOTE: styles[] removed — incompatible with Vector/mapId rendering
+  // Use Cloud Console Map Styling for Vector maps instead
 };
 
 // ── Picker SVG icon (Swiggy/Zomato orange pin) ────────────────────────────────
@@ -154,6 +137,18 @@ export default function GoogleMap({
   const onLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
+    // Temporary Vector diagnostics — remove once VECTOR is confirmed
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Jinkzo GoogleMap] Rendering Type:', map.getRenderingType?.() ?? 'N/A');
+      console.log('[Jinkzo GoogleMap] Heading:', map.getHeading?.() ?? 'N/A');
+      console.log('[Jinkzo GoogleMap] Tilt:', map.getTilt?.() ?? 'N/A');
+      if (typeof map.getHeadingInteractionEnabled === 'function') {
+        console.log('[Jinkzo GoogleMap] Heading Interaction:', map.getHeadingInteractionEnabled());
+      }
+      if (typeof map.getTiltInteractionEnabled === 'function') {
+        console.log('[Jinkzo GoogleMap] Tilt Interaction:', map.getTiltInteractionEnabled());
+      }
+    }
   }, []);
 
   const onUnmount = useCallback(() => {
