@@ -4,6 +4,7 @@ import { useJsApiLoader, GoogleMap, Marker, Polyline, InfoWindow } from '@react-
 import { io } from 'socket.io-client';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
 import { API_BASE } from '../config/api';
+import MapRotationControls from './maps/MapRotationControls';
 
 // ── Default fallback coords (Nandikotkur, AP) ───────────────────────────────────
 const DEFAULT_CENTER = { lat: 15.8562, lng: 78.2700 };
@@ -21,7 +22,10 @@ const MAP_OPTIONS = {
   fullscreenControl: false,
   clickableIcons: false,
   gestureHandling: 'greedy',
-  rotateControl: true,
+  rotateControl: false,
+  heading: 0,
+  tilt: 0,
+  isFractionalZoomEnabled: true,
   mapTypeId: 'roadmap',
   mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID',
 };
@@ -166,6 +170,7 @@ export default function GoogleMapContainer({
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const mapRef = useRef(null);
+  const containerRef = useRef(null);
   const trafficLayerRef = useRef(null);
   const isAutoFollowRef = useRef(true);
   const isUserInteractingRef = useRef(false);
@@ -556,7 +561,7 @@ export default function GoogleMapContainer({
 
   return (
     <div className="w-full h-full relative rounded-2xl overflow-hidden border border-line shadow-inner flex flex-col justify-between">
-      <div className="w-full h-full relative flex-1">
+      <div ref={containerRef} className="w-full h-full relative flex-1">
         <GoogleMap
           mapContainerStyle={MAP_CONTAINER_STYLE}
           center={mapCenter}
@@ -820,6 +825,16 @@ export default function GoogleMapContainer({
             </button>
           </div>
         )}
+
+        {/* ── Map Rotation, Compass & 3D Tilt Controls ── */}
+        <MapRotationControls
+          mapRef={mapRef}
+          containerRef={containerRef}
+          position="bottom-right"
+          showStepButtons={false}
+          show3DTilt={true}
+          className={mode === 'tracking' ? '!bottom-[195px] !right-3' : '!bottom-16 !right-3'}
+        />
 
         {/* ── Top-Left: Live GPS Status Badge ── */}
         {mode === 'tracking' && (

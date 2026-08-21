@@ -6,6 +6,7 @@ import { parseAddressComponents } from '../../utils/parseAddressComponents';
 import { isValidCoordinates } from '../../utils/coordinates';
 import { API_BASE } from '../../config/api';
 import PlacesAutocomplete from './PlacesAutocomplete';
+import MapRotationControls from './MapRotationControls';
 
 const INDIA_CENTER_LAT = 20.5937;
 const INDIA_CENTER_LNG = 78.9629;
@@ -21,6 +22,11 @@ const MAP_OPTIONS = {
   fullscreenControl: false,
   clickableIcons: false,
   gestureHandling: 'greedy',
+  rotateControl: false,
+  heading: 0,
+  tilt: 0,
+  mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID',
+  isFractionalZoomEnabled: true,
   mapTypeId: 'roadmap',
 };
 
@@ -30,6 +36,7 @@ export default function LocationPicker({
   buttonText = 'SAVE ADDRESS'
 }) {
   const mapRef = useRef(null);
+  const mapContainerRef = useRef(null);
   const idleListenerRef = useRef(null);
   const geocodeDebounceRef = useRef(null);
   const skipNextGeocodeRef = useRef(false);
@@ -436,6 +443,7 @@ export default function LocationPicker({
 
       {/* Map Section */}
       <div
+        ref={mapContainerRef}
         className="relative flex-shrink-0 mx-4 rounded-2xl overflow-hidden border border-white/10"
         style={{ height: '260px' }}
       >
@@ -451,14 +459,24 @@ export default function LocationPicker({
             )}
           </div>
         ) : (
-          <GoogleMap
-            mapContainerStyle={MAP_CONTAINER_STYLE}
-            center={mapCenter}
-            zoom={mapZoom}
-            options={MAP_OPTIONS}
-            onLoad={onMapLoad}
-            onUnmount={onMapUnmount}
-          />
+          <>
+            <GoogleMap
+              mapContainerStyle={MAP_CONTAINER_STYLE}
+              center={mapCenter}
+              zoom={mapZoom}
+              options={MAP_OPTIONS}
+              onLoad={onMapLoad}
+              onUnmount={onMapUnmount}
+            />
+            {/* Map Rotation, Compass & 3D Tilt Controls */}
+            <MapRotationControls
+              mapRef={mapRef}
+              containerRef={mapContainerRef}
+              position="top-right"
+              showStepButtons={false}
+              show3DTilt={true}
+            />
+          </>
         )}
 
         {/* Fixed Center Pin */}

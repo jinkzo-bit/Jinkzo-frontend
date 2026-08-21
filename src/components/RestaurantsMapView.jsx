@@ -4,6 +4,7 @@ import { Loader, MapPin } from 'lucide-react';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
 import { API_BASE } from '../config/api';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
+import MapRotationControls from './maps/MapRotationControls';
 
 const DEFAULT_CENTER = { lat: 15.8601, lng: 78.2618 };
 
@@ -17,6 +18,11 @@ const MAP_OPTIONS = {
   fullscreenControl: false,
   clickableIcons: false,
   gestureHandling: 'greedy',
+  rotateControl: false,
+  heading: 0,
+  tilt: 0,
+  isFractionalZoomEnabled: true,
+  mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID',
   styles: [
     { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
     { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
@@ -26,6 +32,7 @@ const MAP_OPTIONS = {
 
 export default function RestaurantsMapView({ restaurants = [], userLocation = null }) {
   const mapRef = useRef(null);
+  const containerRef = useRef(null);
   const clustererRef = useRef(null);
   const [restaurantMarkers, setRestaurantMarkers] = useState([]);
   const [activeInfoWindow, setActiveInfoWindow] = useState(null);
@@ -250,7 +257,7 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
   }
 
   return (
-    <div className="relative w-full rounded-2xl overflow-hidden border border-line shadow-xs bg-surface" style={{ height: '550px' }}>
+    <div ref={containerRef} className="relative w-full rounded-2xl overflow-hidden border border-line shadow-xs bg-surface" style={{ height: '550px' }}>
       <GoogleMap
         mapContainerStyle={MAP_CONTAINER_STYLE}
         center={mapCenter}
@@ -305,6 +312,15 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
           </Marker>
         ))}
       </GoogleMap>
+
+      {/* ── Map Rotation, Compass & 3D Tilt Controls ── */}
+      <MapRotationControls
+        mapRef={mapRef}
+        containerRef={containerRef}
+        position="top-right"
+        showStepButtons={true}
+        show3DTilt={true}
+      />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GoogleMap as GoogleMapComponent, Marker, useJsApiLoader } from '@react-google-maps/api';
 import { MapPin, Loader, AlertTriangle } from 'lucide-react';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMapsLoader';
+import MapRotationControls from './MapRotationControls';
 
 // ── Default location: Nandikotkur, Andhra Pradesh ────────────────────────────
 const DEFAULT_LAT = 15.8567;
@@ -18,6 +19,11 @@ const MAP_OPTIONS = {
   fullscreenControl: false,
   clickableIcons: false,
   gestureHandling: 'greedy',
+  rotateControl: false,
+  heading: 0,
+  tilt: 0,
+  mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID',
+  isFractionalZoomEnabled: true,
   styles: [
     { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
     { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
@@ -95,6 +101,7 @@ export default function GoogleMap({
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const mapRef = useRef(null);
+  const containerRef = useRef(null);
   const [markerPos, setMarkerPos] = useState(null);
   const [geoLocating, setGeoLocating] = useState(false);
 
@@ -222,7 +229,7 @@ export default function GoogleMap({
   const center = markerPos || DEFAULT_CENTER;
 
   return (
-    <div className={`w-full h-full relative ${className}`}>
+    <div ref={containerRef} className={`w-full h-full relative ${className}`}>
       <GoogleMapComponent
         mapContainerStyle={CONTAINER_STYLE}
         center={center}
@@ -241,6 +248,15 @@ export default function GoogleMap({
           />
         )}
       </GoogleMapComponent>
+
+      {/* Floating Map Rotation, Compass & 3D Tilt Controls */}
+      <MapRotationControls
+        mapRef={mapRef}
+        containerRef={containerRef}
+        position="top-right"
+        showStepButtons={false}
+        show3DTilt={true}
+      />
 
       {/* Custom Zoom Controls (Swiggy/Zomato style) */}
       <div style={{ position: 'absolute', bottom: 16, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 5 }}>
