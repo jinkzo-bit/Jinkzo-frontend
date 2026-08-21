@@ -9,6 +9,13 @@ import RiderFeedbackModal from '../components/RiderFeedbackModal';
 import LocationPickerModal from '../components/LocationPickerModal';
 import LanguageModal from '../components/LanguageModal';
 import { formatAppDate } from '../utils/dateUtils';
+import {
+  useHistoryFilter,
+  HistoryFilterToolbar,
+  HistoryCalendarModal,
+  ClearHistoryModal,
+  HistoryEmptyState
+} from '../components/history';
 
 export default function Profile() {
   const { user, token, logout, deleteAddress, editAddress, addAddress } = useAuthStore();
@@ -19,6 +26,38 @@ export default function Profile() {
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showLanguageModal, setShowLanguageModal] = useState(false);
+
+  // Global History Filter
+  const historyFilter = useHistoryFilter(orders, {
+    dateKey: 'createdAt',
+    typeKey: 'orderType',
+    statusKey: 'status',
+  });
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
+
+  const handleClearHistory = async () => {
+    const typeParam = historyFilter.typeFilter;
+    const res = await fetch(`${API_BASE}/orders/history?type=${typeParam}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to clear history');
+    }
+    setOrders((prev) => {
+      if (typeParam === 'ride') {
+        return prev.filter(o => o.orderType !== 'ride' || !['Delivered', 'Completed', 'Rejected', 'Cancelled', 'Rider_Rejected'].includes(o.status));
+      } else if (typeParam === 'food') {
+        return prev.filter(o => o.orderType === 'ride' || !['Delivered', 'Completed', 'Rejected', 'Cancelled', 'Rider_Rejected'].includes(o.status));
+      } else {
+        return prev.filter(o => !['Delivered', 'Completed', 'Rejected', 'Cancelled', 'Rider_Rejected'].includes(o.status));
+      }
+    });
+  };
 
   // Rider review modal states
   const [selectedReviewOrder, setSelectedReviewOrder] = useState(null);
@@ -450,19 +489,72 @@ export default function Profile() {
 
         {/* Right 2 cols: Order History */}
         <div className="md:col-span-2 flex flex-col gap-5">
-          <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2">
-            <ClipboardList className="w-5.5 h-5.5 text-primary" />
-            <span>{t('profile.orderHistory', 'Order History')}</span>
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2">
+              <ClipboardList className="w-5.5 h-5.5 text-primary" />
+              <span>{t('profile.orderHistory', 'Order History')}</span>
+            </h3>
+          </div>
+
+          {/* Global History Filter Toolbar */}
+          {orders.length > 0 && (
+            <HistoryFilterToolbar
+              dateLabel={historyFilter.dateLabel}
+              isFiltered={historyFilter.isFiltered}
+              onOpenCalendar={() => setShowCalendarModal(true)}
+              onReset={historyFilter.resetFilters}
+              onClearHistory={() => setShowClearModal(true)}
+              clearHistoryLabel={
+                historyFilter.typeFilter === 'ride'
+                  ? 'Clear All Ride History'
+                  : historyFilter.typeFilter === 'food'
+                  ? 'Clear All Order History'
+                  : 'Clear All History'
+              }
+              availableYears={historyFilter.availableYears}
+              selectedYear={historyFilter.dateFilter.type === 'year' ? historyFilter.dateFilter.year : null}
+              onSelectYear={(yr) => (yr ? historyFilter.selectYear(yr) : historyFilter.resetFilters())}
+              typeFilter={historyFilter.typeFilter}
+              typeOptions={[
+                { id: 'all', label: 'All Orders & Rides' },
+                { id: 'food', label: 'Food Orders' },
+                { id: 'ride', label: 'Bike Rides' },
+              ]}
+              onTypeChange={historyFilter.setTypeFilter}
+              statusFilter={historyFilter.statusFilter}
+              statusOptions={[
+                { id: 'all', label: 'All Statuses' },
+                { id: 'completed', label: 'Delivered / Completed' },
+                { id: 'ongoing', label: 'In-Progress / Ongoing' },
+                { id: 'cancelled', label: 'Cancelled / Rejected' },
+              ]}
+              onStatusChange={historyFilter.setStatusFilter}
+              totalCount={orders.length}
+              filteredCount={historyFilter.filteredItems.length}
+            />
+          )}
 
           {isLoading ? (
             <div className="flex flex-col gap-4">
               <div className="h-24 skeleton-3xl" />
               <div className="h-24 skeleton-3xl" />
             </div>
-          ) : orders.length > 0 ? (
+          ) : orders.length === 0 ? (
+            <div className="bg-surface rounded-3xl p-10 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
+              <ShoppingBag className="w-10 h-10 text-gray-300" />
+              <h4 className="font-display font-extrabold text-sm text-main">No past orders yet</h4>
+              <p className="text-xs text-muted max-w-xs leading-relaxed">
+                When you make purchases or book rides, your receipt catalog and histories will populate right here.
+              </p>
+            </div>
+          ) : historyFilter.filteredItems.length === 0 ? (
+            <HistoryEmptyState
+              dateLabel={historyFilter.dateLabel}
+              onReset={historyFilter.resetFilters}
+            />
+          ) : (
             <div className="flex flex-col gap-4">
-              {orders.map((order) => (
+              {historyFilter.filteredItems.map((order) => (
                 <div key={order._id} className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4">
                   {/* Row 1: Restaurant/Order Summary */}
                   <div className="flex justify-between items-start border-b border-line pb-3 gap-4">
@@ -575,14 +667,6 @@ export default function Profile() {
                   </div>
                 </div>
               ))}
-            </div>
-          ) : (
-            <div className="bg-surface rounded-3xl p-10 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
-              <ShoppingBag className="w-10 h-10 text-gray-300" />
-              <h4 className="font-display font-extrabold text-sm text-main">No past orders yet</h4>
-              <p className="text-xs text-muted max-w-xs leading-relaxed">
-                When you make purchases, your receipt catalog and order histories will populate right here.
-              </p>
             </div>
           )}
         </div>
@@ -708,6 +792,32 @@ export default function Profile() {
       <LanguageModal
         isOpen={showLanguageModal}
         onClose={() => setShowLanguageModal(false)}
+      />
+
+      {/* ── GLOBAL HISTORY CALENDAR MODAL ─── */}
+      <HistoryCalendarModal
+        isOpen={showCalendarModal}
+        onClose={() => setShowCalendarModal(false)}
+        dateFilter={historyFilter.dateFilter}
+        onApply={historyFilter.setDateFilter}
+        availableYears={historyFilter.availableYears}
+        datesWithRecords={historyFilter.datesWithRecords}
+      />
+
+      {/* ── CLEAR HISTORY CONFIRMATION MODAL ─── */}
+      <ClearHistoryModal
+        isOpen={showClearModal}
+        onClose={() => setShowClearModal(false)}
+        onConfirm={handleClearHistory}
+        title={
+          historyFilter.typeFilter === 'ride'
+            ? 'Clear All Ride History?'
+            : historyFilter.typeFilter === 'food'
+            ? 'Clear All Order History?'
+            : 'Clear All History?'
+        }
+        description="This will permanently remove your history from this history view. Active orders, rides, and account data will not be affected."
+        confirmButtonText="Yes, Clear All"
       />
     </div>
   );

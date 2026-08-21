@@ -8,6 +8,13 @@ import InteractiveMap from '../components/InteractiveMap';
 import { io } from 'socket.io-client';
 import NotificationCenter from '../components/NotificationCenter';
 import { formatAppDateOnly, formatAppTimeOnly } from '../utils/dateUtils';
+import {
+  useHistoryFilter,
+  HistoryFilterToolbar,
+  HistoryCalendarModal,
+  ClearHistoryModal,
+  HistoryEmptyState
+} from '../components/history';
 
 export default function DeliveryDashboard() {
   const { user, token, logout } = useAuthStore();
@@ -147,6 +154,27 @@ export default function DeliveryDashboard() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedOrderRestaurantAddress, setSelectedOrderRestaurantAddress] = useState('');
   const [isOrdersLoading, setIsOrdersLoading] = useState(true);
+
+  // Global History Filter for Delivery Partner Runs
+  const historyFilter = useHistoryFilter(historyOrders, {
+    dateKey: 'createdAt',
+    typeKey: 'orderType',
+    statusKey: 'status'
+  });
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [showClearRunsModal, setShowClearRunsModal] = useState(false);
+
+  const handleClearRunsHistory = async () => {
+    const res = await fetch(`${API_BASE}/delivery-partner/orders/history`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || 'Failed to clear runs history');
+    }
+    setHistoryOrders([]);
+  };
 
   // Status progression action triggers
   const [updatingId, setUpdatingId] = useState(null);
@@ -1423,10 +1451,48 @@ export default function DeliveryDashboard() {
           {/* RUNS HISTORY TAB */}
           {activeSubTab === 'history' && (
             <div className="flex flex-col gap-4">
-              <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Completed Runs History</h3>
-              {historyOrders.length > 0 ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-2">
+                <h3 className="font-display font-extrabold text-base text-main">Completed Runs History</h3>
+              </div>
+
+              {/* Global History Filter Toolbar */}
+              <HistoryFilterToolbar
+                dateLabel={historyFilter.dateLabel}
+                isFiltered={historyFilter.isFiltered}
+                onOpenCalendar={() => setShowCalendarModal(true)}
+                onReset={historyFilter.resetFilters}
+                onClearHistory={() => setShowClearRunsModal(true)}
+                clearHistoryLabel="Clear All Runs History"
+                availableYears={historyFilter.availableYears}
+                selectedYear={historyFilter.dateFilter.type === 'year' ? historyFilter.dateFilter.year : null}
+                onSelectYear={(yr) => (yr ? historyFilter.selectYear(yr) : historyFilter.resetFilters())}
+                typeFilter={historyFilter.typeFilter}
+                typeOptions={[
+                  { id: 'all', label: 'All Runs' },
+                  { id: 'food', label: 'Food Deliveries' },
+                  { id: 'ride', label: 'Ride Captain Runs' },
+                ]}
+                onTypeChange={historyFilter.setTypeFilter}
+                totalCount={historyOrders.length}
+                filteredCount={historyFilter.filteredItems.length}
+              />
+
+              {historyOrders.length === 0 ? (
+                <div className="bg-surface rounded-3xl p-16 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
+                  <Clock className="w-12 h-12 text-gray-300" />
+                  <h4 className="font-display font-extrabold text-sm text-main">No runs completed</h4>
+                  <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">Your complete dispatch log sheet will compile right here once dispatches succeed.</p>
+                </div>
+              ) : historyFilter.filteredItems.length === 0 ? (
+                <HistoryEmptyState
+                  dateLabel={historyFilter.dateLabel}
+                  onReset={historyFilter.resetFilters}
+                  message="No runs found"
+                  description="There are no completed runs matching your active date or type filter."
+                />
+              ) : (
                 <div className="flex flex-col gap-3">
-                  {historyOrders.map(order => (
+                  {historyFilter.filteredItems.map(order => (
                     <div key={order._id} className="bg-surface border border-line p-4 rounded-3xl shadow-2xs flex flex-col gap-3 text-xs">
                       <div className="flex justify-between items-center">
                         <div>
@@ -1475,12 +1541,6 @@ export default function DeliveryDashboard() {
                       )}
                     </div>
                   ))}
-                </div>
-              ) : (
-                <div className="bg-surface rounded-3xl p-16 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
-                  <Clock className="w-12 h-12 text-gray-300" />
-                  <h4 className="font-display font-extrabold text-sm text-main">No runs completed</h4>
-                  <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">Your complete dispatch log sheet will compile right here once dispatches succeed.</p>
                 </div>
               )}
             </div>
@@ -1756,6 +1816,25 @@ export default function DeliveryDashboard() {
         </div>
       )}
 
+      {/* ── GLOBAL HISTORY CALENDAR MODAL ─── */}
+      <HistoryCalendarModal
+        isOpen={showCalendarModal}
+        onClose={() => setShowCalendarModal(false)}
+        dateFilter={historyFilter.dateFilter}
+        onApply={historyFilter.setDateFilter}
+        availableYears={historyFilter.availableYears}
+        datesWithRecords={historyFilter.datesWithRecords}
+      />
+
+      {/* ── CLEAR HISTORY CONFIRMATION MODAL ─── */}
+      <ClearHistoryModal
+        isOpen={showClearRunsModal}
+        onClose={() => setShowClearRunsModal(false)}
+        onConfirm={handleClearRunsHistory}
+        title="Clear All Runs History?"
+        description="This will remove completed delivery and ride runs from your runs log sheet. Active claimed runs, total earnings, and wallet balances will not be affected."
+        confirmButtonText="Yes, Clear All"
+      />
     </div>
   );
 }
