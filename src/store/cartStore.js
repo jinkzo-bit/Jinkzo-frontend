@@ -26,7 +26,7 @@ export const useCartStore = create(
     sectionChangeFee: 15,
     foodBaseItemLimit: 4,
     foodExtraItemLimit: 3,
-    foodExtraItemCharge: 10,
+    foodExtraItemCharge: 15,
     foodMaxHotels: 3,
     foodHotelChangeFee: 15,
     groceryMaxItems: 10,
@@ -52,7 +52,26 @@ export const useCartStore = create(
   },
 
   addItem: (item, restaurant) => {
-    const { items } = get();
+    const { items, platformSettings } = get();
+
+    // 1. Check food item limit
+    const currentTotalItems = items.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
+    const maxFoodItems = (platformSettings?.foodBaseItemLimit ?? 4) + (platformSettings?.foodExtraItemLimit ?? 3);
+    if (currentTotalItems + 1 > maxFoodItems) {
+      get().showToast(`Maximum ${maxFoodItems} food items are allowed per order.`, 'error');
+      return { success: false, message: `Maximum ${maxFoodItems} food items are allowed per order.` };
+    }
+
+    // 2. Check unique hotel limit
+    const currentHotelIds = new Set(items.map(i => String(i.restaurantId)).filter(Boolean));
+    const isNewHotel = restaurant?._id && !currentHotelIds.has(String(restaurant._id));
+    if (isNewHotel) {
+      const maxHotels = platformSettings?.foodMaxHotels ?? 3;
+      if (currentHotelIds.size >= maxHotels) {
+        get().showToast(`You can order from a maximum of ${maxHotels} hotels per food order.`, 'error');
+        return { success: false, message: `You can order from a maximum of ${maxHotels} hotels per food order.` };
+      }
+    }
 
     let updatedItems = [...items];
     const existingIndex = items.findIndex(i => String(i.menuItemId) === String(item._id));
@@ -110,7 +129,7 @@ export const useCartStore = create(
   },
 
   updateQuantity: (menuItemId, quantity) => {
-    const { items } = get();
+    const { items, platformSettings } = get();
     let updatedItems = [...items];
     const index = updatedItems.findIndex(i => String(i.menuItemId) === String(menuItemId));
     if (index === -1) return;
@@ -120,6 +139,16 @@ export const useCartStore = create(
       updatedItems.splice(index, 1);
       get().showToast(`Removed "${name}" from cart`, 'info');
     } else {
+      const currentQty = updatedItems[index].quantity;
+      if (quantity > currentQty) {
+        const diff = quantity - currentQty;
+        const currentTotalItems = items.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
+        const maxFoodItems = (platformSettings?.foodBaseItemLimit ?? 4) + (platformSettings?.foodExtraItemLimit ?? 3);
+        if (currentTotalItems + diff > maxFoodItems) {
+          get().showToast(`Maximum ${maxFoodItems} food items are allowed per order.`, 'error');
+          return;
+        }
+      }
       updatedItems[index].quantity = quantity;
     }
 
@@ -264,11 +293,11 @@ export const useCartStore = create(
       }
     });
 
-    // Calculate sum of delivery fees for each unique restaurant
-    let deliveryFee = 0;
-    const restaurantFees = {};
+    const rIds = Object.keys(uniqueRestaurants);
+    const selectedHotelsCount = rIds.length;
+    const totalFoodItemsCount = items.reduce((sum, item) => sum + (parseInt(item.quantity) || 1), 0);
     
-    // Use configured tiers, or default if distance unknown
+    // Base food delivery pricing tiers
     const fdp = platformSettings?.foodDeliveryPricing || {
       tier1: { maxDistanceKm: 2, fee: 20 },
       tier2: { maxDistanceKm: 3.5, fee: 25 },
@@ -277,65 +306,42 @@ export const useCartStore = create(
       tier5: { maxDistanceKm: 20, fee: 120 }
     };
 
-    const precalculatedData = {};
-    const rIds = Object.keys(uniqueRestaurants);
-    
-    rIds.forEach(rId => {
+    // 1. FIRST HOTEL / NORMAL BASE FEE
+    let baseFoodDeliveryFee = 0;
+    if (selectedHotelsCount > 0) {
       let fee = fdp.tier1.fee;
-      let tier = 'tier1';
       if (distanceKm !== undefined && distanceKm !== null) {
-        if (distanceKm <= fdp.tier1.maxDistanceKm) { fee = fdp.tier1.fee; tier = 'tier1'; }
-        else if (distanceKm <= fdp.tier2.maxDistanceKm) { fee = fdp.tier2.fee; tier = 'tier2'; }
-        else if (distanceKm <= fdp.tier3.maxDistanceKm) { fee = fdp.tier3.fee; tier = 'tier3'; }
-        else if (distanceKm <= fdp.tier4.maxDistanceKm) { fee = fdp.tier4.fee; tier = 'tier4'; }
-        else { fee = fdp.tier5.fee; tier = 'tier5'; }
+        if (distanceKm <= fdp.tier1.maxDistanceKm) { fee = fdp.tier1.fee; }
+        else if (distanceKm <= fdp.tier2.maxDistanceKm) { fee = fdp.tier2.fee; }
+        else if (distanceKm <= fdp.tier3.maxDistanceKm) { fee = fdp.tier3.fee; }
+        else if (distanceKm <= fdp.tier4.maxDistanceKm) { fee = fdp.tier4.fee; }
+        else { fee = fdp.tier5.fee; }
       }
-      precalculatedData[rId] = { normalFee: fee, tier };
-    });
-
-    const multiOrderConfig = platformSettings?.sameAddressMultiOrder || { enabled: true, maxOrders: 3, eligibleTiers: ["tier4", "tier5"] };
-    const eligibleOrders = [];
-    if (multiOrderConfig.enabled) {
-      rIds.forEach(rId => {
-        if (multiOrderConfig.eligibleTiers.includes(precalculatedData[rId].tier)) {
-          eligibleOrders.push(rId);
-        }
-      });
+      baseFoodDeliveryFee = fee;
     }
 
-    const finalFees = {};
-    rIds.forEach(rId => {
-      finalFees[rId] = precalculatedData[rId].normalFee;
-    });
+    // 2. ADDITIONAL HOTEL FEE (foodHotelChangeFee per hotel after the first hotel)
+    const foodHotelChangeFeeRate = platformSettings?.foodHotelChangeFee ?? 15;
+    const additionalHotelsCount = Math.max(0, selectedHotelsCount - 1);
+    const foodHotelChangeFeeTotal = additionalHotelsCount * foodHotelChangeFeeRate;
 
-    let groupingApplied = false;
-    if (eligibleOrders.length > 1) {
-      groupingApplied = true;
-      const maxParticipating = Math.min(eligibleOrders.length, multiOrderConfig.maxOrders || 3);
-      const participatingGroup = eligibleOrders.slice(0, maxParticipating);
-      
-      let highestFee = -1;
-      let highestFeeRestaurantId = null;
-      participatingGroup.forEach(rId => {
-        if (precalculatedData[rId].normalFee > highestFee) {
-          highestFee = precalculatedData[rId].normalFee;
-          highestFeeRestaurantId = rId;
-        }
-      });
+    // 3. EXTRA FOOD ITEM BLOCK FEE (ONE foodExtraItemCharge when totalFoodItems > foodBaseItemLimit)
+    const foodBaseItemLimit = platformSettings?.foodBaseItemLimit ?? 4;
+    const foodExtraItemLimit = platformSettings?.foodExtraItemLimit ?? 3;
+    const foodExtraItemChargeRate = platformSettings?.foodExtraItemCharge ?? 15;
+    const foodExtraItemChargeTotal = totalFoodItemsCount > foodBaseItemLimit ? foodExtraItemChargeRate : 0;
 
-      participatingGroup.forEach(rId => {
-        if (rId === highestFeeRestaurantId) {
-          finalFees[rId] = highestFee;
-        } else {
-          finalFees[rId] = 0;
-        }
-      });
+    // AUTHORITATIVE FOOD DELIVERY FEE
+    const deliveryFee = selectedHotelsCount === 0 ? 0 : (baseFoodDeliveryFee + foodHotelChangeFeeTotal + foodExtraItemChargeTotal);
+
+    // Split order / per-restaurant fees mapping
+    const restaurantFees = {};
+    if (selectedHotelsCount > 0) {
+      restaurantFees[rIds[0]] = baseFoodDeliveryFee + foodExtraItemChargeTotal;
+      for (let i = 1; i < rIds.length; i++) {
+        restaurantFees[rIds[i]] = foodHotelChangeFeeRate;
+      }
     }
-
-    rIds.forEach(rId => {
-      restaurantFees[rId] = finalFees[rId];
-      deliveryFee += finalFees[rId];
-    });
 
     const platformFee = platformSettings ? (platformSettings.platformFee ?? 5) : 5;
     const taxes = 0; // Taxes (5% GST) removed as requested
@@ -349,25 +355,37 @@ export const useCartStore = create(
       if (s.festival?.enabled) { activeSurcharges.push({ name: 'Festival Charge', fee: s.festival.fee || 15 }); totalSurchargeFee += s.festival.fee || 15; }
     }
 
-    return { subtotal, deliveryFee, platformFee, taxes: 0, restaurantFees, activeSurcharges, totalSurchargeFee, groupingApplied };
+    return {
+      subtotal,
+      baseFoodDeliveryFee,
+      foodHotelChangeFee: foodHotelChangeFeeTotal,
+      foodExtraItemCharge: foodExtraItemChargeTotal,
+      deliveryFee,
+      selectedHotelsCount,
+      totalFoodItemsCount,
+      foodBaseItemLimit,
+      foodExtraItemLimit,
+      foodMaxHotels: platformSettings?.foodMaxHotels ?? 3,
+      platformFee,
+      taxes: 0,
+      restaurantFees,
+      activeSurcharges,
+      totalSurchargeFee,
+      groupingApplied: false
+    };
   },
 
   getCalculations: (distanceKm = null) => {
-    const { subtotal, deliveryFee, platformFee, restaurantFees, activeSurcharges, totalSurchargeFee } = get().getCalculationsWithoutPromo(distanceKm);
+    const calcs = get().getCalculationsWithoutPromo(distanceKm);
+    const { subtotal, deliveryFee, platformFee, totalSurchargeFee } = calcs;
     const { promoDiscount } = get();
 
     const total = Math.max(0, subtotal + deliveryFee + platformFee + totalSurchargeFee - promoDiscount);
 
     return {
-      subtotal,
-      deliveryFee,
-      platformFee,
-      taxes: 0,
+      ...calcs,
       promoDiscount,
-      total,
-      restaurantFees,
-      activeSurcharges,
-      totalSurchargeFee
+      total
     };
   }
 }),

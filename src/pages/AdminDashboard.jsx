@@ -27,7 +27,7 @@ const defaultPlatformSettings = {
   sectionChangeFee: 15,
   foodBaseItemLimit: 4,
   foodExtraItemLimit: 3,
-  foodExtraItemCharge: 10,
+  foodExtraItemCharge: 15,
   foodMaxHotels: 3,
   foodHotelChangeFee: 15,
   groceryMaxItems: 10,
@@ -2766,7 +2766,7 @@ export default function AdminDashboard() {
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">items</span>
                         </div>
-                        <span className="text-[9px] text-muted px-1">Default: 4</span>
+                        <span className="text-[9px] text-muted px-1">Number of items included in the normal first-hotel pricing. (Default: 4)</span>
                       </div>
 
                       {/* Food Extra Item Limit */}
@@ -2785,7 +2785,7 @@ export default function AdminDashboard() {
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">items</span>
                         </div>
-                        <span className="text-[9px] text-muted px-1">Max Food Items = {(settingsForm?.foodBaseItemLimit || 4) + (settingsForm?.foodExtraItemLimit || 3)}</span>
+                        <span className="text-[9px] text-muted px-1">Maximum additional food items allowed after the base limit. (Max Food Items = {(settingsForm?.foodBaseItemLimit || 4) + (settingsForm?.foodExtraItemLimit || 3)})</span>
                       </div>
 
                       {/* Food Extra Item Charge */}
@@ -2796,7 +2796,7 @@ export default function AdminDashboard() {
                           <input
                             type="number"
                             min="0"
-                            value={settingsForm?.foodExtraItemCharge ?? 10}
+                            value={settingsForm?.foodExtraItemCharge ?? 15}
                             onChange={(e) => {
                               const val = e.target.value;
                               setSettingsForm({ ...settingsForm, foodExtraItemCharge: val === '' ? '' : parseFloat(val) || 0 });
@@ -2804,7 +2804,7 @@ export default function AdminDashboard() {
                             className="bg-base border border-line-strong rounded-xl pl-7 pr-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary"
                           />
                         </div>
-                        <span className="text-[9px] text-muted px-1">Charge per item beyond base limit</span>
+                        <span className="text-[9px] text-muted px-1">One additional charge applied when the customer goes beyond the base item limit. (Default: ₹15)</span>
                       </div>
 
                       {/* Maximum Food Hotel Selection */}
@@ -2824,12 +2824,12 @@ export default function AdminDashboard() {
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">hotels</span>
                         </div>
-                        <span className="text-[9px] text-muted px-1">Max unique restaurants per order (Default: 3)</span>
+                        <span className="text-[9px] text-muted px-1">Maximum number of distinct food hotels allowed in one order. (Default: 3)</span>
                       </div>
 
                       {/* Food Hotel Change Fee */}
                       <div className="flex flex-col gap-1 sm:col-span-2">
-                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Food Section - Hotel Change Fee</label>
+                        <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Food Hotel Change Fee</label>
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted pointer-events-none">₹</span>
                           <input
@@ -2843,7 +2843,7 @@ export default function AdminDashboard() {
                             className="bg-base border border-line-strong rounded-xl pl-7 pr-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary"
                           />
                         </div>
-                        <span className="text-[9px] text-muted px-1">Extra fee for selecting another hotel for food (Default: ₹15)</span>
+                        <span className="text-[9px] text-muted px-1">Additional charge for each hotel after the first hotel. (Default: ₹15)</span>
                       </div>
                     </div>
                   </div>

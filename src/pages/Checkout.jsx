@@ -95,7 +95,17 @@ export default function Checkout() {
     }
   }, [restaurant?.lat, restaurant?.lng, user?.addresses?.[selectedAddressIndex]?.lat, user?.addresses?.[selectedAddressIndex]?.lng]); // eslint-disable-line
 
-  const { subtotal, deliveryFee, platformFee, promoDiscount, total, restaurantFees, activeSurcharges, groupingApplied } = getCalculations(routeInfo?.distanceKm);
+  const {
+    subtotal,
+    baseFoodDeliveryFee,
+    foodHotelChangeFee,
+    foodExtraItemCharge,
+    deliveryFee,
+    platformFee,
+    promoDiscount,
+    total,
+    activeSurcharges
+  } = getCalculations(routeInfo?.distanceKm);
 
   // Group items by restaurant
   const groupedItems = items.reduce((acc, item) => {
@@ -460,34 +470,28 @@ export default function Checkout() {
                 <span>{t('cart.itemSubtotal', 'Subtotal')}</span>
                 <span className="text-main font-bold">₹{subtotal}</span>
               </div>
-              <div className="flex flex-col gap-1 border-t border-b border-line py-1.5 my-0.5">
-                <div className="flex items-center justify-between font-semibold">
-                  <span>{t('cart.deliveryFee', 'Total Delivery Fee')}</span>
-                  <span className="text-main font-bold">{routeInfo ? `₹${deliveryFee}` : 'Calculating...'}</span>
+              {foodHotelChangeFee > 0 && (
+                <div className="flex items-center justify-between">
+                  <span>Food Hotel Change Fee</span>
+                  <span className="text-main font-bold">+₹{foodHotelChangeFee}</span>
                 </div>
-                {groupedList.map(group => {
-                  const fee = restaurantFees?.[group.restaurantId] || 0;
-                  return (
-                    <div key={group.restaurantId} className="flex items-center justify-between text-[10px] text-muted pl-2">
-                      <span className="truncate max-w-[180px] font-medium">• {group.restaurantName}</span>
-                      <span className="font-bold">
-                        {fee > 0 ? `₹${fee}` : <span className="text-green-600 bg-green-50 px-1 rounded uppercase">Waived</span>}
-                      </span>
-                    </div>
-                  );
-                })}
-                {groupingApplied && (
-                  <div className="flex items-center justify-between text-[10px] text-green-700 bg-green-50 mt-1 px-2 py-1 rounded">
-                    <span className="font-bold">✨ Multi-Order Grouping Discount Applied</span>
-                  </div>
-                )}
-                {activeSurcharges && activeSurcharges.map((sc, idx) => (
-                  <div key={idx} className="flex items-center justify-between font-semibold mt-1">
-                    <span>{sc.name}</span>
-                    <span className="text-main font-bold">₹{sc.fee}</span>
-                  </div>
-                ))}
+              )}
+              {foodExtraItemCharge > 0 && (
+                <div className="flex items-center justify-between">
+                  <span>Food Extra Item Charge</span>
+                  <span className="text-main font-bold">+₹{foodExtraItemCharge}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between border-t border-b border-line py-1.5 font-semibold">
+                <span>{t('cart.deliveryFee', 'Delivery Fee')}</span>
+                <span className="text-main font-bold">{routeInfo ? `₹${deliveryFee}` : 'Calculating...'}</span>
               </div>
+              {activeSurcharges && activeSurcharges.map((sc, idx) => (
+                <div key={idx} className="flex items-center justify-between font-semibold">
+                  <span>{sc.name}</span>
+                  <span className="text-main font-bold">₹{sc.fee}</span>
+                </div>
+              ))}
               {platformFee > 0 && (
                 <div className="flex items-center justify-between font-medium">
                   <span>{t('cart.platformFee', 'Platform Fee')}</span>
