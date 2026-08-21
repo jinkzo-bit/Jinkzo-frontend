@@ -352,9 +352,9 @@ export default function BottomNav() {
 
           {/* 4. ORDER HISTORY */}
           <Link
-            to="/profile"
+            to="/order-history"
             className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all duration-200 ${
-              isActive('/orders') || isActive('/order-tracking')
+              isActive('/order-history')
                 ? 'text-[#7C3AED] dark:text-[#A78BFA] font-bold'
                 : 'text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200'
             }`}

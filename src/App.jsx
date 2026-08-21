@@ -24,6 +24,7 @@ import DeliveryDashboard from './pages/DeliveryDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import RideBooking from './pages/RideBooking';
 import Favourites from './pages/Favourites';
+import OrderHistory from './pages/OrderHistory';
 
 import { useAuthStore } from './store/authStore';
 import { useCartStore } from './store/cartStore';
@@ -95,6 +96,11 @@ export default function App() {
               <Route path="/profile" element={
                 <ProtectedRoute>
                   <Profile />
+                </ProtectedRoute>
+              } />
+              <Route path="/order-history" element={
+                <ProtectedRoute>
+                  <OrderHistory />
                 </ProtectedRoute>
               } />
               <Route path="/login" element={<LoginSignup />} />

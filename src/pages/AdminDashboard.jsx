@@ -2792,8 +2792,130 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
+                    {/* ── ADVANCED SECTION: SERVICE TYPE PRICING & ITEM LIMITS ── */}
+                  </div>
+
+                  {/* ADVANCED SECTION CARD */}
+                  <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-display font-extrabold text-base text-primary flex items-center gap-2">
+                          <SlidersHorizontal className="w-5 h-5 text-primary" />
+                          Advanced Section — Service Type Limits
+                        </h4>
+                        <p className="text-xs text-muted font-medium mt-1 leading-relaxed">
+                          Configure per-service-type ordering limits, minimum amounts, and delivery fee adjustments for Food, Grocery, Vegetables, Meat and Hot & Cool.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                      {[
+                        { key: 'food',       label: '🍔 Food',               color: 'bg-orange-500', defaults: { maxItemsPerOrder: 20, minOrderAmount: 0,   deliveryFeeMultiplier: 1.0 } },
+                        { key: 'grocery',    label: '🛒 Grocery',            color: 'bg-blue-500',   defaults: { maxItemsPerOrder: 50, minOrderAmount: 99,  deliveryFeeMultiplier: 1.0 } },
+                        { key: 'vegetables', label: '🥦 Vegetables & Fruits', color: 'bg-green-500',  defaults: { maxItemsPerOrder: 30, minOrderAmount: 49,  deliveryFeeMultiplier: 1.0 } },
+                        { key: 'meat',       label: '🥩 Meat',               color: 'bg-red-500',    defaults: { maxItemsPerOrder: 20, minOrderAmount: 149, deliveryFeeMultiplier: 1.2 } },
+                        { key: 'cool_hot',   label: '🧊 Hot & Cool',         color: 'bg-cyan-500',   defaults: { maxItemsPerOrder: 15, minOrderAmount: 49,  deliveryFeeMultiplier: 1.1 } },
+                      ].map(({ key, label, color, defaults }) => {
+                        const cur = platformSettings?.serviceTypeLimits?.[key] || { enabled: true, ...defaults };
+                        const update = (patch) => setPlatformSettings({
+                          ...platformSettings,
+                          serviceTypeLimits: {
+                            ...platformSettings.serviceTypeLimits,
+                            [key]: { ...cur, ...patch }
+                          }
+                        });
+                        return (
+                          <div key={key} className={`border border-line rounded-2xl overflow-hidden transition-all ${cur.enabled ? 'opacity-100' : 'opacity-50'}`}>
+                            {/* Row Header */}
+                            <div className="flex items-center justify-between px-4 py-3 bg-base border-b border-line">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${color}`} />
+                                <span className="text-xs font-extrabold text-main uppercase tracking-wide">{label}</span>
+                              </div>
+                              <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <span className="text-[10px] font-bold text-muted uppercase">{cur.enabled ? 'Active' : 'Disabled'}</span>
+                                <div
+                                  onClick={() => update({ enabled: !cur.enabled })}
+                                  className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${cur.enabled ? 'bg-primary' : 'bg-line-strong'}`}
+                                >
+                                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-xs transition-transform ${cur.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                </div>
+                              </label>
+                            </div>
+                            {/* Row Fields */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4">
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">
+                                  Max Items / Order
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="999"
+                                    disabled={!cur.enabled}
+                                    value={cur.maxItemsPerOrder ?? defaults.maxItemsPerOrder}
+                                    onChange={(e) => update({ maxItemsPerOrder: parseInt(e.target.value) || 1 })}
+                                    className="bg-base border border-line-strong rounded-xl px-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                  />
+                                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">items</span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">
+                                  Min Order Amount (₹)
+                                </label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted pointer-events-none">₹</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    disabled={!cur.enabled}
+                                    value={cur.minOrderAmount ?? defaults.minOrderAmount}
+                                    onChange={(e) => update({ minOrderAmount: parseInt(e.target.value) || 0 })}
+                                    className="bg-base border border-line-strong rounded-xl pl-7 pr-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                  />
+                                </div>
+                                <span className="text-[9px] text-muted px-1">0 = no minimum</span>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">
+                                  Delivery Fee Multiplier
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    min="0.1"
+                                    max="5"
+                                    step="0.05"
+                                    disabled={!cur.enabled}
+                                    value={cur.deliveryFeeMultiplier ?? defaults.deliveryFeeMultiplier}
+                                    onChange={(e) => update({ deliveryFeeMultiplier: parseFloat(e.target.value) || 1 })}
+                                    className="bg-base border border-line-strong rounded-xl px-3 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                  />
+                                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted pointer-events-none">×</span>
+                                </div>
+                                <span className="text-[9px] text-muted px-1">1.0 = no change · 1.2 = +20%</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex items-start gap-3 bg-amber-50/60 border border-amber-200/60 rounded-2xl p-3.5 text-xs">
+                      <Activity className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-amber-800">These settings apply to restaurant-side configurations</p>
+                        <p className="text-amber-700 font-medium mt-0.5">Item limits and minimum amounts are enforced at order placement. The delivery fee multiplier adjusts the computed delivery fee for that service category.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-5">
                     {/* Ecosystem Ordering Active */}
-                    <div className="flex items-center gap-3 border-t border-line pt-4">
+                    <div className="flex items-center gap-3">
                       <input
                         type="checkbox"
                         id="isOpen"
