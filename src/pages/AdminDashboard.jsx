@@ -2228,8 +2228,8 @@ export default function AdminDashboard() {
                             ridePickupLng={order.pickupLocation?.lng ?? order.customerLocation?.lng}
                             rideDropLat={order.dropLocation?.lat ?? order.restaurantLocation?.lat}
                             rideDropLng={order.dropLocation?.lng ?? order.restaurantLocation?.lng}
-                            riderLat={riderLocations[order._id]?.lat}
-                            riderLng={riderLocations[order._id]?.lng}
+                            riderLat={liveRiderLocations?.[order._id]?.lat}
+                            riderLng={liveRiderLocations?.[order._id]?.lng}
                           />
                         </div>
                       )}
