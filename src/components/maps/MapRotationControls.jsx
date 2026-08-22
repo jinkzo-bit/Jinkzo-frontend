@@ -73,7 +73,6 @@ export default function MapRotationControls({
 }) {
   const [heading, setHeading] = useState(0);
   const [tilt, setTilt] = useState(0);
-  const [isRotating, setIsRotating] = useState(false);
   const [isFollowingCompass, setIsFollowingCompass] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState(null);
   const toastTimeoutRef = useRef(null);
@@ -82,16 +81,6 @@ export default function MapRotationControls({
   const getActiveMap = useCallback(() => {
     return map || mapRef?.current || null;
   }, [map, mapRef]);
-
-  // Touch gesture tracking refs
-  const touchStateRef = useRef({
-    startAngle: 0,
-    startHeading: 0,
-    startDistance: 0,
-    startMidY: 0,
-    startTilt: 0,
-    isTwoFinger: false,
-  });
 
   // Compass follow smoothing refs
   const smoothedHeadingRef = useRef(0);
@@ -110,57 +99,35 @@ export default function MapRotationControls({
     }, 2200);
   }, []);
 
-  // ── Apply Camera Orientation to Google Maps ──────────────────────────────────
+  // ── Apply Camera Orientation to Google Maps (Atomic moveCamera) ──────────────
   const applyCamera = useCallback((newHeading, newTilt) => {
     const activeMap = getActiveMap();
     const cleanHeading = Math.round(((newHeading % 360) + 360) % 360);
     const cleanTilt = Math.max(0, Math.min(67.5, Math.round(newTilt)));
 
     if (activeMap) {
-      // 1. Primary: moveCamera (Google Maps Camera API)
-      try {
-        if (typeof activeMap.moveCamera === 'function') {
+      if (typeof activeMap.moveCamera === 'function') {
+        try {
           activeMap.moveCamera({
             heading: cleanHeading,
             tilt: cleanTilt,
           });
-        }
-      } catch (_) {}
-
-      // 2. Secondary: setHeading
-      try {
-        if (typeof activeMap.setHeading === 'function') {
-          activeMap.setHeading(cleanHeading);
-        }
-      } catch (_) {}
-
-      // 3. Secondary: setTilt
-      try {
-        if (typeof activeMap.setTilt === 'function') {
-          activeMap.setTilt(cleanTilt);
-        }
-      } catch (_) {}
+        } catch (_) {}
+      } else {
+        try {
+          if (typeof activeMap.setHeading === 'function') {
+            activeMap.setHeading(cleanHeading);
+          }
+          if (typeof activeMap.setTilt === 'function') {
+            activeMap.setTilt(cleanTilt);
+          }
+        } catch (_) {}
+      }
     }
 
     setHeading(cleanHeading);
     setTilt(cleanTilt);
   }, [getActiveMap]);
-
-  // ── Viewport Resize Observer: ensures map fills 100% of container without gray borders ──
-  useEffect(() => {
-    const container = containerRef?.current;
-    if (!container || typeof ResizeObserver === 'undefined') return;
-
-    const ro = new ResizeObserver(() => {
-      const activeMap = getActiveMap();
-      if (activeMap && window.google?.maps?.event) {
-        window.google.maps.event.trigger(activeMap, 'resize');
-      }
-    });
-
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, [containerRef, getActiveMap]);
 
   // ── Sync camera heading & tilt from live map instance ───────────────────────
   useEffect(() => {
@@ -310,95 +277,6 @@ export default function MapRotationControls({
     setIsFollowingCompass(true);
     showFeedback('Following your direction');
   };
-
-  // ── 2-Finger Touch Gesture Handling for Manual Rotation & Tilt ───────────────
-  useEffect(() => {
-    const container = containerRef?.current;
-    if (!container) return;
-
-    const getTouchAngle = (t1, t2) => {
-      const dx = t2.clientX - t1.clientX;
-      const dy = t2.clientY - t1.clientY;
-      return Math.atan2(dy, dx) * (180 / Math.PI);
-    };
-
-    const getTouchDistance = (t1, t2) => {
-      const dx = t2.clientX - t1.clientX;
-      const dy = t2.clientY - t1.clientY;
-      return Math.hypot(dx, dy);
-    };
-
-    const handleTouchStart = (e) => {
-      if (e.touches.length === 2) {
-        // Manual gesture automatically exits phone-compass follow mode
-        if (isFollowingCompassRef.current) {
-          setIsFollowingCompass(false);
-          showFeedback('Direction follow off');
-        }
-
-        const activeMap = getActiveMap();
-        const currentHeading = (activeMap && typeof activeMap.getHeading === 'function')
-          ? (activeMap.getHeading() || 0)
-          : heading;
-        const currentTilt = (activeMap && typeof activeMap.getTilt === 'function')
-          ? (activeMap.getTilt() || 0)
-          : tilt;
-
-        touchStateRef.current = {
-          startAngle: getTouchAngle(e.touches[0], e.touches[1]),
-          startHeading: currentHeading,
-          startDistance: getTouchDistance(e.touches[0], e.touches[1]),
-          startMidY: (e.touches[0].clientY + e.touches[1].clientY) / 2,
-          startTilt: currentTilt,
-          isTwoFinger: true,
-        };
-        setIsRotating(true);
-      } else {
-        touchStateRef.current.isTwoFinger = false;
-        setIsRotating(false);
-      }
-    };
-
-    const handleTouchMove = (e) => {
-      if (e.touches.length === 2 && touchStateRef.current.isTwoFinger) {
-        const currentAngle = getTouchAngle(e.touches[0], e.touches[1]);
-        const angleDelta = currentAngle - touchStateRef.current.startAngle;
-
-        let newHeading = (touchStateRef.current.startHeading - angleDelta) % 360;
-        if (newHeading < 0) newHeading += 360;
-        newHeading = Math.round(newHeading);
-
-        const currentMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        const dy = currentMidY - touchStateRef.current.startMidY;
-        const distChange = Math.abs(getTouchDistance(e.touches[0], e.touches[1]) - touchStateRef.current.startDistance);
-
-        let newTilt = touchStateRef.current.startTilt;
-        if (distChange < 50 && Math.abs(dy) > 12) {
-          const tiltDelta = -dy * 0.35;
-          newTilt = Math.max(0, Math.min(67.5, Math.round(touchStateRef.current.startTilt + tiltDelta)));
-        }
-
-        applyCamera(newHeading, newTilt);
-      }
-    };
-
-    const handleTouchEnd = () => {
-      touchStateRef.current.isTwoFinger = false;
-      setIsRotating(false);
-    };
-
-    container.addEventListener('touchstart', handleTouchStart, { passive: true });
-    container.addEventListener('touchmove', handleTouchMove, { passive: true });
-    container.addEventListener('touchend', handleTouchEnd, { passive: true });
-    container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
-
-    return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
-      container.removeEventListener('touchcancel', handleTouchEnd);
-    };
-  }, [containerRef, getActiveMap, applyCamera, heading, tilt, showFeedback]);
 
   // ── Manual Actions ──────────────────────────────────────────────────────────
 

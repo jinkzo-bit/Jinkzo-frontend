@@ -15,10 +15,6 @@ const HIGH_ZOOM    = 17;
 const MAP_CONTAINER_STYLE = {
   width: '100%',
   height: '100%',
-  minWidth: '100%',
-  minHeight: '260px',
-  position: 'relative',
-  overflow: 'hidden'
 };
 
 const MAP_OPTIONS = {
@@ -236,30 +232,8 @@ export default function LocationPicker({
     mapRef.current = map;
     setMapInstance(map);
 
-    // Multi-pass resize triggers ensuring vector canvas syncs after modal animation and layout reflow
-    const triggerResize = () => {
-      if (window.google?.maps?.event && map) {
-        window.google.maps.event.trigger(map, 'resize');
-      }
-    };
-
-    triggerResize();
-    requestAnimationFrame(triggerResize);
-    setTimeout(triggerResize, 60);
-    setTimeout(triggerResize, 180);
-    setTimeout(triggerResize, 350);
-
-    // Temporary Vector diagnostics — remove once VECTOR is confirmed
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[Jinkzo LocationPicker] Rendering Type:', map.getRenderingType?.() ?? 'N/A');
-      console.log('[Jinkzo LocationPicker] Heading:', map.getHeading?.() ?? 'N/A');
-      console.log('[Jinkzo LocationPicker] Tilt:', map.getTilt?.() ?? 'N/A');
-      if (typeof map.getHeadingInteractionEnabled === 'function') {
-        console.log('[Jinkzo LocationPicker] Heading Interaction:', map.getHeadingInteractionEnabled());
-      }
-      if (typeof map.getTiltInteractionEnabled === 'function') {
-        console.log('[Jinkzo LocationPicker] Tilt Interaction:', map.getTiltInteractionEnabled());
-      }
+    if (window.google?.maps?.event && map) {
+      window.google.maps.event.trigger(map, 'resize');
     }
 
     const listener = map.addListener('idle', async () => {
@@ -506,8 +480,7 @@ export default function LocationPicker({
       <div className="px-4 flex-shrink-0 w-full">
         <div
           ref={mapContainerRef}
-          className="location-map-viewport relative w-full rounded-2xl overflow-hidden border border-white/10 bg-[#1a1a2e]"
-          style={{ height: '260px', width: '100%', minHeight: '260px', position: 'relative', overflow: 'hidden' }}
+          className="jinkzo-location-map rounded-2xl border border-white/10 bg-[#1a1a2e]"
         >
         {!isLoaded || loadError ? (
           <div className="w-full h-full flex items-center justify-center bg-[#1a1a2e]">
@@ -523,6 +496,7 @@ export default function LocationPicker({
         ) : (
           <>
             <GoogleMap
+              mapContainerClassName="absolute inset-0 w-full h-full"
               mapContainerStyle={MAP_CONTAINER_STYLE}
               center={mapCenter}
               zoom={mapZoom}
