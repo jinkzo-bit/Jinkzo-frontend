@@ -310,6 +310,18 @@ export default function AdminDashboard() {
   const [deleteCategoryModal, setDeleteCategoryModal] = useState({ isOpen: false, category: null, warningMessage: '', hasProducts: false, count: 0 });
   const [isDeletingCategory, setIsDeletingCategory] = useState(false);
 
+  // Category Service Availability (6 Primary Platform Services)
+  const [categoryServices, setCategoryServices] = useState([
+    { id: 'food', name: 'Food', isEnabled: true, image: '/assets/cat_food.jpg' },
+    { id: 'ride', name: 'Ride & Courier', isEnabled: true, image: '/assets/cat_ride.jpg' },
+    { id: 'grocery', name: 'Grocery', isEnabled: true, image: '/assets/cat_grocery.jpg' },
+    { id: 'bakery_beverages', name: 'Bakery & Beverages', isEnabled: true, image: '/assets/cat_hot_cool.jpg' },
+    { id: 'veg_fruits', name: 'Veg & Fruits', isEnabled: true, image: '/assets/cat_veg_fruits.jpg' },
+    { id: 'meat', name: 'Meat', isEnabled: true, image: '/assets/cat_meat.jpg' }
+  ]);
+  const [isCategoryServicesLoading, setIsCategoryServicesLoading] = useState(false);
+  const [categoryServiceToggleLoading, setCategoryServiceToggleLoading] = useState({});
+
   // Platform Settings updating state
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
 
@@ -327,6 +339,7 @@ export default function AdminDashboard() {
     fetchRestaurants();
     fetchBanners();
     fetchCategories();
+    fetchCategoryServices();
 
     const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
     const socket = io(socketHost, {
@@ -474,6 +487,51 @@ export default function AdminDashboard() {
       console.error('Error fetching banners:', err);
     } finally {
       setIsBannersLoading(false);
+    }
+  };
+
+  const fetchCategoryServices = async () => {
+    try {
+      setIsCategoryServicesLoading(true);
+      const res = await fetch(`${API_BASE}/admin/category-services`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setCategoryServices(data);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching category services:', err);
+    } finally {
+      setIsCategoryServicesLoading(false);
+    }
+  };
+
+  const handleToggleCategoryService = async (serviceId, newStatus) => {
+    setCategoryServiceToggleLoading(prev => ({ ...prev, [serviceId]: true }));
+    // Optimistic UI update
+    setCategoryServices(prev => prev.map(c => c.id === serviceId ? { ...c, isEnabled: newStatus } : c));
+    try {
+      const res = await fetch(`${API_BASE}/admin/category-services/${serviceId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ isEnabled: newStatus })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.message || 'Failed to update category service status');
+        fetchCategoryServices();
+      }
+    } catch (err) {
+      console.error('Toggle category service status error:', err);
+      fetchCategoryServices();
+    } finally {
+      setCategoryServiceToggleLoading(prev => ({ ...prev, [serviceId]: false }));
     }
   };
 
@@ -3693,6 +3751,98 @@ export default function AdminDashboard() {
           {/* ── CATEGORY MANAGEMENT TAB ──────────────────────────────────── */}
           {activeSubTab === 'categories' && (
             <div className="flex flex-col gap-6 animate-fade-in">
+              {/* ── 1. 6 CORE CATEGORY SERVICES AVAILABILITY (ON/OFF CONTROL) ── */}
+              <div className="bg-surface border border-line rounded-3xl p-5 sm:p-6 flex flex-col gap-4 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line pb-4">
+                  <div className="flex flex-col gap-0.5">
+                    <h4 className="font-display font-extrabold text-sm sm:text-base text-main flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-primary" />
+                      Category Services Availability (ON/OFF Control)
+                    </h4>
+                    <p className="text-xs text-muted font-medium">
+                      Admin-controlled switch for all 6 customer categories. When turned OFF, the category remains visible on Home with the message <span className="font-bold text-main">"We are not providing this service currently."</span> and ordering is blocked.
+                    </p>
+                  </div>
+                  {isCategoryServicesLoading && (
+                    <div className="flex items-center gap-2 text-xs font-bold text-primary">
+                      <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <span>Syncing...</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+                  {categoryServices.map((service) => {
+                    const isToggling = categoryServiceToggleLoading[service.id];
+                    const isEnabled = service.isEnabled !== false;
+
+                    return (
+                      <div
+                        key={service.id}
+                        className={`border rounded-2xl p-4 flex items-center justify-between gap-3 transition-all duration-200 ${
+                          isEnabled
+                            ? 'bg-surface border-line hover:border-emerald-500/40 hover:shadow-xs'
+                            : 'bg-base/60 border-line-strong hover:border-red-500/30'
+                        }`}
+                      >
+                        {/* Left: Thumbnail & Name & Status */}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-base border border-line shrink-0 flex items-center justify-center">
+                            <img
+                              src={getImageUrl(service.image || `/assets/cat_${service.id}.jpg`, 'category')}
+                              alt={service.name}
+                              onError={(e) => handleImageError(e, 'category')}
+                              className="w-full h-full object-contain p-1"
+                            />
+                          </div>
+
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-display font-extrabold text-xs sm:text-sm text-main truncate">
+                              {service.name}
+                            </span>
+                            <div className="mt-1">
+                              {isEnabled ? (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  Accepting Orders
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:border-red-800 dark:text-red-400">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                  Not Providing Service
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right: ON/OFF Switch Button */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            disabled={isToggling}
+                            onClick={() => handleToggleCategoryService(service.id, !isEnabled)}
+                            aria-label={`Toggle ${service.name}`}
+                            className={`relative inline-flex h-7 w-13 items-center rounded-full transition-colors duration-300 focus:outline-none cursor-pointer ${
+                              isToggling ? 'opacity-50 cursor-wait' : ''
+                            } ${
+                              isEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'
+                            }`}
+                          >
+                            <span
+                              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${
+                                isEnabled ? 'translate-x-7' : 'translate-x-1'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── 2. SUB-CATEGORIES CRUD TABLE ───────────────────────────── */}
               {/* Header with Dashboard Service Selector & Add Category Button */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
                 <div className="flex flex-col gap-1">

@@ -183,6 +183,27 @@ export default function RestaurantListing() {
   const addItem = useCartStore((state) => state.addItem);
   const removeItem = useCartStore((state) => state.removeItem);
   const clearCart = useCartStore((state) => state.clearCart);
+  const showToast = useCartStore((state) => state.showToast);
+
+  // Category availability state
+  const [isCategoryDisabled, setIsCategoryDisabled] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/restaurants/category-services`)
+      .then(res => res.ok ? res.json() : [])
+      .then(list => {
+        if (Array.isArray(list)) {
+          let cId = activeDashboard === 'cool_hot' ? 'bakery_beverages' : activeDashboard;
+          const found = list.find(c => c.id === cId);
+          if (found && found.isEnabled === false) {
+            setIsCategoryDisabled(true);
+          } else {
+            setIsCategoryDisabled(false);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [activeDashboard]);
 
   // Favourites Zustand Integration
   const favouriteItems = useFavoriteStore((state) => state.favouriteItems);
@@ -333,6 +354,10 @@ export default function RestaurantListing() {
 
   // Add Item to cart with same-restaurant check
   const handleAddToCart = (dish) => {
+    if (isCategoryDisabled) {
+      showToast(t('home.serviceUnavailable', 'We are not providing this service currently.'), 'error');
+      return;
+    }
     const result = addItem(dish, dish.restaurant || { name: 'Jinkzo Store', _id: 'rest_default' });
     if (result && result.conflict) {
       setConflictModal({
@@ -372,6 +397,13 @@ export default function RestaurantListing() {
 
   return (
     <div className="flex flex-col gap-6 pb-24 max-w-7xl mx-auto px-4 md:px-8 w-full animate-fade-in transition-colors duration-300">
+
+      {isCategoryDisabled && (
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 shrink-0" />
+          <span className="text-sm font-bold">{t('home.serviceUnavailable', 'We are not providing this service currently.')}</span>
+        </div>
+      )}
 
       {/* ─── "WHAT'S ON YOUR MIND?" + PURE VEG & SORT SECTION ─── */}
       <section className="bg-surface rounded-3xl p-5 sm:p-6 shadow-2xs border border-line flex flex-col lg:flex-row lg:items-center justify-between gap-6 transition-colors">

@@ -65,6 +65,18 @@ export default function RideBooking() {
   useEffect(() => {
     const checkRiderAvailability = async () => {
       try {
+        // Check Ride Category Service Availability
+        const catRes = await fetch(`${API_BASE}/restaurants/category-services`);
+        if (catRes.ok) {
+          const catList = await catRes.json();
+          const rideCat = catList.find(c => c.id === 'ride');
+          if (rideCat && rideCat.isEnabled === false) {
+            setIsRiderAvailable(false);
+            setErrorMsg("We are not providing this service currently.");
+            return;
+          }
+        }
+
         const res = await fetch(`${API_BASE}/orders/riders/check?type=ride`);
         if (res.ok) {
           const data = await res.json();

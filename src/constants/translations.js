@@ -79,6 +79,7 @@ export const translations = {
     'home.vegFruitsSubtitle': 'Fresh vegetables & fruits',
     'home.categoryMeat': 'Meat',
     'home.meatSubtitle': 'Fresh meat, chicken & fish',
+    'home.serviceUnavailable': 'We are not providing this service currently.',
     'home.noRestaurantsNearby': 'No restaurants available in this category yet.',
     'home.changeCategory': 'Try selecting another category above.',
 
@@ -301,6 +302,7 @@ export const translations = {
     'home.vegFruitsSubtitle': 'తాజా కూరగాయలు & పండ్లు',
     'home.categoryMeat': 'మాంసం',
     'home.meatSubtitle': 'తాజా మాంసం, చికెన్ & చేపలు',
+    'home.serviceUnavailable': 'We are not providing this service currently.',
     'home.noRestaurantsNearby': 'ఈ విభాగంలో ప్రస్తుతం రెస్టారెంట్లు అందుబాటులో లేవు.',
     'home.changeCategory': 'పైన ఉన్న ఇతర కేటగిరీని ఎంచుకోండి.',
 

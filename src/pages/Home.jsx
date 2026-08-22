@@ -2,11 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  Lock
 } from 'lucide-react';
 import { API_BASE } from '../config/api';
 import { useTranslation } from '../store/languageStore';
+import { useCartStore } from '../store/cartStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
+import io from 'socket.io-client';
 
 const DEFAULT_BANNER_SLIDES = [
   {
@@ -44,8 +47,19 @@ const DEFAULT_BANNER_SLIDES = [
 export default function Home() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { showToast } = useCartStore();
   const [foodAvailable, setFoodAvailable] = useState(true);
   const [rideAvailable, setRideAvailable] = useState(true);
+
+  // Category Services Availability Status
+  const [categoryStatus, setCategoryStatus] = useState({
+    food: true,
+    ride: true,
+    grocery: true,
+    bakery_beverages: true,
+    veg_fruits: true,
+    meat: true
+  });
 
   // Dynamic Banners from Backend
   const [bannerSlides, setBannerSlides] = useState(DEFAULT_BANNER_SLIDES);
@@ -59,15 +73,33 @@ export default function Home() {
   useEffect(() => {
     const fetchAvailabilityAndBanners = async () => {
       try {
-        const [availRes, bannersRes] = await Promise.allSettled([
+        const [availRes, bannersRes, catServicesRes] = await Promise.allSettled([
           fetch(`${API_BASE}/auth/driver-availability`),
-          fetch(`${API_BASE}/restaurants/banners`)
+          fetch(`${API_BASE}/restaurants/banners`),
+          fetch(`${API_BASE}/restaurants/category-services`)
         ]);
 
         if (availRes.status === 'fulfilled' && availRes.value.ok) {
           const data = await availRes.value.json();
           setFoodAvailable(data.foodAvailable ?? true);
           setRideAvailable(data.rideAvailable ?? true);
+        }
+
+        if (catServicesRes.status === 'fulfilled' && catServicesRes.value.ok) {
+          const catList = await catServicesRes.value.json();
+          if (Array.isArray(catList)) {
+            const statusMap = {};
+            catList.forEach(c => {
+              if (c.id) {
+                statusMap[c.id] = c.isEnabled !== false;
+                // Support aliases
+                if (c.id === 'bakery_beverages') statusMap['cool_hot'] = c.isEnabled !== false;
+                if (c.id === 'ride') statusMap['ride_courier'] = c.isEnabled !== false;
+                if (c.id === 'veg_fruits') statusMap['fruits-vegetables'] = c.isEnabled !== false;
+              }
+            });
+            setCategoryStatus(prev => ({ ...prev, ...statusMap }));
+          }
         }
 
         if (bannersRes.status === 'fulfilled' && bannersRes.value.ok) {
@@ -99,10 +131,34 @@ export default function Home() {
           }
         }
       } catch (err) {
-        console.error('Error fetching driver availability or banners:', err);
+        console.error('Error fetching driver availability, categories, or banners:', err);
       }
     };
     fetchAvailabilityAndBanners();
+
+    // Listen to real-time socket category updates
+    let socket;
+    try {
+      const socketUrl = API_BASE.replace('/api', '');
+      socket = io(socketUrl);
+      socket.on('categoryStatusChanged', (data) => {
+        if (data && data.categoryId) {
+          setCategoryStatus(prev => {
+            const updated = { ...prev, [data.categoryId]: data.isEnabled !== false };
+            if (data.categoryId === 'bakery_beverages') updated['cool_hot'] = data.isEnabled !== false;
+            if (data.categoryId === 'ride') updated['ride_courier'] = data.isEnabled !== false;
+            if (data.categoryId === 'veg_fruits') updated['fruits-vegetables'] = data.isEnabled !== false;
+            return updated;
+          });
+        }
+      });
+    } catch (e) {
+      // socket fallback
+    }
+
+    return () => {
+      if (socket) socket.disconnect();
+    };
   }, []);
 
   // 10-Second Auto-Slide Loop with reset on interaction & pause on hover/touch
@@ -355,44 +411,89 @@ export default function Home() {
 
       {/* 3. CATEGORY CARDS (EXACT 2-COLUMN GRID, 3 ROWS, CENTER ALIGNED) */}
       <section className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
-        {categories.map((cat) => (
-          <Link
-            key={cat.id}
-            to={cat.link}
-            className={`${cat.bgGradient} ${cat.borderColor} border rounded-3xl sm:rounded-[32px] p-3.5 sm:p-5 md:p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group flex flex-col items-center justify-between text-center cursor-pointer relative overflow-hidden shadow-2xs`}
-          >
-            {/* Background Decorative Pattern / Watermark Details */}
-            <div className="absolute inset-0 pointer-events-none opacity-25 overflow-hidden">
-              <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full border border-black/10"></div>
-              <div className="absolute -bottom-8 -left-8 w-24 h-24 rounded-full border border-black/10"></div>
-            </div>
+        {categories.map((cat) => {
+          const isEnabled = categoryStatus[cat.id] !== false;
 
-            {/* Large Category Product Image (Top ~60% Dominant Visual) */}
-            <div className="w-full h-28 sm:h-36 md:h-44 flex items-center justify-center relative z-10 group-hover:scale-105 transition-transform duration-300">
-              <img
-                src={getImageUrl(cat.image, 'category')}
-                alt={cat.title}
-                onError={(e) => handleImageError(e, 'category')}
-                className="max-h-full max-w-full object-contain rounded-2xl drop-shadow-xs"
-              />
-            </div>
-
-            {/* Centered Content: Title, Tagline, Circular Arrow Button */}
-            <div className="flex flex-col items-center justify-center gap-0.5 z-10 w-full mt-2">
-              <h3 className={`font-display font-black text-sm sm:text-base md:text-xl ${cat.textColor} tracking-tight leading-tight`}>
-                {cat.title}
-              </h3>
-              <p className="text-[10px] sm:text-xs text-gray-800 dark:text-gray-900 font-semibold leading-snug line-clamp-2 max-w-[150px] sm:max-w-none">
-                {cat.subtitle}
-              </p>
-
-              {/* Centered Circular Arrow Button */}
-              <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full ${cat.btnBg} text-white flex items-center justify-center shadow-md shadow-black/10 mt-2 group-hover:scale-110 active:scale-95 transition-all duration-200`}>
-                <ChevronRight className="w-4 h-4 stroke-[3]" />
+          const cardContent = (
+            <>
+              {/* Background Decorative Pattern / Watermark Details */}
+              <div className="absolute inset-0 pointer-events-none opacity-25 overflow-hidden">
+                <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full border border-black/10"></div>
+                <div className="absolute -bottom-8 -left-8 w-24 h-24 rounded-full border border-black/10"></div>
               </div>
+
+              {/* Large Category Product Image (Top ~60% Dominant Visual) */}
+              <div className="w-full h-28 sm:h-36 md:h-44 flex items-center justify-center relative z-10 group-hover:scale-105 transition-transform duration-300">
+                <img
+                  src={getImageUrl(cat.image, 'category')}
+                  alt={cat.title}
+                  onError={(e) => handleImageError(e, 'category')}
+                  className="max-h-full max-w-full object-contain rounded-2xl drop-shadow-xs"
+                />
+              </div>
+
+              {/* Centered Content: Title, Tagline, Circular Arrow Button */}
+              <div className="flex flex-col items-center justify-center gap-0.5 z-10 w-full mt-2">
+                <h3 className={`font-display font-black text-sm sm:text-base md:text-xl ${cat.textColor} tracking-tight leading-tight`}>
+                  {cat.title}
+                </h3>
+                <p className="text-[10px] sm:text-xs text-gray-800 dark:text-gray-900 font-semibold leading-snug line-clamp-2 max-w-[150px] sm:max-w-none">
+                  {cat.subtitle}
+                </p>
+
+                {/* Centered Circular Arrow Button */}
+                <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full ${cat.btnBg} text-white flex items-center justify-center shadow-md shadow-black/10 mt-2 group-hover:scale-110 active:scale-95 transition-all duration-200`}>
+                  <ChevronRight className="w-4 h-4 stroke-[3]" />
+                </div>
+              </div>
+
+              {/* Disabled / Service Unavailable Overlay */}
+              {!isEnabled && (
+                <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px] rounded-3xl sm:rounded-[32px] flex flex-col items-center justify-center p-3 sm:p-4 text-center z-20 select-none animate-fade-in transition-all">
+                  <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-2 shadow-sm border border-white/30">
+                    <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2.5]" />
+                  </div>
+                  <p className="text-white font-bold text-xs sm:text-sm leading-tight drop-shadow-sm px-2">
+                    {t('home.serviceUnavailable', 'We are not providing this service currently.')}
+                  </p>
+                </div>
+              )}
+            </>
+          );
+
+          if (isEnabled) {
+            return (
+              <Link
+                key={cat.id}
+                to={cat.link}
+                className={`${cat.bgGradient} ${cat.borderColor} border rounded-3xl sm:rounded-[32px] p-3.5 sm:p-5 md:p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group flex flex-col items-center justify-between text-center cursor-pointer relative overflow-hidden shadow-2xs`}
+              >
+                {cardContent}
+              </Link>
+            );
+          }
+
+          return (
+            <div
+              key={cat.id}
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.preventDefault();
+                showToast(t('home.serviceUnavailable', 'We are not providing this service currently.'), 'error');
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  showToast(t('home.serviceUnavailable', 'We are not providing this service currently.'), 'error');
+                }
+              }}
+              className={`${cat.bgGradient} ${cat.borderColor} border rounded-3xl sm:rounded-[32px] p-3.5 sm:p-5 md:p-6 transition-all duration-300 group flex flex-col items-center justify-between text-center cursor-not-allowed relative overflow-hidden shadow-2xs opacity-95`}
+            >
+              {cardContent}
             </div>
-          </Link>
-        ))}
+          );
+        })}
       </section>
 
     </div>

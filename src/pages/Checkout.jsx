@@ -201,6 +201,33 @@ export default function Checkout() {
     if (typeof selectedAddress.lat !== 'number' || typeof selectedAddress.lng !== 'number' || isNaN(selectedAddress.lat) || isNaN(selectedAddress.lng)) {
       return setErrorMsg('Selected address lacks a precise location. Please delete it and add a new one with GPS.');
     }
+
+    // Category Service Availability Check
+    try {
+      const catRes = await fetch(`${API_BASE}/restaurants/category-services`);
+      if (catRes.ok) {
+        const catList = await catRes.json();
+        for (const itm of items) {
+          const itmCat = (itm.category || '').toLowerCase();
+          let cId = 'food';
+          if (itmCat.includes('cake') || itmCat.includes('puff') || itmCat.includes('sweet') || itmCat.includes('lassi') || itmCat.includes('ice cream') || itmCat.includes('golisoda') || itmCat.includes('milk shake') || itmCat.includes('beverage') || itmCat.includes('cool') || itmCat.includes('bakery')) {
+            cId = 'bakery_beverages';
+          } else if (itmCat.includes('atta') || itmCat.includes('oil') || itmCat.includes('dairy') || itmCat.includes('grocery') || itmCat.includes('masala')) {
+            cId = 'grocery';
+          } else if (itmCat.includes('chicken') || itmCat.includes('mutton') || itmCat.includes('fish') || itmCat.includes('meat') || itmCat.includes('prawn') || itmCat.includes('egg') || itmCat.includes('seafood')) {
+            cId = 'meat';
+          } else if (itmCat.includes('vegetable') || itmCat.includes('fruit') || itmCat.includes('palak') || itmCat.includes('spinach') || itmCat.includes('organic')) {
+            cId = 'veg_fruits';
+          }
+          const found = catList.find(c => c.id === cId);
+          if (found && found.isEnabled === false) {
+            return setErrorMsg("We are not providing this service currently.");
+          }
+        }
+      }
+    } catch (e) {
+      // fallback to backend enforcement
+    }
     
     setIsSubmitting(true);
     try {
