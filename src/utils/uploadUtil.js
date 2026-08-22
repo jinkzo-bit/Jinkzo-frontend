@@ -103,9 +103,10 @@ export const getImageUrl = (url, type = 'default') => {
     return trimmed;
   }
 
-  // 5. Frontend public assets (e.g. /assets/cat_food.jpg)
+  // 5. Frontend public assets (e.g. /assets/cat_food.jpg or /assets/home/...)
   if (trimmed.startsWith('/assets/') || trimmed.startsWith('assets/')) {
-    return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    const formatted = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    return formatted.replace(/^\/assets\/HOME\//i, '/assets/home/');
   }
 
   // 6. Backend uploaded images (/uploads/... or uploads/...)
