@@ -70,10 +70,17 @@ export default function RideBooking() {
         if (catRes.ok) {
           const catList = await catRes.json();
           const rideCat = catList.find(c => c.id === 'ride');
-          if (rideCat && rideCat.isEnabled === false) {
-            setIsRiderAvailable(false);
-            setErrorMsg("We are not providing this service currently.");
-            return;
+          if (rideCat) {
+            if (rideCat.status === 'DISABLED' || rideCat.isEnabled === false) {
+              setIsRiderAvailable(false);
+              setErrorMsg("We are not providing this service currently.");
+              return;
+            }
+            if (rideCat.status === 'CLOSED') {
+              setIsRiderAvailable(false);
+              setErrorMsg(`Ride & Courier service is closed. ${rideCat.message || ''}`.trim());
+              return;
+            }
           }
         }
 

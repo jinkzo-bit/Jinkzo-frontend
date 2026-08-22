@@ -509,30 +509,36 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleToggleCategoryService = async (serviceId, newStatus) => {
+  const handleUpdateCategoryService = async (serviceId, updateFields) => {
     setCategoryServiceToggleLoading(prev => ({ ...prev, [serviceId]: true }));
     // Optimistic UI update
-    setCategoryServices(prev => prev.map(c => c.id === serviceId ? { ...c, isEnabled: newStatus } : c));
+    setCategoryServices(prev => prev.map(c => c.id === serviceId ? { ...c, ...updateFields } : c));
     try {
-      const res = await fetch(`${API_BASE}/admin/category-services/${serviceId}/status`, {
+      const res = await fetch(`${API_BASE}/admin/category-services/${serviceId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ isEnabled: newStatus })
+        body: JSON.stringify(updateFields)
       });
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
-        alert(data.message || 'Failed to update category service status');
+        alert(data.message || 'Failed to update category service');
         fetchCategoryServices();
+      } else {
+        setCategoryServices(prev => prev.map(c => c.id === serviceId ? data : c));
       }
     } catch (err) {
-      console.error('Toggle category service status error:', err);
+      console.error('Update category service error:', err);
       fetchCategoryServices();
     } finally {
       setCategoryServiceToggleLoading(prev => ({ ...prev, [serviceId]: false }));
     }
+  };
+
+  const handleToggleCategoryService = async (serviceId, newStatus) => {
+    return handleUpdateCategoryService(serviceId, { isEnabled: newStatus });
   };
 
   const fetchCategories = async (service = selectedCategoryService) => {
@@ -3751,16 +3757,16 @@ export default function AdminDashboard() {
           {/* ── CATEGORY MANAGEMENT TAB ──────────────────────────────────── */}
           {activeSubTab === 'categories' && (
             <div className="flex flex-col gap-6 animate-fade-in">
-              {/* ── 1. 6 CORE CATEGORY SERVICES AVAILABILITY (ON/OFF CONTROL) ── */}
+              {/* ── 1. 6 CORE CATEGORY SERVICES AVAILABILITY (ON/OFF & HOURS CONTROL) ── */}
               <div className="bg-surface border border-line rounded-3xl p-5 sm:p-6 flex flex-col gap-4 shadow-2xs">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line pb-4">
                   <div className="flex flex-col gap-0.5">
                     <h4 className="font-display font-extrabold text-sm sm:text-base text-main flex items-center gap-2">
                       <Layers className="w-4 h-4 text-primary" />
-                      Category Services Availability (ON/OFF Control)
+                      Category Services Availability & Service Hours (ON/OFF Control)
                     </h4>
                     <p className="text-xs text-muted font-medium">
-                      Admin-controlled switch for all 6 customer categories. When turned OFF, the category remains visible on Home with the message <span className="font-bold text-main">"We are not providing this service currently."</span> and ordering is blocked.
+                      Configure live availability and opening/closing hours in IST (<span className="font-semibold text-main">Asia/Kolkata</span>) for all 6 customer categories. When turned OFF or closed, categories remain visible on Home and ordering is safely blocked.
                     </p>
                   </div>
                   {isCategoryServicesLoading && (
@@ -3775,66 +3781,133 @@ export default function AdminDashboard() {
                   {categoryServices.map((service) => {
                     const isToggling = categoryServiceToggleLoading[service.id];
                     const isEnabled = service.isEnabled !== false;
+                    const is24Hours = service.is24Hours === true;
+                    const status = service.status || (isEnabled ? 'OPEN' : 'DISABLED');
+                    const isClosed = status === 'CLOSED';
+                    const isDisabled = status === 'DISABLED' || !isEnabled;
 
                     return (
                       <div
                         key={service.id}
-                        className={`border rounded-2xl p-4 flex items-center justify-between gap-3 transition-all duration-200 ${
-                          isEnabled
-                            ? 'bg-surface border-line hover:border-emerald-500/40 hover:shadow-xs'
-                            : 'bg-base/60 border-line-strong hover:border-red-500/30'
+                        className={`border rounded-2xl p-4 flex flex-col justify-between gap-3.5 transition-all duration-200 ${
+                          isDisabled
+                            ? 'bg-base/60 border-line-strong'
+                            : isClosed
+                            ? 'bg-amber-500/5 border-amber-500/30'
+                            : 'bg-surface border-line hover:border-emerald-500/40 hover:shadow-xs'
                         }`}
                       >
-                        {/* Left: Thumbnail & Name & Status */}
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-base border border-line shrink-0 flex items-center justify-center">
-                            <img
-                              src={getImageUrl(service.image || `/assets/cat_${service.id}.jpg`, 'category')}
-                              alt={service.name}
-                              onError={(e) => handleImageError(e, 'category')}
-                              className="w-full h-full object-contain p-1"
-                            />
+                        {/* Top: Thumbnail, Name, Status Badge, and Switch */}
+                        <div className="flex items-start justify-between gap-2.5">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-12 h-12 rounded-xl overflow-hidden bg-base border border-line shrink-0 flex items-center justify-center">
+                              <img
+                                src={getImageUrl(service.image || `/assets/cat_${service.id}.jpg`, 'category')}
+                                alt={service.name}
+                                onError={(e) => handleImageError(e, 'category')}
+                                className="w-full h-full object-contain p-1"
+                              />
+                            </div>
+
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-display font-extrabold text-xs sm:text-sm text-main truncate">
+                                {service.name}
+                              </span>
+                              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                {isDisabled ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:border-red-800 dark:text-red-400">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                    SERVICE DISABLED
+                                  </span>
+                                ) : isClosed ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-400">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                    CLOSED NOW ({service.message || 'Outside hours'})
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    OPEN NOW
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-display font-extrabold text-xs sm:text-sm text-main truncate">
-                              {service.name}
-                            </span>
-                            <div className="mt-1">
-                              {isEnabled ? (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                  Accepting Orders
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:border-red-800 dark:text-red-400">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-                                  Not Providing Service
-                                </span>
-                              )}
-                            </div>
+                          {/* Switch Button */}
+                          <div className="shrink-0 pt-0.5">
+                            <button
+                              type="button"
+                              disabled={isToggling}
+                              onClick={() => handleUpdateCategoryService(service.id, { isEnabled: !isEnabled })}
+                              aria-label={`Toggle ${service.name}`}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none cursor-pointer ${
+                                isToggling ? 'opacity-50 cursor-wait' : ''
+                              } ${
+                                isEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'
+                              }`}
+                            >
+                              <span
+                                className={`inline-block h-4.5 w-4.5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${
+                                  isEnabled ? 'translate-x-5.5' : 'translate-x-1'
+                                }`}
+                              />
+                            </button>
                           </div>
                         </div>
 
-                        {/* Right: ON/OFF Switch Button */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            disabled={isToggling}
-                            onClick={() => handleToggleCategoryService(service.id, !isEnabled)}
-                            aria-label={`Toggle ${service.name}`}
-                            className={`relative inline-flex h-7 w-13 items-center rounded-full transition-colors duration-300 focus:outline-none cursor-pointer ${
-                              isToggling ? 'opacity-50 cursor-wait' : ''
-                            } ${
-                              isEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'
-                            }`}
-                          >
-                            <span
-                              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${
-                                isEnabled ? 'translate-x-7' : 'translate-x-1'
-                              }`}
-                            />
-                          </button>
+                        {/* Bottom: Service Hours Config */}
+                        <div className="pt-2.5 border-t border-line flex flex-col gap-2">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Hours:</span>
+                            <div className="inline-flex rounded-lg p-0.5 bg-base border border-line text-[10px] font-bold">
+                              <button
+                                type="button"
+                                disabled={isToggling}
+                                onClick={() => handleUpdateCategoryService(service.id, { is24Hours: false })}
+                                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                                  !is24Hours ? 'bg-surface text-main shadow-2xs font-extrabold' : 'text-muted hover:text-main'
+                                }`}
+                              >
+                                Custom Hours
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isToggling}
+                                onClick={() => handleUpdateCategoryService(service.id, { is24Hours: true })}
+                                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                                  is24Hours ? 'bg-primary text-white shadow-2xs font-extrabold' : 'text-muted hover:text-main'
+                                }`}
+                              >
+                                24 Hours
+                              </button>
+                            </div>
+                          </div>
+
+                          {!is24Hours && (
+                            <div className="grid grid-cols-2 gap-2 pt-0.5">
+                              <div className="flex flex-col gap-0.5">
+                                <label className="text-[9px] font-extrabold text-muted uppercase">Opens</label>
+                                <input
+                                  type="time"
+                                  disabled={isToggling}
+                                  value={service.openingTime || '06:00'}
+                                  onChange={(e) => handleUpdateCategoryService(service.id, { openingTime: e.target.value })}
+                                  className="bg-base border border-line rounded-lg px-2 py-1 text-[11px] font-bold text-main outline-none focus:border-primary cursor-pointer"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <label className="text-[9px] font-extrabold text-muted uppercase">Closes</label>
+                                <input
+                                  type="time"
+                                  disabled={isToggling}
+                                  value={service.closingTime || '22:00'}
+                                  onChange={(e) => handleUpdateCategoryService(service.id, { closingTime: e.target.value })}
+                                  className="bg-base border border-line rounded-lg px-2 py-1 text-[11px] font-bold text-main outline-none focus:border-primary cursor-pointer"
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );

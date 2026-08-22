@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronRight,
   ChevronLeft,
-  Lock
+  Lock,
+  Clock
 } from 'lucide-react';
 import { API_BASE } from '../config/api';
 import { useTranslation } from '../store/languageStore';
@@ -53,12 +54,12 @@ export default function Home() {
 
   // Category Services Availability Status
   const [categoryStatus, setCategoryStatus] = useState({
-    food: true,
-    ride: true,
-    grocery: true,
-    bakery_beverages: true,
-    veg_fruits: true,
-    meat: true
+    food: { status: 'OPEN', isEnabled: true, message: null },
+    ride: { status: 'OPEN', isEnabled: true, message: null },
+    grocery: { status: 'OPEN', isEnabled: true, message: null },
+    bakery_beverages: { status: 'OPEN', isEnabled: true, message: null },
+    veg_fruits: { status: 'OPEN', isEnabled: true, message: null },
+    meat: { status: 'OPEN', isEnabled: true, message: null }
   });
 
   // Dynamic Banners from Backend
@@ -91,11 +92,11 @@ export default function Home() {
             const statusMap = {};
             catList.forEach(c => {
               if (c.id) {
-                statusMap[c.id] = c.isEnabled !== false;
+                statusMap[c.id] = c;
                 // Support aliases
-                if (c.id === 'bakery_beverages') statusMap['cool_hot'] = c.isEnabled !== false;
-                if (c.id === 'ride') statusMap['ride_courier'] = c.isEnabled !== false;
-                if (c.id === 'veg_fruits') statusMap['fruits-vegetables'] = c.isEnabled !== false;
+                if (c.id === 'bakery_beverages') statusMap['cool_hot'] = c;
+                if (c.id === 'ride') statusMap['ride_courier'] = c;
+                if (c.id === 'veg_fruits') statusMap['fruits-vegetables'] = c;
               }
             });
             setCategoryStatus(prev => ({ ...prev, ...statusMap }));
@@ -142,14 +143,18 @@ export default function Home() {
       const socketUrl = API_BASE.replace('/api', '');
       socket = io(socketUrl);
       socket.on('categoryStatusChanged', (data) => {
-        if (data && data.categoryId) {
-          setCategoryStatus(prev => {
-            const updated = { ...prev, [data.categoryId]: data.isEnabled !== false };
-            if (data.categoryId === 'bakery_beverages') updated['cool_hot'] = data.isEnabled !== false;
-            if (data.categoryId === 'ride') updated['ride_courier'] = data.isEnabled !== false;
-            if (data.categoryId === 'veg_fruits') updated['fruits-vegetables'] = data.isEnabled !== false;
-            return updated;
-          });
+        if (data) {
+          const catId = data.categoryId || (data.category && data.category.id);
+          const catData = data.category || data;
+          if (catId) {
+            setCategoryStatus(prev => {
+              const updated = { ...prev, [catId]: catData };
+              if (catId === 'bakery_beverages') updated['cool_hot'] = catData;
+              if (catId === 'ride') updated['ride_courier'] = catData;
+              if (catId === 'veg_fruits') updated['fruits-vegetables'] = catData;
+              return updated;
+            });
+          }
         }
       });
     } catch (e) {
@@ -412,7 +417,13 @@ export default function Home() {
       {/* 3. CATEGORY CARDS (EXACT 2-COLUMN GRID, 3 ROWS, CENTER ALIGNED) */}
       <section className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
         {categories.map((cat) => {
-          const isEnabled = categoryStatus[cat.id] !== false;
+          const currentCat = categoryStatus[cat.id] || { status: 'OPEN', isEnabled: true, message: null };
+          const isEnabled = typeof currentCat === 'boolean' ? currentCat : currentCat.isEnabled !== false;
+          const status = currentCat.status || (isEnabled ? 'OPEN' : 'DISABLED');
+          const isOpen = status === 'OPEN';
+          const isClosed = status === 'CLOSED';
+          const isDisabled = status === 'DISABLED' || !isEnabled;
+          const closedMsg = currentCat.message || t('home.serviceClosed', 'Service Closed');
 
           const cardContent = (
             <>
@@ -447,12 +458,30 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Closed Service Hours Overlay */}
+              {isClosed && (
+                <div className="absolute inset-0 bg-black/50 backdrop-blur-[2.5px] rounded-3xl sm:rounded-[32px] flex flex-col items-center justify-center p-3 sm:p-4 text-center z-20 select-none animate-fade-in transition-all">
+                  <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-amber-500/20 backdrop-blur-md flex items-center justify-center mb-1.5 shadow-sm border border-amber-400/40">
+                    <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300 stroke-[2.5]" />
+                  </div>
+                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-amber-300 mb-0.5 drop-shadow-xs">
+                    {t('home.closedNow', 'CLOSED NOW')}
+                  </span>
+                  <p className="text-white font-bold text-xs sm:text-sm leading-tight drop-shadow-sm px-2">
+                    {closedMsg}
+                  </p>
+                </div>
+              )}
+
               {/* Disabled / Service Unavailable Overlay */}
-              {!isEnabled && (
-                <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px] rounded-3xl sm:rounded-[32px] flex flex-col items-center justify-center p-3 sm:p-4 text-center z-20 select-none animate-fade-in transition-all">
-                  <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-2 shadow-sm border border-white/30">
+              {isDisabled && (
+                <div className="absolute inset-0 bg-black/55 backdrop-blur-[2.5px] rounded-3xl sm:rounded-[32px] flex flex-col items-center justify-center p-3 sm:p-4 text-center z-20 select-none animate-fade-in transition-all">
+                  <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-1.5 shadow-sm border border-white/30">
                     <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2.5]" />
                   </div>
+                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-red-300 mb-0.5 drop-shadow-xs">
+                    {t('home.serviceDisabled', 'SERVICE DISABLED')}
+                  </span>
                   <p className="text-white font-bold text-xs sm:text-sm leading-tight drop-shadow-sm px-2">
                     {t('home.serviceUnavailable', 'We are not providing this service currently.')}
                   </p>
@@ -461,7 +490,7 @@ export default function Home() {
             </>
           );
 
-          if (isEnabled) {
+          if (isOpen) {
             return (
               <Link
                 key={cat.id}
@@ -473,6 +502,10 @@ export default function Home() {
             );
           }
 
+          const clickMessage = isClosed
+            ? `${cat.title}: ${closedMsg}`
+            : t('home.serviceUnavailable', 'We are not providing this service currently.');
+
           return (
             <div
               key={cat.id}
@@ -480,12 +513,12 @@ export default function Home() {
               tabIndex={0}
               onClick={(e) => {
                 e.preventDefault();
-                showToast(t('home.serviceUnavailable', 'We are not providing this service currently.'), 'error');
+                showToast(clickMessage, 'error');
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  showToast(t('home.serviceUnavailable', 'We are not providing this service currently.'), 'error');
+                  showToast(clickMessage, 'error');
                 }
               }}
               className={`${cat.bgGradient} ${cat.borderColor} border rounded-3xl sm:rounded-[32px] p-3.5 sm:p-5 md:p-6 transition-all duration-300 group flex flex-col items-center justify-between text-center cursor-not-allowed relative overflow-hidden shadow-2xs opacity-95`}

@@ -220,8 +220,13 @@ export default function Checkout() {
             cId = 'veg_fruits';
           }
           const found = catList.find(c => c.id === cId);
-          if (found && found.isEnabled === false) {
-            return setErrorMsg("We are not providing this service currently.");
+          if (found) {
+            if (found.status === 'DISABLED' || found.isEnabled === false) {
+              return setErrorMsg("We are not providing this service currently.");
+            }
+            if (found.status === 'CLOSED') {
+              return setErrorMsg(`${found.name || 'This'} service is closed. ${found.message || ''}`.trim());
+            }
           }
         }
       }
