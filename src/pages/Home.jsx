@@ -157,66 +157,54 @@ export default function Home() {
       id: 'food',
       title: t('home.categoryFood', 'Food'),
       subtitle: t('home.foodSubtitle', 'Tasty meals from top restaurants'),
-      textColor: 'text-[#D9381E]',
-      btnBg: 'bg-[#D9381E] hover:bg-[#C62828]',
       bgImage: '/assets/HOME/backgrounds/food-bg.png',
       fgImage: '/assets/HOME/categories/food.png',
-      imgStyle: { width: '92%', height: '85%', top: '6%' },
+      imgStyle: { width: '92%', height: '62%', top: '3%' },
       link: '/restaurants'
     },
     {
-      id: 'ride',s
+      id: 'ride',
       title: t('home.categoryRide', 'Ride & Courier'),
       subtitle: t('home.rideSubtitle', 'Quick rides & courier service'),
-      textColor: 'text-[#1565C0]',
-      btnBg: 'bg-[#1565C0] hover:bg-[#0D47A1]',
       bgImage: '/assets/HOME/backgrounds/ride-courier-bg.png',
       fgImage: '/assets/HOME/categories/ride-courier.png',
-      imgStyle: { width: '92%', height: '85%', top: '6%' },
+      imgStyle: { width: '92%', height: '62%', top: '3%' },
       link: '/ride'
     },
     {
       id: 'grocery',
       title: t('home.categoryGrocery', 'Grocery'),
       subtitle: t('home.grocerySubtitle', 'Daily essentials delivered fast'),
-      textColor: 'text-[#2E7D32]',
-      btnBg: 'bg-[#2E7D32] hover:bg-[#1B5E20]',
       bgImage: '/assets/HOME/backgrounds/grocery-bg.png',
       fgImage: '/assets/HOME/categories/grocery.png',
-      imgStyle: { width: '92%', height: '85%', top: '6%' },
+      imgStyle: { width: '94%', height: '62%', top: '2%' },
       link: '/restaurants?category=grocery'
     },
     {
       id: 'bakery_beverages',
       title: t('home.categoryBakery', 'Bakery & Beverages'),
       subtitle: t('home.bakerySubtitle', 'Fresh cakes, puffs, snacks & cool drinks'),
-      textColor: 'text-[#C2185B]',
-      btnBg: 'bg-[#C2185B] hover:bg-[#AD1457]',
       bgImage: '/assets/HOME/backgrounds/bakery-beverages-bg.png',
       fgImage: '/assets/HOME/categories/bakery-beverages.png',
-      imgStyle: { width: '92%', height: '85%', top: '6%' },
+      imgStyle: { width: '95%', height: '64%', top: '2%' },
       link: '/restaurants?category=beverages'
     },
     {
       id: 'veg_fruits',
       title: t('home.categoryVegFruits', 'Veg & Fruits'),
       subtitle: t('home.vegFruitsSubtitle', 'Fresh vegetables & fruits'),
-      textColor: 'text-[#00796B]',
-      btnBg: 'bg-[#00796B] hover:bg-[#004D40]',
       bgImage: '/assets/HOME/backgrounds/veg-fruits-bg.png',
       fgImage: '/assets/HOME/categories/veg-fruits.png',
-      imgStyle: { width: '92%', height: '85%', top: '6%' },
+      imgStyle: { width: '94%', height: '64%', top: '2%' },
       link: '/restaurants?category=fruits-vegetables'
     },
     {
       id: 'meat',
       title: t('home.categoryMeat', 'Meat'),
       subtitle: t('home.meatSubtitle', 'Fresh meat, chicken & fish'),
-      textColor: 'text-[#D84315]',
-      btnBg: 'bg-[#D84315] hover:bg-[#BF360C]',
       bgImage: '/assets/HOME/backgrounds/meat-bg.png',
       fgImage: '/assets/HOME/categories/meat.png',
-      imgStyle: { width: '92%', height: '85%', top: '6%' },
+      imgStyle: { width: '95%', height: '62%', top: '3%' },
       link: '/restaurants?category=meat'
     }
   ];
@@ -353,15 +341,15 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 3. CATEGORY CARDS (LAYERED: BACKGROUND + TRANSPARENT PNG + HTML TITLE + TAGLINE) */}
-      <section className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+      {/* 3. CATEGORY CARDS (FINAL: COLORFUL BG + LARGE TRANSPARENT PNG + WHITE TITLE + TAGLINE — NO ARROWS) */}
+      <section className="grid grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5 md:gap-6">
         {categories.map((cat) => (
           <Link
             key={cat.id}
             to={cat.link}
-            className="rounded-3xl sm:rounded-[32px] overflow-hidden cursor-pointer relative shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group aspect-square w-full flex flex-col justify-end p-2.5 sm:p-3.5 md:p-4 text-center select-none"
+            className="rounded-[22px] sm:rounded-[32px] overflow-hidden cursor-pointer relative shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group aspect-square w-full flex flex-col justify-end items-center pb-3 pt-2 px-2 sm:pb-5 sm:px-4 md:pb-6 text-center select-none"
           >
-            {/* 1. Background Image (Fills complete card) */}
+            {/* LAYER 1: Colorful Background Image (Fills complete card) */}
             <img
               src={getImageUrl(cat.bgImage, 'category')}
               alt=""
@@ -369,29 +357,28 @@ export default function Home() {
               className="absolute inset-0 w-full h-full object-cover pointer-events-none"
             />
 
-            {/* 2. Transparent Foreground PNG (Enlarged, centered, prominent) */}
-            <div className="absolute inset-x-0 top-0 bottom-[23%] flex items-center justify-center pointer-events-none z-10 p-1.5 sm:p-2.5 group-hover:scale-105 transition-transform duration-300">
+            {/* LAYER 2: Large Transparent Foreground PNG (Full scale aligned with background) */}
+            <div className="absolute inset-0 w-full h-full flex items-center justify-center pointer-events-none z-10 group-hover:scale-105 transition-transform duration-300">
               <img
                 src={getImageUrl(cat.fgImage, 'category')}
                 alt={cat.title}
                 onError={(e) => handleImageError(e, 'category')}
-                className="w-full h-full max-w-[98%] max-h-[98%] object-contain drop-shadow-md"
+                className="w-full h-full object-contain drop-shadow-md"
               />
             </div>
 
-            {/* 3. HTML Title & Tagline (Bottom section) */}
-            <div className="flex flex-col items-center justify-center gap-0.5 z-10 w-full px-1 pb-1.5 sm:pb-2.5">
-              <h3 className={`font-display font-black text-sm sm:text-base md:text-lg lg:text-xl ${cat.textColor} tracking-tight leading-tight`}>
+            {/* LAYERS 3 & 4: HTML Category Title & Tagline (Centered below PNG — NO ARROWS) */}
+            <div className="flex flex-col items-center justify-center gap-0.5 sm:gap-1 z-10 w-full px-2 pb-3 sm:pb-5 md:pb-6">
+              <h3 className="font-display font-black text-base sm:text-xl md:text-2xl lg:text-[26px] text-white tracking-tight leading-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.35)]">
                 {cat.title}
               </h3>
-              <p className="text-[9px] sm:text-[11px] md:text-xs text-gray-800 dark:text-gray-900 font-semibold leading-tight sm:leading-snug line-clamp-2 max-w-[170px] sm:max-w-none">
+              <p className="text-[10px] sm:text-xs md:text-[13px] lg:text-[14px] text-gray-950 font-extrabold leading-tight sm:leading-snug line-clamp-2 max-w-[155px] sm:max-w-[210px] md:max-w-none">
                 {cat.subtitle}
               </p>
             </div>
           </Link>
         ))}
       </section>
-
     </div>
   );
 }
