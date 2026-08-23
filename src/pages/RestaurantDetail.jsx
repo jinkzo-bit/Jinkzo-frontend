@@ -10,8 +10,6 @@ import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import VegBadge from '../components/VegBadge';
 import { checkRestaurantOpenStatus, checkItemAvailability, formatTime12 } from '../utils/timingUtils';
 
-const menuCategories = ['Starters', 'Burgers', 'Pizza', 'Biryani', 'Main Course', 'Desserts', 'Drinks'];
-
 export default function RestaurantDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -27,8 +25,9 @@ export default function RestaurantDetail() {
   const [restaurant, setRestaurant] = useState(null);
   const [menuItems, setMenuItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState('Starters');
+  const [activeCategory, setActiveCategory] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [foodTypeFilter, setFoodTypeFilter] = useState('ALL'); // 'ALL', 'VEG', 'NON_VEG'
 
   // Zustand Cart Integration
   const cartItems = useCartStore((state) => state.items);
@@ -82,19 +81,48 @@ export default function RestaurantDetail() {
     );
   }
 
-  // Filter menu items by search query
+  // Derive active restaurant categories sorted by displayOrder
+  const restaurantCategories = React.useMemo(() => {
+    if (restaurant?.menuCategories && Array.isArray(restaurant.menuCategories) && restaurant.menuCategories.length > 0) {
+      return restaurant.menuCategories
+        .filter(c => c.isActive !== false)
+        .sort((a, b) => (Number(a.displayOrder) || 0) - (Number(b.displayOrder) || 0))
+        .map(c => c.name);
+    }
+    // Fallback to distinct categories in items
+    const distinct = [...new Set(menuItems.map(i => i.category).filter(Boolean))];
+    return distinct.length > 0 ? distinct : ['Main Course'];
+  }, [restaurant, menuItems]);
+
+  // Filter menu items by search query and foodTypeFilter
   const filteredMenuItems = menuItems.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesSearch;
+    
+    const matchesFoodType =
+      foodTypeFilter === 'ALL' ||
+      (foodTypeFilter === 'VEG' && item.isVeg === true) ||
+      (foodTypeFilter === 'NON_VEG' && item.isVeg === false);
+
+    return matchesSearch && matchesFoodType;
   });
 
   // Group menu by category
   const groupedMenu = filteredMenuItems.reduce((acc, item) => {
-    if (!acc[item.category]) acc[item.category] = [];
-    acc[item.category].push(item);
+    const cat = item.category || 'Main Course';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(item);
     return acc;
   }, {});
+
+  // Visible categories that have matching items
+  const visibleCategories = restaurantCategories.filter(cat => groupedMenu[cat]?.length > 0);
+
+  useEffect(() => {
+    if (visibleCategories.length > 0 && (!activeCategory || !visibleCategories.includes(activeCategory))) {
+      setActiveCategory(visibleCategories[0]);
+    }
+  }, [visibleCategories, activeCategory]);
 
   // Add Item to cart with same-restaurant check
   const handleAddToCart = (item) => {
@@ -244,79 +272,121 @@ export default function RestaurantDetail() {
         );
       })()}
 
-      {/* Search Input Filter */}
-      <section className="bg-surface border border-line p-3.5 rounded-3xl shadow-2xs flex items-center gap-3 w-full max-w-md animate-fade-in">
-        <Search className="w-5 h-5 text-muted flex-shrink-0" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={t('restaurant.searchMenu', 'Search menu items...')}
-          className="bg-transparent text-xs font-semibold text-main outline-none flex-grow placeholder-gray-400"
-        />
-        {searchQuery && (
+      {/* Search & Food Type Filter Bar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        <section className="bg-surface border border-line p-3 rounded-2xl shadow-2xs flex items-center gap-3 flex-1 max-w-md animate-fade-in">
+          <Search className="w-4 h-4 text-muted flex-shrink-0" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('restaurant.searchMenu', 'Search menu items...')}
+            className="bg-transparent text-xs font-semibold text-main outline-none flex-grow placeholder-gray-400"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="p-1 hover:bg-base rounded-lg text-muted hover:text-gray-650 cursor-pointer transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </section>
+
+        {/* Food Type Filter Toggle Pills */}
+        <div className="flex items-center gap-1.5 bg-surface border border-line p-1 rounded-2xl shadow-2xs w-fit self-start sm:self-auto">
           <button
-            onClick={() => setSearchQuery('')}
-            className="p-1 hover:bg-base rounded-lg text-muted hover:text-gray-650 cursor-pointer transition-colors"
+            type="button"
+            onClick={() => setFoodTypeFilter('ALL')}
+            className={`px-3.5 py-1.8 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              foodTypeFilter === 'ALL'
+                ? 'bg-primary text-white shadow-xs'
+                : 'text-muted hover:text-main hover:bg-base'
+            }`}
           >
-            <X className="w-4 h-4" />
+            ALL
           </button>
-        )}
-      </section>
+          <button
+            type="button"
+            onClick={() => setFoodTypeFilter('VEG')}
+            className={`px-3.5 py-1.8 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+              foodTypeFilter === 'VEG'
+                ? 'bg-green-600 text-white shadow-xs'
+                : 'text-green-700 hover:bg-green-50'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-green-500 ring-2 ring-white/50"></span>
+            VEG
+          </button>
+          <button
+            type="button"
+            onClick={() => setFoodTypeFilter('NON_VEG')}
+            className={`px-3.5 py-1.8 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+              foodTypeFilter === 'NON_VEG'
+                ? 'bg-red-600 text-white shadow-xs'
+                : 'text-red-700 hover:bg-red-50'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-red-500 ring-2 ring-white/50"></span>
+            NON-VEG
+          </button>
+        </div>
+      </div>
 
       {/* Main menu content */}
       <div className="flex flex-col md:flex-row gap-8 items-start">
         {/* Sticky Sidebar Navigation (Desktop) */}
-        <aside className="hidden md:block w-[200px] sticky top-24 bg-surface rounded-2xl p-3 border border-line shadow-xs flex-shrink-0">
-          <p className="text-[10px] uppercase font-bold tracking-wider text-muted px-3 mb-2">{t('restaurant.categories', 'Categories')}</p>
-          <div className="flex flex-col gap-1">
-            {menuCategories.map((category) => {
-              const hasItems = groupedMenu[category]?.length > 0;
+        {visibleCategories.length > 0 && (
+          <aside className="hidden md:block w-[200px] sticky top-24 bg-surface rounded-2xl p-3 border border-line shadow-xs flex-shrink-0">
+            <p className="text-[10px] uppercase font-bold tracking-wider text-muted px-3 mb-2">{t('restaurant.categories', 'Categories')}</p>
+            <div className="flex flex-col gap-1">
+              {visibleCategories.map((category) => {
+                const count = groupedMenu[category]?.length || 0;
+                return (
+                  <button
+                    key={category}
+                    onClick={() => {
+                      setActiveCategory(category);
+                      document.getElementById(category)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }}
+                    className={`w-full text-left px-3 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-between ${
+                      activeCategory === category
+                        ? 'bg-primary-light text-primary'
+                        : 'text-muted hover:bg-base'
+                    }`}
+                  >
+                    <span className="truncate pr-1">{category}</span>
+                    <span className="text-[10px] bg-base text-muted font-bold px-1.5 py-0.5 rounded-md border border-line">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+        )}
+
+        {/* Sticky Mobile Categories Bar */}
+        {visibleCategories.length > 0 && (
+          <div className="md:hidden sticky top-18 z-20 bg-surface/95 w-full border-b border-line py-2 flex gap-2 overflow-x-auto no-scrollbar glass px-1">
+            {visibleCategories.map((category) => {
               return (
                 <button
                   key={category}
-                  disabled={!hasItems}
                   onClick={() => {
                     setActiveCategory(category);
                     document.getElementById(category)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }}
-                  className={`w-full text-left px-3 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-between ${
+                  className={`px-3.5 py-2 text-xs font-bold rounded-full transition-all flex-shrink-0 border cursor-pointer ${
                     activeCategory === category
-                      ? 'bg-primary-light text-primary'
-                      : 'text-muted hover:bg-base disabled:opacity-40 disabled:hover:bg-transparent'
+                      ? 'bg-primary-light text-primary border-primary-light'
+                      : 'bg-surface text-muted border-line'
                   }`}
                 >
-                  <span>{category}</span>
-                  {hasItems && <span className="text-[10px] bg-gray-100 text-muted font-semibold px-1.5 py-0.5 rounded-md">{groupedMenu[category].length}</span>}
+                  {category}
                 </button>
               );
             })}
           </div>
-        </aside>
-
-        {/* Sticky Mobile Categories Bar */}
-        <div className="md:hidden sticky top-18 z-20 bg-surface/95 w-full border-b border-line py-2 flex gap-2 overflow-x-auto no-scrollbar glass px-1">
-          {menuCategories.map((category) => {
-            const hasItems = groupedMenu[category]?.length > 0;
-            if (!hasItems) return null;
-            return (
-              <button
-                key={category}
-                onClick={() => {
-                  setActiveCategory(category);
-                  document.getElementById(category)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }}
-                className={`px-3.5 py-2 text-xs font-bold rounded-full transition-all flex-shrink-0 border cursor-pointer ${
-                  activeCategory === category
-                    ? 'bg-primary-light text-primary border-primary-light'
-                    : 'bg-surface text-muted border-line'
-                }`}
-              >
-                {category}
-              </button>
-            );
-          })}
-        </div>
+        )}
 
         {/* Menu Items List */}
         <div className="flex-grow flex flex-col gap-8 w-full">
@@ -324,10 +394,22 @@ export default function RestaurantDetail() {
             <div className="bg-surface rounded-3xl p-16 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
               <Search className="w-12 h-12 text-gray-300" />
               <h4 className="font-display font-extrabold text-sm text-main">{t('restaurant.noMatchingDishes', 'No matching dishes found')}</h4>
-              <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">{t('restaurant.trySearchingOther', 'Try searching for other dish names or keywords!')}</p>
+              <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">
+                {searchQuery || foodTypeFilter !== 'ALL'
+                  ? 'Try clearing the search or changing your Veg / Non-Veg filter!'
+                  : t('restaurant.trySearchingOther', 'Try searching for other dish names or keywords!')}
+              </p>
+              {(searchQuery || foodTypeFilter !== 'ALL') && (
+                <button
+                  onClick={() => { setSearchQuery(''); setFoodTypeFilter('ALL'); }}
+                  className="mt-2 text-xs font-bold text-primary hover:underline cursor-pointer"
+                >
+                  Clear All Filters
+                </button>
+              )}
             </div>
           ) : (
-            menuCategories.map((category) => {
+            visibleCategories.map((category) => {
             const categoryItems = groupedMenu[category] || [];
             if (categoryItems.length === 0) return null;
 
