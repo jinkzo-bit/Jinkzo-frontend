@@ -40,31 +40,171 @@ export default function RestaurantDetail() {
   // Cart conflict modal state
   const [conflictModal, setConflictModal] = useState({ isOpen: false, message: '', pendingItem: null });
 
+  // Fetch restaurant details
   useEffect(() => {
+    let isMounted = true;
     const fetchRestaurantDetail = async () => {
       setIsLoading(true);
       try {
         const res = await fetch(`${API_BASE}/restaurants/${id}`);
+        if (!isMounted) return;
         if (res.ok) {
           const data = await res.json();
-          // Split expanded menu fields
           const { menu, ...rest } = data;
           setRestaurant(rest);
-          setMenuItems(menu || []);
+          setMenuItems(Array.isArray(menu) ? menu : []);
         } else {
           navigate('/');
         }
       } catch (err) {
         console.error('Fetch detail error:', err);
-        navigate('/');
+        if (isMounted) navigate('/');
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     };
 
-    fetchRestaurantDetail();
+    if (id) {
+      fetchRestaurantDetail();
+    }
+    return () => {
+      isMounted = false;
+    };
   }, [id, navigate]);
 
+  // Derive active restaurant categories sorted by displayOrder (safely handles null/undefined/empty)
+  const restaurantCategories = React.useMemo(() => {
+    const rawCategories = Array.isArray(restaurant?.menuCategories) ? restaurant.menuCategories : [];
+    const activeCats = rawCategories
+      .filter((c) => c && c.isActive !== false && c.name)
+      .sort((a, b) => (Number(a.displayOrder) || 0) - (Number(b.displayOrder) || 0))
+      .map((c) => c.name.trim());
+
+    // Also collect distinct categories from menuItems for backward compatibility
+    const itemCats = Array.isArray(menuItems)
+      ? [...new Set(menuItems.map((i) => (typeof i?.category === 'string' ? i.category.trim() : '')).filter(Boolean))]
+      : [];
+
+    const combined = [...activeCats];
+    for (const catName of itemCats) {
+      if (!combined.some((c) => c.toLowerCase() === catName.toLowerCase())) {
+        combined.push(catName);
+      }
+    }
+
+    return combined.length > 0 ? combined : ['Main Course'];
+  }, [restaurant?.menuCategories, menuItems]);
+
+  // Filter menu items by search query and foodTypeFilter
+  const filteredMenuItems = React.useMemo(() => {
+    if (!Array.isArray(menuItems)) return [];
+
+    const query = searchQuery ? searchQuery.trim().toLowerCase() : '';
+
+    return menuItems.filter((item) => {
+      if (!item) return false;
+
+      const nameMatch = item.name && typeof item.name === 'string' && item.name.toLowerCase().includes(query);
+      const descMatch = item.description && typeof item.description === 'string' && item.description.toLowerCase().includes(query);
+      const matchesSearch = !query || nameMatch || descMatch;
+
+      const isItemVeg = item.isVeg === true || item.isVeg === 'true' || item.foodType === 'veg';
+      const matchesFoodType =
+        foodTypeFilter === 'ALL' ||
+        (foodTypeFilter === 'VEG' && isItemVeg) ||
+        (foodTypeFilter === 'NON_VEG' && !isItemVeg);
+
+      return matchesSearch && matchesFoodType;
+    });
+  }, [menuItems, searchQuery, foodTypeFilter]);
+
+  // Group menu by category (supports categoryId and legacy category string)
+  const groupedMenu = React.useMemo(() => {
+    const rawCategories = Array.isArray(restaurant?.menuCategories) ? restaurant.menuCategories : [];
+    const catIdToName = {};
+    rawCategories.forEach((c) => {
+      if (c && c._id && c.name) {
+        catIdToName[String(c._id)] = c.name.trim();
+      }
+    });
+
+    const groups = {};
+    restaurantCategories.forEach((catName) => {
+      groups[catName] = [];
+    });
+
+    filteredMenuItems.forEach((item) => {
+      let targetCat = null;
+
+      // 1. Match by categoryId if available
+      if (item.categoryId && catIdToName[String(item.categoryId)]) {
+        targetCat = catIdToName[String(item.categoryId)];
+      }
+
+      // 2. Match by category string name if not matched yet
+      if (!targetCat && item.category && typeof item.category === 'string') {
+        const itemCatTrimmed = item.category.trim();
+        const found = restaurantCategories.find((c) => c.toLowerCase() === itemCatTrimmed.toLowerCase());
+        if (found) {
+          targetCat = found;
+        } else {
+          targetCat = itemCatTrimmed;
+        }
+      }
+
+      // 3. Fallback
+      if (!targetCat) {
+        targetCat = restaurantCategories[0] || 'Main Course';
+      }
+
+      if (!groups[targetCat]) {
+        groups[targetCat] = [];
+      }
+      groups[targetCat].push(item);
+    });
+
+    return groups;
+  }, [restaurantCategories, filteredMenuItems, restaurant?.menuCategories]);
+
+  // Visible categories that have matching items
+  const visibleCategories = React.useMemo(() => {
+    return restaurantCategories.filter((cat) => groupedMenu[cat] && groupedMenu[cat].length > 0);
+  }, [restaurantCategories, groupedMenu]);
+
+  // Sync activeCategory when visibleCategories change
+  useEffect(() => {
+    if (visibleCategories.length > 0 && (!activeCategory || !visibleCategories.includes(activeCategory))) {
+      setActiveCategory(visibleCategories[0]);
+    }
+  }, [visibleCategories, activeCategory]);
+
+  // Add Item to cart with same-restaurant check
+  const handleAddToCart = (item) => {
+    if (!restaurant) return;
+    const result = addItem(item, restaurant);
+    if (result && result.conflict) {
+      setConflictModal({
+        isOpen: true,
+        message: result.message,
+        pendingItem: item
+      });
+    }
+  };
+
+  const confirmConflictReset = () => {
+    if (!restaurant || !conflictModal.pendingItem) return;
+    clearCart();
+    addItem(conflictModal.pendingItem, restaurant);
+    setConflictModal({ isOpen: false, message: '', pendingItem: null });
+  };
+
+  // Check if item is in cart and return its quantity
+  const getItemQuantity = (itemId) => {
+    const matched = cartItems.find((i) => String(i.menuItemId || i._id) === String(itemId));
+    return matched ? matched.quantity : 0;
+  };
+
+  // Conditional early return ONLY after all hooks are executed
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8 flex flex-col gap-6">
@@ -81,72 +221,9 @@ export default function RestaurantDetail() {
     );
   }
 
-  // Derive active restaurant categories sorted by displayOrder
-  const restaurantCategories = React.useMemo(() => {
-    if (restaurant?.menuCategories && Array.isArray(restaurant.menuCategories) && restaurant.menuCategories.length > 0) {
-      return restaurant.menuCategories
-        .filter(c => c.isActive !== false)
-        .sort((a, b) => (Number(a.displayOrder) || 0) - (Number(b.displayOrder) || 0))
-        .map(c => c.name);
-    }
-    // Fallback to distinct categories in items
-    const distinct = [...new Set(menuItems.map(i => i.category).filter(Boolean))];
-    return distinct.length > 0 ? distinct : ['Main Course'];
-  }, [restaurant, menuItems]);
-
-  // Filter menu items by search query and foodTypeFilter
-  const filteredMenuItems = menuItems.filter((item) => {
-    const matchesSearch = !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    const matchesFoodType =
-      foodTypeFilter === 'ALL' ||
-      (foodTypeFilter === 'VEG' && item.isVeg === true) ||
-      (foodTypeFilter === 'NON_VEG' && item.isVeg === false);
-
-    return matchesSearch && matchesFoodType;
-  });
-
-  // Group menu by category
-  const groupedMenu = filteredMenuItems.reduce((acc, item) => {
-    const cat = item.category || 'Main Course';
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(item);
-    return acc;
-  }, {});
-
-  // Visible categories that have matching items
-  const visibleCategories = restaurantCategories.filter(cat => groupedMenu[cat]?.length > 0);
-
-  useEffect(() => {
-    if (visibleCategories.length > 0 && (!activeCategory || !visibleCategories.includes(activeCategory))) {
-      setActiveCategory(visibleCategories[0]);
-    }
-  }, [visibleCategories, activeCategory]);
-
-  // Add Item to cart with same-restaurant check
-  const handleAddToCart = (item) => {
-    const result = addItem(item, restaurant);
-    if (result.conflict) {
-      setConflictModal({
-        isOpen: true,
-        message: result.message,
-        pendingItem: item
-      });
-    }
-  };
-
-  const confirmConflictReset = () => {
-    clearCart();
-    addItem(conflictModal.pendingItem, restaurant);
-    setConflictModal({ isOpen: false, message: '', pendingItem: null });
-  };
-
-  // Check if item is in cart and return its quantity
-  const getItemQuantity = (itemId) => {
-    const matched = cartItems.find((i) => String(i.menuItemId) === String(itemId));
-    return matched ? matched.quantity : 0;
-  };
+  if (!restaurant) {
+    return null;
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-8 pb-32 animate-fade-in relative flex flex-col gap-8">
