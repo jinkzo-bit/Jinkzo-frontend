@@ -6,7 +6,6 @@ import { parseAddressComponents } from '../../utils/parseAddressComponents';
 import { isValidCoordinates } from '../../utils/coordinates';
 import { API_BASE } from '../../config/api';
 import PlacesAutocomplete from './PlacesAutocomplete';
-import MapRotationControls from './MapRotationControls';
 
 const INDIA_CENTER_LAT = 20.5937;
 const INDIA_CENTER_LNG = 78.9629;
@@ -27,7 +26,6 @@ const MAP_OPTIONS = {
   tilt: 0,
   isFractionalZoomEnabled: true,
   mapTypeId: 'roadmap',
-  ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
 };
 
 export default function LocationPicker({ 
@@ -279,19 +277,19 @@ export default function LocationPicker({
     }, 'SEARCH', { lat, lng });
 
     setHasValidLocation(true);
+    setMapCenter({ lat, lng });
+    setMapZoom(HIGH_ZOOM);
     skipNextGeocodeRef.current = true;
 
     if (mapRef.current) {
+      mapRef.current.setCenter({ lat, lng });
       mapRef.current.panTo({ lat, lng });
       mapRef.current.setZoom(HIGH_ZOOM);
-    } else {
-      setMapCenter({ lat, lng });
-      setMapZoom(HIGH_ZOOM);
     }
   }, [fillForm]);
 
   const handleGps = (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!navigator.geolocation) {
       alert('Geolocation is not supported by your browser.');
       return;
@@ -312,14 +310,14 @@ export default function LocationPicker({
         }));
         setHasValidLocation(true);
         setLocationSource('GPS');
+        setMapCenter({ lat, lng });
+        setMapZoom(HIGH_ZOOM);
         skipNextGeocodeRef.current = true;
 
         if (mapRef.current) {
+          mapRef.current.setCenter({ lat, lng });
           mapRef.current.panTo({ lat, lng });
           mapRef.current.setZoom(HIGH_ZOOM);
-        } else {
-          setMapCenter({ lat, lng });
-          setMapZoom(HIGH_ZOOM);
         }
         setIsLocating(false);
         
@@ -471,22 +469,17 @@ export default function LocationPicker({
               onLoad={onMapLoad}
               onUnmount={onMapUnmount}
             />
-            {/* Map Rotation, Compass & 3D Tilt Controls */}
-            <MapRotationControls
-              map={mapInstance}
-              mapRef={mapRef}
-              containerRef={mapContainerRef}
-              position="top-right"
-              showStepButtons={false}
-              show3DTilt={true}
-            />
           </>
         )}
 
         {/* Fixed Center Pin */}
         <div
-          className="absolute inset-0 flex items-end justify-center pointer-events-none z-10"
-          style={{ paddingBottom: '24px' }}
+          className="absolute pointer-events-none z-10"
+          style={{
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -100%)',
+          }}
         >
           <div className="flex flex-col items-center" style={{ filter: 'drop-shadow(0 4px 14px rgba(252,128,25,0.65))' }}>
             <svg width="36" height="46" viewBox="0 0 36 46" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -496,7 +489,7 @@ export default function LocationPicker({
             </svg>
             <div style={{
               width: '14px', height: '5px', background: 'rgba(252,128,25,0.3)',
-              borderRadius: '50%', marginTop: '2px', filter: 'blur(3px)',
+              borderRadius: '50%', marginTop: '-2px', filter: 'blur(3px)',
             }} />
           </div>
         </div>

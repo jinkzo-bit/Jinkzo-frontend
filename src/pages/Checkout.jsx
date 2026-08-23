@@ -276,6 +276,15 @@ export default function Checkout() {
         instruction: deliveryInstructions
       };
 
+      console.log('[CHECKOUT DEBUG] POST /api/orders request:', {
+        requestUrl: `${API_BASE}/orders`,
+        category: items?.[0]?.category || 'food',
+        latitude: activeAddress?.lat,
+        longitude: activeAddress?.lng,
+        selectedAddress: activeAddress,
+        payload: orderPayload
+      });
+
       const res = await fetch(`${API_BASE}/orders`, {
         method: 'POST',
         headers: {
@@ -285,9 +294,16 @@ export default function Checkout() {
         body: JSON.stringify(orderPayload)
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
+      console.log('[CHECKOUT DEBUG] POST /api/orders response:', {
+        httpStatus: res.status,
+        responseBody: data,
+        ok: res.ok
+      });
+
       if (!res.ok) {
-        throw new Error(data.message || 'Failed to place order');
+        throw new Error(data.message || `Order placement failed (HTTP ${res.status})`);
       }
 
       showToast('Order placed successfully!', 'success');
@@ -310,7 +326,9 @@ export default function Checkout() {
       navigate(`/order-tracking/${data._id}`);
 
     } catch (err) {
+      console.error('[CHECKOUT ERROR]', err);
       setErrorMsg(err.message || 'Server error occurred during checkout');
+      showToast(err.message || 'Server error occurred during checkout', 'error');
       setIsSubmitting(false);
     }
   };

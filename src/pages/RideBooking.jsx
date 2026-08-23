@@ -281,6 +281,14 @@ export default function RideBooking() {
         instruction: rideInstructions
       };
 
+      console.log('[RIDE DEBUG] POST /api/orders request:', {
+        requestUrl: `${API_BASE}/orders`,
+        category: 'ride',
+        pickup: payload.pickupAddress,
+        drop: payload.address,
+        payload
+      });
+
       const res = await fetch(`${API_BASE}/orders`, {
         method: 'POST',
         headers: {
@@ -290,16 +298,25 @@ export default function RideBooking() {
         body: JSON.stringify(payload)
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
+      console.log('[RIDE DEBUG] POST /api/orders response:', {
+        httpStatus: res.status,
+        responseBody: data,
+        ok: res.ok
+      });
+
       if (!res.ok) {
-        throw new Error(data.message || 'Failed to place booking');
+        throw new Error(data.message || `Booking failed (HTTP ${res.status})`);
       }
 
       showToast(`${serviceType === 'ride' ? 'Ride booked' : 'Parcel dispatched'} successfully!`, 'success');
       navigate(`/order-tracking/${data._id}`);
 
     } catch (err) {
+      console.error('[RIDE ERROR]', err);
       setErrorMsg(err.message || 'Server error occurred during booking');
+      showToast(err.message || 'Server error occurred during booking', 'error');
     } finally {
       setIsSubmitting(false);
     }
