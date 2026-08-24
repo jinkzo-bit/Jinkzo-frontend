@@ -521,17 +521,21 @@ export default function DeliveryDashboard() {
       socket.emit('join', `user_${user._id}`);
     });
 
-    // AUTO mode: backend pushes this when a new opportunity is available for this rider
+    // AUTO mode: backend pushes this when a new ride opportunity is available for this rider
     socket.on('auto_ride_opportunity', () => {
       fetchOrdersData();
     });
 
-    // When a rider wins the race (status becomes Rider_Assigned),
+    // UNIFIED FLOW: backend pushes this when any food/catalog/mixed order is placed.
+    // All eligible riders refresh their pool immediately — no polling lag.
+    socket.on('new_order_pool', () => {
+      fetchOrdersData();
+    });
+
+    // When a rider wins the race (status becomes Confirmed or Rider_Assigned),
     // other riders should re-fetch so the claimed order disappears from their pool.
-    // We do NOT re-fetch on every status change (e.g. Accepted, Preparing, etc.)
-    // because those are not pool-affecting and the 6-second poll handles them.
     socket.on('orderStatusChanged', ({ status } = {}) => {
-      if (status === 'Rider_Assigned') {
+      if (status === 'Rider_Assigned' || status === 'Confirmed') {
         fetchOrdersData();
       }
     });
@@ -602,6 +606,35 @@ export default function DeliveryDashboard() {
     } finally {
       setUpdatingId(null);
       isUpdatingRef.current = false;
+    }
+  };
+
+  // Update individual pickup stop status (per-source milestone tracking)
+  const handleUpdateStopStatus = async (orderId, stopId, nextStatus) => {
+    setUpdatingId(orderId + '_stop_' + stopId);
+    try {
+      const res = await fetch(`${API_BASE}/orders/${orderId}/pickupstops/${stopId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: nextStatus })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setSelectedOrder(updated);
+        // Also update the active orders list
+        setActiveOrders(prev => prev.map(o => o._id === orderId ? updated : o));
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Failed to update pickup stop: ${errorData.message || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert(`Error updating pickup stop: ${err.message}`);
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -730,22 +763,41 @@ export default function DeliveryDashboard() {
       return null;
     }
 
+    // For multi-stop orders, pickup progression is handled per-stop in the UI.
+    // The main order status buttons only handle after all stops are collected.
+    const hasPickupStops = order && Array.isArray(order.pickupStops) && order.pickupStops.length > 0;
+
+    if (hasPickupStops) {
+      const allCollected = order.pickupStops.every(s => s.status === 'Collected');
+
+      // While collecting pickups — main milestone buttons handle delivery start
+      if (['Confirmed', 'Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Accepted'].includes(status)) {
+        if (allCollected) {
+          return { next: 'Out_for_Delivery', label: 'All Collected — Start Delivery' };
+        }
+        // Per-stop buttons handle individual pickup progression; main button is disabled here
+        return null; // Per-stop UI takes over
+      }
+      if (['Out_for_Delivery', 'Out for Delivery'].includes(status)) {
+        return { next: 'Rider_At_Customer', label: 'Reached Customer' };
+      }
+      if (status === 'Rider_At_Customer') {
+        return { next: 'Delivered', label: 'Mark as Delivered' };
+      }
+      return null;
+    }
+
+    // Legacy fallback for orders without pickupStops (old orders)
     const hasSupplierPickups = order && Array.isArray(order.supplierDeliveries) && order.supplierDeliveries.length > 0;
     const hasRestaurant = order && order.restaurantId && Array.isArray(order.items) && order.items.some(i => i.itemModel === 'MenuItem' && !i.supplierId);
     const pickupLabel = (hasSupplierPickups && !hasRestaurant) ? 'Reached Store' : (hasSupplierPickups && hasRestaurant ? 'Reached Pickup Stop' : 'Reached Restaurant');
 
-    // Food/Catalog/Parcel Orders
-    // Before reaching first pickup
     if (['Rider_Accepted', 'Placed', 'Accepted', 'Confirmed', 'Preparing'].includes(status)) {
       return { next: (hasSupplierPickups && !hasRestaurant) ? 'Rider_At_Pickup' : 'Rider_At_Restaurant', label: pickupLabel };
     }
-    
-    // At restaurant/store waiting for items, or food is ready
     if (['Rider_At_Restaurant', 'Rider_At_Pickup', 'Ready_for_Pickup'].includes(status)) {
       return { next: 'Picked_Up', label: 'Pick Up Order' };
     }
-
-    // After pickup
     if (status === 'Picked_Up') {
       return { next: 'Out_for_Delivery', label: 'Start Delivery' };
     }
@@ -757,6 +809,18 @@ export default function DeliveryDashboard() {
     }
 
     return null;
+  };
+
+  // Helper: compute pickup collection progress for a multi-stop order
+  const getPickupStopsProgress = (order) => {
+    if (!order || !Array.isArray(order.pickupStops) || order.pickupStops.length === 0) {
+      return { hasStops: false, total: 0, collected: 0, allCollected: true, pending: [] };
+    }
+    const total = order.pickupStops.length;
+    const collected = order.pickupStops.filter(s => s.status === 'Collected').length;
+    const allCollected = collected === total;
+    const pending = order.pickupStops.filter(s => s.status !== 'Collected');
+    return { hasStops: true, total, collected, allCollected, pending };
   };
 
   return (
@@ -1039,68 +1103,183 @@ export default function DeliveryDashboard() {
                       />
                     )}
 
-                    {/* Multi-Store Pickup Milestones (Catalog / Multi-Supplier Orders) */}
-                    {Array.isArray(selectedOrder.supplierDeliveries) && selectedOrder.supplierDeliveries.length > 0 && (
-                      <div className="bg-base border border-line rounded-2xl p-4 flex flex-col gap-3">
-                        <div className="flex items-center justify-between">
-                          <h5 className="text-xs font-extrabold uppercase tracking-wider text-main flex items-center gap-1.5">
-                            <span>🏪 Store Pickup Stops ({selectedOrder.supplierDeliveries.length})</span>
-                          </h5>
-                          <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                            Multi-Store Run
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-2.5">
-                          {selectedOrder.supplierDeliveries.map((sup, sIdx) => (
-                            <div
-                              key={sup.supplierId || sIdx}
-                              className="bg-surface border border-line rounded-xl p-3 flex flex-col gap-2 shadow-2xs"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="w-5 h-5 rounded-full bg-violet-600 text-white font-extrabold text-[10px] flex items-center justify-center flex-shrink-0">
-                                    {sIdx + 1}
-                                  </span>
-                                  <div>
-                                    <h6 className="font-bold text-xs text-main">{sup.supplierName || 'Store Pickup'}</h6>
-                                    <p className="text-[10px] text-muted line-clamp-1">{sup.address || 'Store Location'}</p>
+                    {/* Unified Pickup Stops Panel — shows ALL sources (suppliers + restaurant) */}
+                    {(() => {
+                      const stopsProgress = getPickupStopsProgress(selectedOrder);
+                      if (!stopsProgress.hasStops) {
+                        // Legacy: fall back to old supplierDeliveries display if no pickupStops
+                        if (!Array.isArray(selectedOrder.supplierDeliveries) || selectedOrder.supplierDeliveries.length === 0) return null;
+                        return (
+                          <div className="bg-base border border-line rounded-2xl p-4 flex flex-col gap-3">
+                            <h5 className="text-xs font-extrabold uppercase tracking-wider text-main flex items-center gap-1.5">
+                              🏪 Store Pickup Stops ({selectedOrder.supplierDeliveries.length})
+                            </h5>
+                            <div className="flex flex-col gap-2">
+                              {selectedOrder.supplierDeliveries.map((sup, sIdx) => (
+                                <div key={sup.supplierId || sIdx} className="bg-surface border border-line rounded-xl p-3 flex flex-col gap-1 shadow-2xs">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="font-bold text-xs text-main">{sup.supplierName || 'Store'}</p>
+                                    {sup.distanceKm != null && <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex-shrink-0">{sup.distanceKm} km</span>}
                                   </div>
-                                </div>
-                                {sup.distanceKm != null && (
-                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex-shrink-0">
-                                    {sup.distanceKm} km
-                                  </span>
-                                )}
-                              </div>
-
-                              {Array.isArray(sup.items) && sup.items.length > 0 && (
-                                <div className="bg-base/70 rounded-lg p-2 flex flex-col gap-1 border border-line/60">
-                                  <span className="text-[9px] uppercase font-extrabold text-muted">Items to Collect:</span>
-                                  {sup.items.map((it, itIdx) => (
-                                    <div key={itIdx} className="flex justify-between text-[11px] font-medium text-main">
-                                      <span>• {it.itemName || it.name} {it.unit ? `(${it.unit})` : ''}</span>
-                                      <span className="font-bold text-muted">x{it.quantity}</span>
+                                  {Array.isArray(sup.items) && sup.items.length > 0 && (
+                                    <div className="bg-base/70 rounded-lg p-2 flex flex-col gap-1 border border-line/60 text-[11px]">
+                                      {sup.items.map((it, itIdx) => (
+                                        <div key={itIdx} className="flex justify-between font-medium text-main">
+                                          <span>• {it.itemName || it.name} {it.unit ? `(${it.unit})` : ''}</span>
+                                          <span className="font-bold text-muted">x{it.quantity}</span>
+                                        </div>
+                                      ))}
                                     </div>
-                                  ))}
+                                  )}
                                 </div>
-                              )}
-
-                              {sup.supplierPhone && (
-                                <div className="flex justify-end pt-1">
-                                  <a
-                                    href={`tel:${sup.supplierPhone}`}
-                                    className="text-[10px] font-bold text-violet-600 hover:text-violet-700 bg-violet-50 px-2.5 py-1 rounded-md transition-colors"
-                                  >
-                                    📞 Call Store ({sup.supplierPhone})
-                                  </a>
-                                </div>
-                              )}
+                              ))}
                             </div>
-                          ))}
+                          </div>
+                        );
+                      }
+
+                      const { total, collected, allCollected } = stopsProgress;
+                      const isDelivering = ['Out_for_Delivery', 'Out for Delivery', 'Rider_At_Customer', 'Delivered', 'Completed'].includes(selectedOrder.status);
+
+                      return (
+                        <div className="bg-base border border-line rounded-2xl p-4 flex flex-col gap-3">
+                          <div className="flex items-center justify-between">
+                            <h5 className="text-xs font-extrabold uppercase tracking-wider text-main flex items-center gap-1.5">
+                              📦 Pickup Stops
+                            </h5>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${allCollected || isDelivering ? 'bg-green-100 text-green-700' : 'bg-violet-100 text-primary'}`}>
+                              {isDelivering ? 'All Collected' : `${collected}/${total} Collected`}
+                            </span>
+                          </div>
+
+                          {/* Progress bar */}
+                          <div className="w-full bg-line rounded-full h-1.5">
+                            <div
+                              className="bg-primary rounded-full h-1.5 transition-all duration-500"
+                              style={{ width: `${total > 0 ? (collected / total) * 100 : 0}%` }}
+                            />
+                          </div>
+
+                          {/* Each stop */}
+                          <div className="flex flex-col gap-2.5">
+                            {selectedOrder.pickupStops.map((stop, sIdx) => {
+                              const stopId = String(stop._id || stop.stopId || sIdx);
+                              const isSupplier = stop.sourceType === 'supplier';
+                              const isCollected = stop.status === 'Collected';
+                              const isArrived = stop.status === 'Rider_Arrived';
+                              const isRestaurantNotReady = stop.sourceType === 'restaurant' && ['Pending', 'Preparing'].includes(stop.status);
+                              const isRestaurantReady = stop.sourceType === 'restaurant' && stop.status === 'Ready';
+                              const isUpdatingStop = updatingId === (selectedOrder._id + '_stop_' + stopId);
+
+                              return (
+                                <div
+                                  key={stopId}
+                                  className={`border rounded-xl p-3 flex flex-col gap-2 shadow-2xs transition-all ${isCollected ? 'bg-green-50 border-green-150' : isSupplier ? 'bg-surface border-line' : 'bg-orange-50/50 border-orange-100'}`}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`w-5 h-5 rounded-full font-extrabold text-[10px] flex items-center justify-center flex-shrink-0 ${isCollected ? 'bg-green-600 text-white' : isSupplier ? 'bg-violet-600 text-white' : 'bg-orange-500 text-white'}`}>
+                                        {isCollected ? '✓' : sIdx + 1}
+                                      </span>
+                                      <div>
+                                        <h6 className="font-bold text-xs text-main flex items-center gap-1">
+                                          {isSupplier ? '🏪' : '🍴'} {stop.sourceName || 'Pickup Stop'}
+                                        </h6>
+                                        {stop.address && <p className="text-[10px] text-muted line-clamp-1">{stop.address}</p>}
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                      {stop.distanceKm != null && stop.distanceKm > 0 && (
+                                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{stop.distanceKm} km</span>
+                                      )}
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded capitalize ${
+                                        isCollected ? 'bg-green-100 text-green-700' :
+                                        isArrived ? 'bg-violet-100 text-violet-700' :
+                                        stop.status === 'Ready' ? 'bg-emerald-100 text-emerald-700' :
+                                        stop.status === 'Preparing' ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-gray-100 text-gray-500'
+                                      }`}>{stop.status}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Items */}
+                                  {Array.isArray(stop.items) && stop.items.length > 0 && (
+                                    <div className="bg-base/70 rounded-lg p-2 flex flex-col gap-0.5 border border-line/60">
+                                      <span className="text-[9px] uppercase font-extrabold text-muted">Items to Collect:</span>
+                                      {stop.items.map((it, itIdx) => (
+                                        <div key={itIdx} className="flex justify-between text-[11px] font-medium text-main">
+                                          <span>• {it.itemName || it.name} {it.unit ? `(${it.unit})` : ''}</span>
+                                          <span className="font-bold text-muted">×{it.quantity || 1}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Phone */}
+                                  {stop.sourcePhone && (
+                                    <a href={`tel:${stop.sourcePhone}`} className="text-[10px] font-bold text-violet-600 hover:text-violet-700 bg-violet-50 px-2.5 py-1 rounded-md transition-colors self-end">
+                                      📞 Call {isSupplier ? 'Store' : 'Restaurant'} ({stop.sourcePhone})
+                                    </a>
+                                  )}
+
+                                  {/* Per-stop milestone buttons */}
+                                  {!isCollected && !isDelivering && (
+                                    <div className="flex gap-1.5 mt-1">
+                                      {/* Restaurant not ready yet */}
+                                      {isRestaurantNotReady && (
+                                        <span className="flex-1 bg-yellow-50 border border-yellow-200 text-yellow-700 text-[10px] font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1">
+                                          <Clock className="w-3.5 h-3.5" /> Waiting for Restaurant
+                                        </span>
+                                      )}
+
+                                      {/* Arrived at stop (or restaurant ready) — collect button */}
+                                      {(isArrived || isRestaurantReady) && (
+                                        <button
+                                          onClick={() => handleUpdateStopStatus(selectedOrder._id, stopId, 'Collected')}
+                                          disabled={isUpdatingStop}
+                                          className="flex-1 bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                                        >
+                                          <CheckCircle className="w-3.5 h-3.5" />
+                                          {isSupplier ? 'Collect Items' : 'Collect Food'}
+                                        </button>
+                                      )}
+
+                                      {/* Not yet arrived — mark arrived */}
+                                      {!isArrived && !isRestaurantReady && !isRestaurantNotReady && (
+                                        <button
+                                          onClick={() => handleUpdateStopStatus(selectedOrder._id, stopId, 'Rider_Arrived')}
+                                          disabled={isUpdatingStop}
+                                          className={`flex-1 ${isSupplier ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-orange-500 hover:bg-orange-600'} text-white text-[10px] font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-50`}
+                                        >
+                                          <MapPin className="w-3.5 h-3.5" />
+                                          {isSupplier ? 'Reached Store' : 'Reached Restaurant'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {isCollected && (
+                                    <div className="flex items-center gap-1 text-[10px] text-green-700 font-bold">
+                                      <CheckCircle className="w-3.5 h-3.5" /> Collected ✓
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Out_for_Delivery guard warning */}
+                          {!allCollected && !isDelivering && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[10px] font-bold text-amber-800 flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-500 mt-0.5" />
+                              <span>
+                                {collected} of {total} stops collected. Collect all items before starting delivery.
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Driver Instructions */}
                     {selectedOrder.instruction && (
@@ -1155,7 +1334,13 @@ export default function DeliveryDashboard() {
                     ) : (
                       <div className="bg-violet-50 border border-violet-100 text-violet-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2 animate-pulse">
                         <Clock className="w-5 h-5 text-primary" />
-                        <span>{selectedOrder.orderType === 'ride' ? 'Waiting for pickup...' : 'Awaiting kitchen preparation...'}</span>
+                        <span>
+                          {selectedOrder.orderType === 'ride'
+                            ? 'Waiting for pickup...'
+                            : Array.isArray(selectedOrder.pickupStops) && selectedOrder.pickupStops.length > 0
+                              ? 'Collecting items from pickup stops...'
+                              : 'Awaiting preparation...'}
+                        </span>
                       </div>
                     )}
 
@@ -1423,26 +1608,62 @@ export default function DeliveryDashboard() {
                                 <span>{order.distance ? `${order.distance} km` : ''}</span>
                               </div>
                             </>
-                          ) : (
-                            <>
-                              <div className="flex items-center gap-1.5 text-main">
-                                <span className="font-extrabold text-[10px] text-gray-500 w-24">CUSTOMER:</span>
-                                <span className="truncate">{order.customerName || order.user?.name || order.userId?.name || 'Customer'}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-main">
-                                <span className="font-extrabold text-[10px] text-gray-500 w-24">RESTAURANT:</span>
-                                <span className="truncate">{order.restaurant?.name || 'Restaurant'}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-muted">
-                                <span className="font-extrabold text-[10px] text-gray-400 w-24">LOCATION:</span>
-                                <span className="truncate">{order.customerLocation?.formattedAddress || `${order.address?.street || 'Customer Location'}, ${order.address?.city || ''}`}</span>
-                              </div>
-                              <div className="flex justify-between items-center mt-1 text-[10px] text-gray-500">
-                                <span>{order.distance ? `${order.distance} km` : ''}</span>
-                                <span className="font-bold text-green-600">Earning: ₹{order.deliveryFee ? order.deliveryFee + 20 : 40}</span>
-                              </div>
-                            </>
-                          )}
+                          ) : (() => {
+                            // Determine order type for display
+                            const hasSuppliers = Array.isArray(order.pickupStops) && order.pickupStops.some(s => s.sourceType === 'supplier');
+                            const hasRestaurant = Array.isArray(order.pickupStops) && order.pickupStops.some(s => s.sourceType === 'restaurant');
+                            const isMixed = hasSuppliers && hasRestaurant;
+                            const isCatalogOnly = hasSuppliers && !hasRestaurant;
+                            const isFoodOnly = !hasSuppliers && hasRestaurant;
+
+                            const typeLabel = isMixed ? '🔀 MIXED ORDER' : isCatalogOnly ? '🏪 STORE DELIVERY' : '🍽 FOOD ORDER';
+                            const typeColor = isMixed ? 'text-violet-600' : isCatalogOnly ? 'text-emerald-600' : 'text-orange-500';
+
+                            // Collect all pickup sources for display
+                            const pickupSources = Array.isArray(order.pickupStops) && order.pickupStops.length > 0
+                              ? order.pickupStops
+                              : hasRestaurant
+                                ? [{ sourceType: 'restaurant', sourceName: order.restaurant?.name || 'Restaurant', items: [] }]
+                                : (order.supplierDeliveries || []).map(sd => ({ sourceType: 'supplier', sourceName: sd.supplierName || 'Store', items: sd.items || [] }));
+
+                            return (
+                              <>
+                                <div className={`text-[10px] font-black ${typeColor} tracking-wide`}>{typeLabel}</div>
+                                <div className="flex items-center gap-1.5 text-main text-xs font-bold mt-1">
+                                  <span className="font-extrabold text-[10px] text-gray-500 w-24">CUSTOMER:</span>
+                                  <span className="truncate">{order.customerName || order.user?.name || order.userId?.name || 'Customer'}</span>
+                                </div>
+                                {/* Pickup sources */}
+                                <div className="mt-2 flex flex-col gap-1.5">
+                                  {pickupSources.slice(0, 3).map((src, si) => (
+                                    <div key={si} className={`flex items-start gap-1.5 ${src.sourceType === 'restaurant' ? 'bg-orange-50 border-orange-100' : 'bg-emerald-50 border-emerald-100'} border rounded-lg p-1.5`}>
+                                      <span className="text-[11px] flex-shrink-0 mt-0.5">{src.sourceType === 'restaurant' ? '🍴' : '🏪'}</span>
+                                      <div className="min-w-0">
+                                        <p className="text-[10px] font-bold text-main truncate">{src.sourceName}</p>
+                                        {Array.isArray(src.items) && src.items.length > 0 && (
+                                          <p className="text-[9px] text-muted truncate">
+                                            {src.items.slice(0, 2).map(it => `${it.itemName || it.name || ''}${it.unit ? ` (${it.unit})` : ''} ×${it.quantity || 1}`).join(', ')}
+                                            {src.items.length > 2 ? ` +${src.items.length - 2} more` : ''}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {pickupSources.length > 3 && (
+                                    <p className="text-[9px] text-muted font-semibold pl-1">+{pickupSources.length - 3} more stops</p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 text-muted text-[10px] font-semibold mt-2">
+                                  <span className="font-extrabold text-[10px] text-gray-400 w-24">DELIVER TO:</span>
+                                  <span className="truncate">{order.customerLocation?.formattedAddress || `${order.address?.street || 'Customer Location'}, ${order.address?.city || ''}`}</span>
+                                </div>
+                                <div className="flex justify-between items-center mt-1 text-[10px] text-gray-500">
+                                  <span>{order.distance ? `${order.distance} km` : ''} {pickupSources.length > 1 ? `• ${pickupSources.length} stops` : ''}</span>
+                                  <span className="font-bold text-green-600">Earning: ₹{order.deliveryFee ? order.deliveryFee + 20 : 40}</span>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                       <button

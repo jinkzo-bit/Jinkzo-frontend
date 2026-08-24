@@ -257,7 +257,9 @@ export default function OrderTracking() {
     );
   }
 
-  // Active status timeline markers
+  const isCatalogOrder = !order.restaurantId && Array.isArray(order.supplierDeliveries) && order.supplierDeliveries.length > 0;
+  const isMixedOrder = order.restaurantId && Array.isArray(order.supplierDeliveries) && order.supplierDeliveries.length > 0;
+
   const timelineSteps = order.orderType === 'ride' ? [
     { label: 'Booking Placed', mappedState: 0, desc: 'Finding nearest Ride Captain' },
     { label: 'Captain Assigned', mappedState: 1, desc: 'Captain accepted your ride request' },
@@ -265,11 +267,25 @@ export default function OrderTracking() {
     { label: 'Ride in Progress', mappedState: 3, desc: 'Captain is en route to destination' },
     { label: 'Completed', mappedState: 4, desc: 'Reached destination successfully!' }
   ] : [
-    { label: 'Order Placed', mappedState: 0, desc: 'Awaiting restaurant approval' },
-    { label: 'Preparing', mappedState: 1, desc: 'Accepted & being cooked' },
-    { label: 'Awaiting Pickup', mappedState: 2, desc: 'Rider is assigned and on the way' },
+    {
+      label: 'Order Placed',
+      mappedState: 0,
+      desc: isCatalogOrder
+        ? 'Finding a delivery partner for your order'
+        : isMixedOrder
+          ? 'Finding a delivery partner — restaurant is preparing'
+          : 'Awaiting restaurant approval'
+    },
+    {
+      label: isCatalogOrder ? 'Partner Assigned' : 'Preparing',
+      mappedState: 1,
+      desc: isCatalogOrder
+        ? 'Delivery partner is heading to the store'
+        : 'Accepted & being prepared'
+    },
+    { label: 'Collecting Items', mappedState: 2, desc: 'Rider is collecting your order from pickup locations' },
     { label: 'Out for Delivery', mappedState: 3, desc: 'Rider is driving to you' },
-    { label: 'Delivered', mappedState: 4, desc: 'Enjoy your meal!' }
+    { label: 'Delivered', mappedState: 4, desc: isCatalogOrder ? 'Enjoy your items!' : 'Enjoy your meal!' }
   ];
 
   const getStepIndex = (currentStatus, type) => {
@@ -281,10 +297,10 @@ export default function OrderTracking() {
       if (['Delivered', 'Completed'].includes(currentStatus)) return 4;
       return 0;
     } else {
-      // Food / Parcel — UNCHANGED
+      // Food / Catalog / Mixed — UNIFIED
       if (currentStatus === 'Placed') return 0;
       if (currentStatus === 'Confirmed' || currentStatus === 'Accepted' || currentStatus === 'Preparing') return 1;
-      if (['Ready_for_Pickup', 'Rider_Assigned', 'Rider_At_Restaurant', 'Picked_Up'].includes(currentStatus)) return 2;
+      if (['Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up'].includes(currentStatus)) return 2;
       if (['Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(currentStatus)) return 3;
       if (currentStatus === 'Delivered' || currentStatus === 'Completed') return 4;
       return 0;
