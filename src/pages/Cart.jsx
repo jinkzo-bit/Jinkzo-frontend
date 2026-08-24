@@ -209,7 +209,7 @@ export default function Cart() {
               {/* Items List in Restaurant Card */}
               <div className="flex flex-col divide-y divide-gray-100">
                 {group.items.map((item) => (
-                  <div key={item.menuItemId} className="py-3.5 first:pt-1 last:pb-1 flex items-center justify-between gap-4">
+                  <div key={item.cartKey || `${item.menuItemId}_${item.unit || ''}`} className="py-3.5 first:pt-1 last:pb-1 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3.5 max-w-[65%]">
                       <img
                         src={getImageUrl(item.image, 'food')}
@@ -221,7 +221,15 @@ export default function Cart() {
                         <h4 className="font-display font-bold text-sm md:text-base text-main line-clamp-1">
                           {item.name}
                         </h4>
-                        <p className="text-[11px] text-muted font-medium">Serves 1</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {item.unit ? (
+                            <span className="text-[10px] font-extrabold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
+                              {item.unit}
+                            </span>
+                          ) : (
+                            <p className="text-[11px] text-muted font-medium">Serves 1</p>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -231,14 +239,14 @@ export default function Cart() {
                       </span>
                       <div className="flex items-center bg-base border border-line-strong rounded-xl overflow-hidden h-8">
                         <button
-                          onClick={() => updateQuantity(item.menuItemId, item.quantity - 1)}
+                          onClick={() => updateQuantity(item.menuItemId, item.quantity - 1, item.unit)}
                           className="px-2.5 hover:bg-gray-100 text-muted hover:text-main font-bold transition-colors cursor-pointer"
                         >
                           <Minus className="w-3 h-3" />
                         </button>
                         <span className="px-2 text-xs font-bold text-main min-w-[20px] text-center">{item.quantity}</span>
                         <button
-                          onClick={() => updateQuantity(item.menuItemId, item.quantity + 1)}
+                          onClick={() => updateQuantity(item.menuItemId, item.quantity + 1, item.unit)}
                           className="px-2.5 hover:bg-gray-100 text-muted hover:text-main font-bold transition-colors cursor-pointer"
                         >
                           <Plus className="w-3 h-3" />

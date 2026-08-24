@@ -3,11 +3,12 @@ import {
   Boxes, Plus, Search, Filter, RefreshCw, Pencil, Trash2,
   MapPin, Phone, CheckCircle2, XCircle, AlertCircle, Eye, EyeOff,
   Store, ShoppingCart, Beef, Apple, Croissant, Wheat, Package,
-  ExternalLink, Check, X, ShieldAlert, Sparkles, Building2
+  ExternalLink, Check, X, ShieldAlert, Sparkles, Building2, Navigation
 } from 'lucide-react';
 import { API_BASE } from '../../config/api';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../../utils/uploadUtil';
 import ImageUploadInput from '../common/ImageUploadInput';
+import LocationPickerModal from '../LocationPickerModal';
 
 const CATEGORIES_CONFIG = [
   {
@@ -56,6 +57,13 @@ const CATEGORIES_CONFIG = [
   }
 ];
 
+const CATEGORY_UNIT_PRESETS = {
+  grocery: ['250g', '500g', '1kg', '2kg', '5kg', '250ml', '500ml', '1L', '2L', '1 pc', '1 pack', '1 bottle', '1 packet'],
+  meat: ['250g', '500g', '1kg', '2kg', '5kg', '1 pc'],
+  veg_fruits: ['250g', '500g', '1kg', '2kg', '5kg', '1 pc', '1 dozen'],
+  bakery_beverages: ['250g', '500g', '1kg', '2kg', '250ml', '500ml', '1L', '1 pc', '1 pack', '1 box', '1 bottle']
+};
+
 export default function SuppliersAndItemsTab({ token }) {
   const [activeCategory, setActiveCategory] = useState('grocery');
 
@@ -72,6 +80,10 @@ export default function SuppliersAndItemsTab({ token }) {
   const [itemSearch, setItemSearch] = useState('');
   const [itemAvailabilityFilter, setItemAvailabilityFilter] = useState('all'); // 'all', 'available', 'unavailable'
   const [itemSupplierFilter, setItemSupplierFilter] = useState('all'); // 'all', supplierId, 'none'
+
+  // Map Location Picker Modal state
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [locationPickerTarget, setLocationPickerTarget] = useState(null); // 'add' | 'edit'
 
   // Add Supplier Modal
   const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
@@ -108,33 +120,37 @@ export default function SuppliersAndItemsTab({ token }) {
   });
   const [isDeletingSupplier, setIsDeletingSupplier] = useState(false);
 
-  // Add Catalog Item Modal
+  // Add Catalog Item Modal & Multi-Variants
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [addItemForm, setAddItemForm] = useState({
     name: '',
-    price: '',
-    unit: '',
     supplierId: '',
     isAvailable: true,
     description: '',
     image: ''
   });
+  const [addItemVariants, setAddItemVariants] = useState([
+    { unit: '1kg', price: '', isAvailable: true }
+  ]);
+  const [customUnitAdd, setCustomUnitAdd] = useState('');
+  const [customPriceAdd, setCustomPriceAdd] = useState('');
   const [addItemFile, setAddItemFile] = useState(null);
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [addItemError, setAddItemError] = useState('');
 
-  // Edit Catalog Item Modal
+  // Edit Catalog Item Modal & Multi-Variants
   const [showEditItemModal, setShowEditItemModal] = useState(false);
   const [editItemForm, setEditItemForm] = useState({
     _id: '',
     name: '',
-    price: '',
-    unit: '',
     supplierId: '',
     isAvailable: true,
     description: '',
     image: ''
   });
+  const [editItemVariants, setEditItemVariants] = useState([]);
+  const [customUnitEdit, setCustomUnitEdit] = useState('');
+  const [customPriceEdit, setCustomPriceEdit] = useState('');
   const [editItemFile, setEditItemFile] = useState(null);
   const [isEditingItem, setIsEditingItem] = useState(false);
   const [editItemError, setEditItemError] = useState('');
@@ -204,6 +220,103 @@ export default function SuppliersAndItemsTab({ token }) {
     setItemAvailabilityFilter('all');
     setItemSupplierFilter('all');
   }, [activeCategory, token]);
+
+  // ── LOCATION PICKER HANDLER ───────────────────────────────────────────────
+
+  const handleConfirmLocation = (loc) => {
+    if (!loc) return;
+    const lat = loc.lat != null ? Number(loc.lat) : null;
+    const lng = loc.lng != null ? Number(loc.lng) : null;
+    const addr = loc.formattedAddress || loc.displayName || loc.street || '';
+
+    if (locationPickerTarget === 'add') {
+      setAddSupplierForm(prev => ({
+        ...prev,
+        latitude: lat !== null ? lat : '',
+        longitude: lng !== null ? lng : '',
+        address: prev.address && prev.address.trim() ? prev.address : addr
+      }));
+    } else if (locationPickerTarget === 'edit') {
+      setEditSupplierForm(prev => ({
+        ...prev,
+        latitude: lat !== null ? lat : '',
+        longitude: lng !== null ? lng : '',
+        address: prev.address && prev.address.trim() ? prev.address : addr
+      }));
+    }
+    setShowLocationPicker(false);
+    setLocationPickerTarget(null);
+  };
+
+  // ── VARIANT MANAGEMENT HANDLERS ───────────────────────────────────────────
+
+  const handleTogglePresetVariant = (size, target = 'add') => {
+    if (target === 'add') {
+      setAddItemVariants(prev => {
+        const exists = prev.some(v => v.unit.toLowerCase() === size.toLowerCase());
+        if (exists) {
+          return prev.filter(v => v.unit.toLowerCase() !== size.toLowerCase());
+        } else {
+          return [...prev, { unit: size, price: '', isAvailable: true }];
+        }
+      });
+    } else {
+      setEditItemVariants(prev => {
+        const exists = prev.some(v => v.unit.toLowerCase() === size.toLowerCase());
+        if (exists) {
+          return prev.filter(v => v.unit.toLowerCase() !== size.toLowerCase());
+        } else {
+          return [...prev, { unit: size, price: '', isAvailable: true }];
+        }
+      });
+    }
+  };
+
+  const handleAddCustomVariant = (target = 'add') => {
+    if (target === 'add') {
+      if (!customUnitAdd.trim()) return;
+      const unitStr = customUnitAdd.trim();
+      const priceVal = customPriceAdd !== '' && !isNaN(Number(customPriceAdd)) ? customPriceAdd : '';
+      setAddItemVariants(prev => {
+        const exists = prev.some(v => v.unit.toLowerCase() === unitStr.toLowerCase());
+        if (exists) {
+          return prev.map(v => v.unit.toLowerCase() === unitStr.toLowerCase() ? { ...v, price: priceVal } : v);
+        }
+        return [...prev, { unit: unitStr, price: priceVal, isAvailable: true }];
+      });
+      setCustomUnitAdd('');
+      setCustomPriceAdd('');
+    } else {
+      if (!customUnitEdit.trim()) return;
+      const unitStr = customUnitEdit.trim();
+      const priceVal = customPriceEdit !== '' && !isNaN(Number(customPriceEdit)) ? customPriceEdit : '';
+      setEditItemVariants(prev => {
+        const exists = prev.some(v => v.unit.toLowerCase() === unitStr.toLowerCase());
+        if (exists) {
+          return prev.map(v => v.unit.toLowerCase() === unitStr.toLowerCase() ? { ...v, price: priceVal } : v);
+        }
+        return [...prev, { unit: unitStr, price: priceVal, isAvailable: true }];
+      });
+      setCustomUnitEdit('');
+      setCustomPriceEdit('');
+    }
+  };
+
+  const handleUpdateVariantPrice = (index, newPrice, target = 'add') => {
+    if (target === 'add') {
+      setAddItemVariants(prev => prev.map((v, i) => i === index ? { ...v, price: newPrice } : v));
+    } else {
+      setEditItemVariants(prev => prev.map((v, i) => i === index ? { ...v, price: newPrice } : v));
+    }
+  };
+
+  const handleRemoveVariant = (index, target = 'add') => {
+    if (target === 'add') {
+      setAddItemVariants(prev => prev.filter((_, i) => i !== index));
+    } else {
+      setEditItemVariants(prev => prev.filter((_, i) => i !== index));
+    }
+  };
 
   // ── SUPPLIER HANDLERS ────────────────────────────────────────────────────────
 
@@ -309,6 +422,21 @@ export default function SuppliersAndItemsTab({ token }) {
     e.preventDefault();
     setIsAddingItem(true);
     setAddItemError('');
+
+    if (addItemVariants.length === 0) {
+      setAddItemError('Please select or add at least one pack size / variant.');
+      setIsAddingItem(false);
+      return;
+    }
+
+    for (const v of addItemVariants) {
+      if (v.price === '' || v.price === null || isNaN(Number(v.price)) || Number(v.price) < 0) {
+        setAddItemError(`Please enter a valid non-negative price for variant "${v.unit}".`);
+        setIsAddingItem(false);
+        return;
+      }
+    }
+
     try {
       let imageUrl = (addItemForm.image || '').trim();
       if (addItemFile) {
@@ -324,8 +452,13 @@ export default function SuppliersAndItemsTab({ token }) {
         body: JSON.stringify({
           name: addItemForm.name.trim(),
           category: activeCategory,
-          price: Number(addItemForm.price),
-          unit: addItemForm.unit.trim(),
+          price: Number(addItemVariants[0].price),
+          unit: addItemVariants[0].unit.trim(),
+          variants: addItemVariants.map(v => ({
+            unit: v.unit.trim(),
+            price: Number(v.price),
+            isAvailable: v.isAvailable !== false
+          })),
           supplierId: addItemForm.supplierId && addItemForm.supplierId !== 'none' ? addItemForm.supplierId : null,
           isAvailable: addItemForm.isAvailable,
           description: addItemForm.description.trim(),
@@ -337,7 +470,10 @@ export default function SuppliersAndItemsTab({ token }) {
         setAddItemError(data.message || 'Failed to add item');
       } else {
         setShowAddItemModal(false);
-        setAddItemForm({ name: '', price: '', unit: '', supplierId: '', isAvailable: true, description: '', image: '' });
+        setAddItemForm({ name: '', supplierId: '', isAvailable: true, description: '', image: '' });
+        setAddItemVariants([{ unit: '1kg', price: '', isAvailable: true }]);
+        setCustomUnitAdd('');
+        setCustomPriceAdd('');
         setAddItemFile(null);
         fetchItems(activeCategory);
         fetchSuppliers(activeCategory); // update linked items count
@@ -353,6 +489,21 @@ export default function SuppliersAndItemsTab({ token }) {
     e.preventDefault();
     setIsEditingItem(true);
     setEditItemError('');
+
+    if (editItemVariants.length === 0) {
+      setEditItemError('Please select or add at least one pack size / variant.');
+      setIsEditingItem(false);
+      return;
+    }
+
+    for (const v of editItemVariants) {
+      if (v.price === '' || v.price === null || isNaN(Number(v.price)) || Number(v.price) < 0) {
+        setEditItemError(`Please enter a valid non-negative price for variant "${v.unit}".`);
+        setIsEditingItem(false);
+        return;
+      }
+    }
+
     try {
       let imageUrl = (editItemForm.image || '').trim();
       if (editItemFile) {
@@ -367,8 +518,13 @@ export default function SuppliersAndItemsTab({ token }) {
         },
         body: JSON.stringify({
           name: editItemForm.name.trim(),
-          price: Number(editItemForm.price),
-          unit: editItemForm.unit.trim(),
+          price: Number(editItemVariants[0].price),
+          unit: editItemVariants[0].unit.trim(),
+          variants: editItemVariants.map(v => ({
+            unit: v.unit.trim(),
+            price: Number(v.price),
+            isAvailable: v.isAvailable !== false
+          })),
           supplierId: editItemForm.supplierId && editItemForm.supplierId !== 'none' ? editItemForm.supplierId : null,
           isAvailable: editItemForm.isAvailable,
           description: editItemForm.description.trim(),
@@ -900,9 +1056,24 @@ export default function SuppliersAndItemsTab({ token }) {
                       </td>
 
                       <td className="py-3 px-3">
-                        <span className="font-display font-black text-sm text-main">
-                          ₹{Number(item.price).toFixed(0)}
-                        </span>
+                        {item.variants && item.variants.length > 1 ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-display font-black text-xs sm:text-sm text-main">
+                              ₹{Math.min(...item.variants.map(v => Number(v.price) || 0))} - ₹{Math.max(...item.variants.map(v => Number(v.price) || 0))}
+                            </span>
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {item.variants.map((v, i) => (
+                                <span key={i} className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-base border border-line text-muted">
+                                  {v.unit}: ₹{v.price}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="font-display font-black text-sm text-main">
+                            ₹{Number(item.price).toFixed(0)}
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-3 px-3">
@@ -952,13 +1123,30 @@ export default function SuppliersAndItemsTab({ token }) {
                               setEditItemForm({
                                 _id: item._id,
                                 name: item.name,
-                                price: item.price,
-                                unit: item.unit || '',
                                 supplierId: item.supplierId || '',
                                 isAvailable: item.isAvailable,
                                 description: item.description || '',
                                 image: item.image || ''
                               });
+                              let initialVariants = [];
+                              if (Array.isArray(item.variants) && item.variants.length > 0) {
+                                initialVariants = item.variants.map(v => ({
+                                  unit: v.unit || '',
+                                  price: v.price !== undefined ? v.price : '',
+                                  isAvailable: v.isAvailable !== false
+                                }));
+                              } else if (item.unit || item.price) {
+                                initialVariants = [{
+                                  unit: item.unit || 'Standard',
+                                  price: item.price !== undefined ? item.price : '',
+                                  isAvailable: item.isAvailable !== false
+                                }];
+                              } else {
+                                initialVariants = [{ unit: '1kg', price: '', isAvailable: true }];
+                              }
+                              setEditItemVariants(initialVariants);
+                              setCustomUnitEdit('');
+                              setCustomPriceEdit('');
                               setEditItemFile(null);
                               setShowEditItemModal(true);
                             }}
@@ -1071,33 +1259,77 @@ export default function SuppliersAndItemsTab({ token }) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-muted block mb-1">
-                    Latitude (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="e.g. 15.8549"
-                    value={addSupplierForm.latitude}
-                    onChange={(e) => setAddSupplierForm({ ...addSupplierForm, latitude: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-base border border-line text-main outline-none focus:border-primary"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-muted block mb-1">
-                    Longitude (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="e.g. 78.2638"
-                    value={addSupplierForm.longitude}
-                    onChange={(e) => setAddSupplierForm({ ...addSupplierForm, longitude: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-base border border-line text-main outline-none focus:border-primary"
-                  />
-                </div>
+              {/* ── STORE LOCATION ON MAP ── */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-main block">
+                  Store Location <span className="text-[10px] text-muted font-normal">(GPS for customer radius & rider pickup)</span>
+                </label>
+
+                {addSupplierForm.latitude && addSupplierForm.longitude ? (
+                  <div className="p-3 bg-violet-50/70 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800/50 rounded-2xl flex flex-col gap-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2 min-w-0">
+                        <div className="p-1.5 rounded-lg bg-primary text-white shrink-0 mt-0.5">
+                          <MapPin className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-bold text-main truncate">
+                            {addSupplierForm.address || 'Location Selected'}
+                          </span>
+                          <span className="text-[10px] text-muted font-mono font-bold">
+                            GPS: {Number(addSupplierForm.latitude).toFixed(5)}, {Number(addSupplierForm.longitude).toFixed(5)}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 shrink-0">
+                        Saved
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLocationPickerTarget('add');
+                          setShowLocationPicker(true);
+                        }}
+                        className="flex-1 py-1.5 px-3 bg-primary hover:bg-primary-hover text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <MapPin className="w-3 h-3" />
+                        Change Location on Map
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAddSupplierForm(prev => ({ ...prev, latitude: '', longitude: '' }))}
+                        className="py-1.5 px-3 bg-base hover:bg-red-50 hover:text-red-600 text-muted text-[11px] font-bold rounded-xl border border-line transition-colors cursor-pointer"
+                        title="Remove coordinates"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-base border border-dashed border-line-strong rounded-2xl flex flex-col items-center justify-center gap-2 text-center">
+                    <div className="p-2.5 rounded-full bg-violet-50 dark:bg-violet-950/40 text-primary">
+                      <MapPin className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-main">Location not selected yet</p>
+                      <p className="text-[10px] text-muted font-medium">Pin exact store on map for accurate distance & delivery pickup</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLocationPickerTarget('add');
+                        setShowLocationPicker(true);
+                      }}
+                      className="mt-1 py-2 px-4 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      Select Store Location on Map
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-xl bg-base border border-line">
@@ -1208,31 +1440,77 @@ export default function SuppliersAndItemsTab({ token }) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-muted block mb-1">
-                    Latitude (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={editSupplierForm.latitude}
-                    onChange={(e) => setEditSupplierForm({ ...editSupplierForm, latitude: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-base border border-line text-main outline-none focus:border-primary"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-muted block mb-1">
-                    Longitude (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={editSupplierForm.longitude}
-                    onChange={(e) => setEditSupplierForm({ ...editSupplierForm, longitude: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-base border border-line text-main outline-none focus:border-primary"
-                  />
-                </div>
+              {/* ── STORE LOCATION ON MAP (EDIT) ── */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-main block">
+                  Store Location <span className="text-[10px] text-muted font-normal">(GPS for customer radius & rider pickup)</span>
+                </label>
+
+                {editSupplierForm.latitude && editSupplierForm.longitude ? (
+                  <div className="p-3 bg-violet-50/70 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800/50 rounded-2xl flex flex-col gap-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2 min-w-0">
+                        <div className="p-1.5 rounded-lg bg-primary text-white shrink-0 mt-0.5">
+                          <MapPin className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-bold text-main truncate">
+                            {editSupplierForm.address || 'Location Selected'}
+                          </span>
+                          <span className="text-[10px] text-muted font-mono font-bold">
+                            GPS: {Number(editSupplierForm.latitude).toFixed(5)}, {Number(editSupplierForm.longitude).toFixed(5)}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 shrink-0">
+                        Saved
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLocationPickerTarget('edit');
+                          setShowLocationPicker(true);
+                        }}
+                        className="flex-1 py-1.5 px-3 bg-primary hover:bg-primary-hover text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <MapPin className="w-3 h-3" />
+                        Change Location on Map
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditSupplierForm(prev => ({ ...prev, latitude: '', longitude: '' }))}
+                        className="py-1.5 px-3 bg-base hover:bg-red-50 hover:text-red-600 text-muted text-[11px] font-bold rounded-xl border border-line transition-colors cursor-pointer"
+                        title="Remove coordinates"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-base border border-dashed border-line-strong rounded-2xl flex flex-col items-center justify-center gap-2 text-center">
+                    <div className="p-2.5 rounded-full bg-violet-50 dark:bg-violet-950/40 text-primary">
+                      <MapPin className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-main">Location not selected yet</p>
+                      <p className="text-[10px] text-muted font-medium">Pin exact store on map for accurate distance & delivery pickup</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLocationPickerTarget('edit');
+                        setShowLocationPicker(true);
+                      }}
+                      className="mt-1 py-2 px-4 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      Select Store Location on Map
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-xl bg-base border border-line">
@@ -1363,40 +1641,123 @@ export default function SuppliersAndItemsTab({ token }) {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Chicken 1kg, Aashirvaad Atta 5kg, Tomato 1kg"
+                  placeholder="e.g. Chicken Skinless, Aashirvaad Atta, Tomato Hybrid"
                   value={addItemForm.name}
                   onChange={(e) => setAddItemForm({ ...addItemForm, name: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded-xl bg-base border border-line text-main outline-none focus:border-primary"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-main block mb-1">
-                    Price (₹) <span className="text-red-500">*</span>
+              {/* ── MULTI-VARIANT WEIGHT / SIZE SELECTOR ── */}
+              <div className="flex flex-col gap-2.5 border border-line rounded-2xl p-3.5 bg-base/40">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-main">
+                    Weight / Size Variants & Pricing <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="any"
-                    placeholder="e.g. 220"
-                    value={addItemForm.price}
-                    onChange={(e) => setAddItemForm({ ...addItemForm, price: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-base border border-line text-main outline-none focus:border-primary"
-                  />
+                  <span className="text-[10px] text-primary font-bold">
+                    {addItemVariants.length} selected
+                  </span>
                 </div>
-                <div>
-                  <label className="text-[11px] font-bold text-muted block mb-1">
-                    Unit / Pack Size (Optional)
-                  </label>
+
+                {/* Category Preset Size Pills */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-bold text-muted uppercase tracking-wider">
+                    Quick Preset Sizes:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                    {(CATEGORY_UNIT_PRESETS[activeCategory] || CATEGORY_UNIT_PRESETS.grocery).map(size => {
+                      const isSelected = addItemVariants.some(v => v.unit.toLowerCase() === size.toLowerCase());
+                      return (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => handleTogglePresetVariant(size, 'add')}
+                          className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-primary text-white border-primary shadow-xs'
+                              : 'bg-surface text-muted border-line hover:border-primary/40 hover:text-main'
+                          }`}
+                        >
+                          {isSelected ? `✓ ${size}` : `+ ${size}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom Size Input */}
+                <div className="flex items-center gap-1.5 pt-2 border-t border-line/60">
                   <input
                     type="text"
-                    placeholder="e.g. 1kg, 500g, 1L, 12 pcs"
-                    value={addItemForm.unit}
-                    onChange={(e) => setAddItemForm({ ...addItemForm, unit: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-base border border-line text-main outline-none focus:border-primary"
+                    placeholder="Custom size (e.g. 750g, 1.5kg)"
+                    value={customUnitAdd}
+                    onChange={(e) => setCustomUnitAdd(e.target.value)}
+                    className="flex-1 px-2.5 py-1.5 text-xs rounded-xl bg-surface border border-line text-main outline-none focus:border-primary"
                   />
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="₹ Price"
+                    value={customPriceAdd}
+                    onChange={(e) => setCustomPriceAdd(e.target.value)}
+                    className="w-20 px-2.5 py-1.5 text-xs rounded-xl bg-surface border border-line text-main outline-none focus:border-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAddCustomVariant('add')}
+                    disabled={!customUnitAdd.trim()}
+                    className="py-1.5 px-3 bg-surface hover:bg-violet-50 dark:hover:bg-violet-950/40 text-primary border border-primary/30 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-40"
+                  >
+                    + Add
+                  </button>
+                </div>
+
+                {/* Selected Variants List */}
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <div className="flex items-center justify-between text-[10px] uppercase font-extrabold text-muted px-1">
+                    <span>Variant Size</span>
+                    <span>Price (₹)</span>
+                  </div>
+
+                  {addItemVariants.length === 0 ? (
+                    <div className="p-3 rounded-xl border border-dashed border-red-300 dark:border-red-800 text-center text-xs text-red-500 font-medium">
+                      Please select or add at least one size variant.
+                    </div>
+                  ) : (
+                    addItemVariants.map((v, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-2 p-2 rounded-xl bg-surface border border-line shadow-2xs">
+                        <span className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-black border border-primary/20 shrink-0">
+                          {v.unit}
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 bg-base border border-line rounded-lg px-2 py-1 focus-within:border-primary">
+                            <span className="text-xs font-bold text-muted">₹</span>
+                            <input
+                              type="number"
+                              required
+                              min="0"
+                              step="any"
+                              placeholder="Price"
+                              value={v.price}
+                              onChange={(e) => handleUpdateVariantPrice(idx, e.target.value, 'add')}
+                              className="w-20 bg-transparent text-xs font-black text-main outline-none"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveVariant(idx, 'add')}
+                            className="p-1 rounded-lg text-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                            title="Remove variant"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -1527,31 +1888,116 @@ export default function SuppliersAndItemsTab({ token }) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-main block mb-1">
-                    Price (₹) <span className="text-red-500">*</span>
+              {/* ── MULTI-VARIANT WEIGHT / SIZE SELECTOR (EDIT) ── */}
+              <div className="flex flex-col gap-2.5 border border-line rounded-2xl p-3.5 bg-base/40">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-main">
+                    Weight / Size Variants & Pricing <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="any"
-                    value={editItemForm.price}
-                    onChange={(e) => setEditItemForm({ ...editItemForm, price: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-base border border-line text-main outline-none focus:border-primary"
-                  />
+                  <span className="text-[10px] text-primary font-bold">
+                    {editItemVariants.length} selected
+                  </span>
                 </div>
-                <div>
-                  <label className="text-[11px] font-bold text-muted block mb-1">
-                    Unit / Pack Size
-                  </label>
+
+                {/* Category Preset Size Pills */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-bold text-muted uppercase tracking-wider">
+                    Quick Preset Sizes:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                    {(CATEGORY_UNIT_PRESETS[activeCategory] || CATEGORY_UNIT_PRESETS.grocery).map(size => {
+                      const isSelected = editItemVariants.some(v => v.unit.toLowerCase() === size.toLowerCase());
+                      return (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => handleTogglePresetVariant(size, 'edit')}
+                          className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-primary text-white border-primary shadow-xs'
+                              : 'bg-surface text-muted border-line hover:border-primary/40 hover:text-main'
+                          }`}
+                        >
+                          {isSelected ? `✓ ${size}` : `+ ${size}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom Size Input */}
+                <div className="flex items-center gap-1.5 pt-2 border-t border-line/60">
                   <input
                     type="text"
-                    value={editItemForm.unit}
-                    onChange={(e) => setEditItemForm({ ...editItemForm, unit: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-base border border-line text-main outline-none focus:border-primary"
+                    placeholder="Custom size (e.g. 750g, 1.5kg)"
+                    value={customUnitEdit}
+                    onChange={(e) => setCustomUnitEdit(e.target.value)}
+                    className="flex-1 px-2.5 py-1.5 text-xs rounded-xl bg-surface border border-line text-main outline-none focus:border-primary"
                   />
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="₹ Price"
+                    value={customPriceEdit}
+                    onChange={(e) => setCustomPriceEdit(e.target.value)}
+                    className="w-20 px-2.5 py-1.5 text-xs rounded-xl bg-surface border border-line text-main outline-none focus:border-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAddCustomVariant('edit')}
+                    disabled={!customUnitEdit.trim()}
+                    className="py-1.5 px-3 bg-surface hover:bg-violet-50 dark:hover:bg-violet-950/40 text-primary border border-primary/30 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-40"
+                  >
+                    + Add
+                  </button>
+                </div>
+
+                {/* Selected Variants List */}
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <div className="flex items-center justify-between text-[10px] uppercase font-extrabold text-muted px-1">
+                    <span>Variant Size</span>
+                    <span>Price (₹)</span>
+                  </div>
+
+                  {editItemVariants.length === 0 ? (
+                    <div className="p-3 rounded-xl border border-dashed border-red-300 dark:border-red-800 text-center text-xs text-red-500 font-medium">
+                      Please select or add at least one size variant.
+                    </div>
+                  ) : (
+                    editItemVariants.map((v, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-2 p-2 rounded-xl bg-surface border border-line shadow-2xs">
+                        <span className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-black border border-primary/20 shrink-0">
+                          {v.unit}
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 bg-base border border-line rounded-lg px-2 py-1 focus-within:border-primary">
+                            <span className="text-xs font-bold text-muted">₹</span>
+                            <input
+                              type="number"
+                              required
+                              min="0"
+                              step="any"
+                              placeholder="Price"
+                              value={v.price}
+                              onChange={(e) => handleUpdateVariantPrice(idx, e.target.value, 'edit')}
+                              className="w-20 bg-transparent text-xs font-black text-main outline-none"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveVariant(idx, 'edit')}
+                            className="p-1 rounded-lg text-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                            title="Remove variant"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -1672,6 +2118,26 @@ export default function SuppliersAndItemsTab({ token }) {
           </div>
         </div>
       )}
+
+      {/* ── INTERACTIVE MAP LOCATION PICKER MODAL ── */}
+      <LocationPickerModal
+        isOpen={showLocationPicker}
+        onClose={() => {
+          setShowLocationPicker(false);
+          setLocationPickerTarget(null);
+        }}
+        onConfirm={handleConfirmLocation}
+        title={
+          locationPickerTarget === 'edit'
+            ? `Store Location — ${editSupplierForm.name || 'Supplier'}`
+            : `Store Location — ${addSupplierForm.name || 'New Supplier'}`
+        }
+        initialAddress={{
+          lat: locationPickerTarget === 'edit' ? editSupplierForm.latitude : addSupplierForm.latitude,
+          lng: locationPickerTarget === 'edit' ? editSupplierForm.longitude : addSupplierForm.longitude,
+          formattedAddress: locationPickerTarget === 'edit' ? editSupplierForm.address : addSupplierForm.address
+        }}
+      />
 
     </div>
   );

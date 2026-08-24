@@ -99,7 +99,14 @@ export const useCartStore = create(
     }
 
     let updatedItems = [...items];
-    const existingIndex = items.findIndex(i => String(i.menuItemId) === String(item._id));
+    const itemUnit = item.unit ? String(item.unit).trim() : '';
+    const itemKey = itemUnit ? `${item._id}_${itemUnit}` : String(item._id);
+
+    const existingIndex = items.findIndex(i => {
+      const iUnit = i.unit ? String(i.unit).trim() : '';
+      const iKey = iUnit ? `${i.menuItemId}_${iUnit}` : String(i.menuItemId);
+      return iKey === itemKey;
+    });
 
     const storeId = item.supplierId || item.storeId || restaurant?._id || (isCatalog ? 'jinkzo_store' : 'rest_default');
     const storeName = item.supplierName || item.storeName || restaurant?.name || (isCatalog ? 'Jinkzo Store' : 'Restaurant');
@@ -108,12 +115,13 @@ export const useCartStore = create(
       updatedItems[existingIndex].quantity += 1;
     } else {
       updatedItems.push({
+        cartKey: itemKey,
         menuItemId: item._id,
         name: item.name,
         price: item.price,
         image: item.image || '',
         isVeg: item.isVeg,
-        unit: item.unit || '',
+        unit: itemUnit,
         service: item.service || item.category || 'food',
         category: item.category || '',
         supplierId: item.supplierId || null,
@@ -135,13 +143,18 @@ export const useCartStore = create(
       restaurant: restaurant || { _id: storeId, name: storeName }
     });
     
-    get().showToast(`Added "${item.name}" to cart!`);
+    get().showToast(`Added "${item.name}${itemUnit ? ` (${itemUnit})` : ''}" to cart!`);
     return { success: true };
   },
 
-  removeItem: (menuItemId) => {
+  removeItem: (menuItemId, unit = null) => {
     const { items } = get();
-    const existingIndex = items.findIndex(i => String(i.menuItemId) === String(menuItemId));
+    const existingIndex = items.findIndex(i => {
+      if (unit != null && unit !== '') {
+        return String(i.menuItemId) === String(menuItemId) && (i.unit || '') === String(unit);
+      }
+      return String(i.menuItemId) === String(menuItemId);
+    });
     if (existingIndex === -1) return;
 
     let updatedItems = [...items];
@@ -164,10 +177,15 @@ export const useCartStore = create(
     });
   },
 
-  updateQuantity: (menuItemId, quantity) => {
+  updateQuantity: (menuItemId, quantity, unit = null) => {
     const { items, platformSettings } = get();
     let updatedItems = [...items];
-    const index = updatedItems.findIndex(i => String(i.menuItemId) === String(menuItemId));
+    const index = updatedItems.findIndex(i => {
+      if (unit != null && unit !== '') {
+        return String(i.menuItemId) === String(menuItemId) && (i.unit || '') === String(unit);
+      }
+      return String(i.menuItemId) === String(menuItemId);
+    });
     if (index === -1) return;
 
     if (quantity <= 0) {

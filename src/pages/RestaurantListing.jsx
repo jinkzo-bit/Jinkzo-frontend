@@ -204,6 +204,9 @@ export default function RestaurantListing() {
   // Conflict modal state
   const [conflictModal, setConflictModal] = useState({ isOpen: false, message: '', pendingItem: null, pendingRestaurant: null });
 
+  // Selected item variant state for catalog products with multi-variants
+  const [selectedVariants, setSelectedVariants] = useState({});
+
   // Sync state with URL params
   useEffect(() => {
     const paramSearch = searchParams.get('search') || '';
@@ -572,15 +575,37 @@ export default function RestaurantListing() {
       return;
     }
 
-    const result = addItem(dish, dish.restaurant || { name: 'Jinkzo Store', _id: 'rest_default' });
+    const dishId = dish._id || dish.id;
+    const hasVariants = Array.isArray(dish.variants) && dish.variants.length > 1;
+    const currentVariant = (hasVariants && selectedVariants[dishId])
+      ? selectedVariants[dishId]
+      : (hasVariants ? dish.variants[0] : null);
+
+    const activeDish = currentVariant ? {
+      ...dish,
+      price: currentVariant.price,
+      unit: currentVariant.unit
+    } : dish;
+
+    const result = addItem(activeDish, dish.restaurant || { name: 'Jinkzo Store', _id: 'rest_default' });
     if (result && result.conflict) {
       setConflictModal({
         isOpen: true,
         message: result.message,
-        pendingItem: dish,
+        pendingItem: activeDish,
         pendingRestaurant: dish.restaurant
       });
     }
+  };
+
+  const handleRemoveFromCart = (dish) => {
+    const dishId = dish._id || dish.id;
+    const hasVariants = Array.isArray(dish.variants) && dish.variants.length > 1;
+    const currentVariant = (hasVariants && selectedVariants[dishId])
+      ? selectedVariants[dishId]
+      : (hasVariants ? dish.variants[0] : null);
+
+    removeItem(dishId, currentVariant ? currentVariant.unit : (dish.unit || null));
   };
 
   const confirmConflictReset = () => {
@@ -589,9 +614,13 @@ export default function RestaurantListing() {
     setConflictModal({ isOpen: false, message: '', pendingItem: null, pendingRestaurant: null });
   };
 
-  const getItemQuantity = (itemId) => {
-    const matched = cartItems.find((i) => String(i.menuItemId) === String(itemId));
-    return matched ? matched.quantity : 0;
+  const getItemQuantity = (itemId, unit = null) => {
+    if (unit != null && unit !== '') {
+      const matched = cartItems.find((i) => String(i.menuItemId) === String(itemId) && (i.unit || '') === String(unit));
+      return matched ? matched.quantity : 0;
+    }
+    const matched = cartItems.filter((i) => String(i.menuItemId) === String(itemId));
+    return matched.reduce((acc, curr) => acc + (curr.quantity || 0), 0);
   };
 
   // Sorted and filtered dishes
@@ -725,7 +754,15 @@ export default function RestaurantListing() {
   // Render an individual item card
   const renderDishCard = (dish) => {
     const dishId = dish._id || dish.id;
-    const quantity = getItemQuantity(dishId);
+    const hasVariants = Array.isArray(dish.variants) && dish.variants.length > 1;
+    const currentVariant = (hasVariants && selectedVariants[dishId])
+      ? selectedVariants[dishId]
+      : (hasVariants ? dish.variants[0] : null);
+
+    const activePrice = currentVariant ? currentVariant.price : dish.price;
+    const activeUnit = currentVariant ? currentVariant.unit : dish.unit;
+    const quantity = getItemQuantity(dishId, activeUnit);
+
     const isRestClosed = dish.restaurant?.isClosed || dish.isServiceClosed;
     const isItemUnavailable = dish.isAvailable === false;
     const isDisabled = isRestClosed || isItemUnavailable;
@@ -793,9 +830,9 @@ export default function RestaurantListing() {
             <div>
               <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                 {getServiceBadge(dish.service, dish.serviceName)}
-                {dish.unit && (
+                {activeUnit && (
                   <span className="text-[10px] font-extrabold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
-                    {dish.unit}
+                    {activeUnit}
                   </span>
                 )}
                 {dish.category && (
@@ -810,10 +847,37 @@ export default function RestaurantListing() {
               <p className="text-xs text-muted font-medium line-clamp-2 mt-0.5">
                 {dish.description || 'Fresh and high quality catalog item.'}
               </p>
+
+              {/* Multi-variant size pills */}
+              {hasVariants && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {dish.variants.map((v, vIdx) => {
+                    const isSelected = (currentVariant?.unit === v.unit);
+                    return (
+                      <button
+                        key={vIdx}
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSelectedVariants(prev => ({ ...prev, [dishId]: v }));
+                        }}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary text-white border-primary shadow-xs'
+                            : 'bg-base text-main border-line hover:border-primary/40'
+                        }`}
+                      >
+                        {v.unit} (₹{v.price})
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between mt-1">
-              <span className="text-sm font-black text-main">₹{dish.price}</span>
+              <span className="text-sm font-black text-main">₹{activePrice}</span>
             </div>
           </div>
         </div>
@@ -840,7 +904,7 @@ export default function RestaurantListing() {
               {quantity > 0 ? (
                 <>
                   <button
-                    onClick={() => removeItem(dishId)}
+                    onClick={() => handleRemoveFromCart(dish)}
                     className="w-8 h-full flex items-center justify-center hover:bg-base text-primary font-black text-sm cursor-pointer transition-colors"
                   >
                     -
