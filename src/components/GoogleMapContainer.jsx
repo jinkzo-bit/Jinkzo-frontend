@@ -10,10 +10,15 @@ import MapRotationControls from './maps/MapRotationControls';
 const DEFAULT_CENTER = { lat: 15.8562, lng: 78.2700 };
 const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
 
-// ── Map container style ───────────────────────────────────────────────────────
-const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
+// ── Map container style — Guaranteed full container expansion ────────────────
+const MAP_CONTAINER_STYLE = { 
+  width: '100%', 
+  height: '100%', 
+  minHeight: '380px',
+  position: 'relative'
+};
 
-// ── Map base options ──────────────────────────────────────────────────────────
+// ── Map base options (matching the proven working LocationPicker) ──────────────
 const MAP_OPTIONS = {
   disableDefaultUI: true,
   zoomControl: false,
@@ -27,7 +32,6 @@ const MAP_OPTIONS = {
   tilt: 0,
   isFractionalZoomEnabled: true,
   mapTypeId: 'roadmap',
-  ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
 };
 
 // ── SVG marker builders ───────────────────────────────────────────────────────
@@ -169,6 +173,7 @@ export default function GoogleMapContainer({
   orderId = null,
   onRouteInfo = null,
   supplierDeliveries = [],
+  routeSequence = [],
   // Ride-specific props (ride orders only; food orders leave these undefined/null)
   isRide = false,
   ridePickupLat = null,
@@ -199,8 +204,8 @@ export default function GoogleMapContainer({
   const [riderPos, setRiderPos] = useState(null);
   
   // Dual routes state
-  const [route1Path, setRoute1Path] = useState([]); // Rider -> Restaurant (Blue)
-  const [route2Path, setRoute2Path] = useState([]); // Restaurant -> Customer (Green)
+  const [route1Path, setRoute1Path] = useState([]); // Rider -> First Pickup (Blue)
+  const [route2Path, setRoute2Path] = useState([]); // Pickup Sequence -> Customer (Green)
   const [route1Info, setRoute1Info] = useState({ distanceKm: null, durationMinutes: null });
   const [route2Info, setRoute2Info] = useState({ distanceKm: null, durationMinutes: null });
 
@@ -225,6 +230,13 @@ export default function GoogleMapContainer({
   const rideIcon   = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26, riderBearing)   : undefined;
   const pickerIcon = isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50) : undefined;
 
+  // ── Helper: Trigger Map Resize on lifecycle & dimension events ───────────────
+  const triggerMapResize = useCallback(() => {
+    if (mapRef.current && window.google?.maps?.event) {
+      window.google.maps.event.trigger(mapRef.current, 'resize');
+    }
+  }, []);
+
   // ── Map load callback ──────────────────────────────────────────────────────
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
@@ -232,6 +244,12 @@ export default function GoogleMapContainer({
     if (window.google) {
       trafficLayerRef.current = new window.google.maps.TrafficLayer();
     }
+    // Force immediate and delayed resize checks
+    setTimeout(() => {
+      if (window.google?.maps?.event) {
+        window.google.maps.event.trigger(map, 'resize');
+      }
+    }, 100);
   }, []);
 
   const onMapUnmount = useCallback(() => {
@@ -242,6 +260,38 @@ export default function GoogleMapContainer({
     mapRef.current = null;
     setMapInstance(null);
   }, []);
+
+  // ── ResizeObserver on container to guarantee 100% container fill ───────────
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          triggerMapResize();
+        }
+      }
+    });
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [triggerMapResize]);
+
+  // ── Multi-stage resize trigger after render/animations ─────────────────────
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    triggerMapResize();
+    const t1 = setTimeout(triggerMapResize, 60);
+    const t2 = setTimeout(triggerMapResize, 180);
+    const t3 = setTimeout(triggerMapResize, 400);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [mapInstance, orderId, triggerMapResize]);
 
   // ── Picker mode ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -316,7 +366,7 @@ export default function GoogleMapContainer({
     }
   }, [trafficOn]);
 
-  // ── Update Physical Markers (Independent Coordinates) ──────────────────────
+  // ── Update Physical Markers (Independent Authoritative Coordinates) ─────────
   useEffect(() => {
     if (!isLoaded || mode !== 'tracking') return;
 
@@ -362,7 +412,28 @@ export default function GoogleMapContainer({
     }
   }, [isLoaded, mode, restaurantLat, restaurantLng, customerLat, customerLng, ridePickupLat, ridePickupLng, rideDropLat, rideDropLng, riderLat, riderLng, isRideOrder]);
 
-  // ── Auto-fit Camera on Mount or Order Change ───────────────────────────────
+  // ── Determine First Pickup Point for Leg 1 Route ─────────────────────────────
+  const getFirstPickupPos = useCallback(() => {
+    if (isRideOrder) {
+      if (restaurantPos) return restaurantPos;
+    }
+    if (Array.isArray(routeSequence) && routeSequence.length > 0) {
+      const firstStop = routeSequence.find(s => s.type === 'supplier' || s.type === 'restaurant' || s.type === 'store');
+      if (firstStop && typeof firstStop.lat === 'number' && typeof firstStop.lng === 'number') {
+        return { lat: firstStop.lat, lng: firstStop.lng };
+      }
+    }
+    if (restaurantPos) return restaurantPos;
+    if (Array.isArray(supplierDeliveries) && supplierDeliveries.length > 0) {
+      const firstSup = supplierDeliveries[0];
+      if (typeof firstSup.latitude === 'number' && typeof firstSup.longitude === 'number') {
+        return { lat: firstSup.latitude, lng: firstSup.longitude };
+      }
+    }
+    return customerPos;
+  }, [isRideOrder, restaurantPos, routeSequence, supplierDeliveries, customerPos]);
+
+  // ── Auto-fit Camera Bounds around all relevant points ───────────────────────
   useEffect(() => {
     if (!isLoaded || mode !== 'tracking' || !mapRef.current || !window.google) return;
     if (hasFitBoundsInitialRef.current && isUserInteractingRef.current) return;
@@ -373,6 +444,14 @@ export default function GoogleMapContainer({
     if (restaurantPos) {
       bounds.extend(restaurantPos);
       count++;
+    }
+    if (Array.isArray(supplierDeliveries) && supplierDeliveries.length > 0) {
+      supplierDeliveries.forEach(sup => {
+        if (typeof sup.latitude === 'number' && typeof sup.longitude === 'number') {
+          bounds.extend({ lat: sup.latitude, lng: sup.longitude });
+          count++;
+        }
+      });
     }
     if (customerPos) {
       bounds.extend(customerPos);
@@ -392,14 +471,15 @@ export default function GoogleMapContainer({
       });
       hasFitBoundsInitialRef.current = true;
     }
-  }, [isLoaded, mode, orderId, restaurantPos, customerPos]);
+  }, [isLoaded, mode, orderId, restaurantPos, customerPos, supplierDeliveries, riderPos]);
 
-  // ── Route 1: Dynamic Road Route (Rider GPS -> Restaurant/Pickup) ─────────────
+  // ── Route 1: Dynamic Road Route (Rider GPS -> First Pickup) ──────────────────
   const lastRoute1CalcRef = useRef({ lat: null, lng: null, orderId: null });
 
   useEffect(() => {
     if (!isLoaded || mode !== 'tracking') return;
-    if (!riderPos || !restaurantPos) {
+    const firstPickup = getFirstPickupPos();
+    if (!riderPos || !firstPickup) {
       setRoute1Path([]);
       setRoute1Info({ distanceKm: null, durationMinutes: null });
       return;
@@ -411,7 +491,6 @@ export default function GoogleMapContainer({
 
     const orderChanged = lastRoute1CalcRef.current.orderId !== orderId;
 
-    // Throttle: only recalculate Route 1 if rider moved > 100 meters or on order change
     if (!orderChanged && distFromLastCalc < 100) {
       return;
     }
@@ -423,74 +502,81 @@ export default function GoogleMapContainer({
         const res = await fetch(`${API_BASE}/maps/routes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ origin: riderPos, destination: restaurantPos, travelMode: 'DRIVE' }),
+          body: JSON.stringify({ origin: riderPos, destination: firstPickup, travelMode: 'DRIVE' }),
         });
         const data = await res.json();
         if (data.success && data.data) {
-          setRoute1Path(data.data.polyline || [riderPos, restaurantPos]);
+          setRoute1Path(data.data.polyline || [riderPos, firstPickup]);
           setRoute1Info({ distanceKm: data.data.distanceKm, durationMinutes: data.data.durationMinutes });
           if (onRouteInfo) onRouteInfo({ route1: data.data });
         } else {
-          setRoute1Path([riderPos, restaurantPos]);
+          setRoute1Path([riderPos, firstPickup]);
         }
       } catch (err) {
         console.error('[GoogleMapContainer] Route 1 fetch failed:', err);
-        setRoute1Path([riderPos, restaurantPos]);
+        setRoute1Path([riderPos, firstPickup]);
       }
     };
 
     fetchRoute1();
-  }, [isLoaded, mode, riderPos, restaurantPos, orderId, onRouteInfo]);
+  }, [isLoaded, mode, riderPos, getFirstPickupPos, orderId, onRouteInfo]);
 
-  // ── Route 2: Static Road Route (Restaurant/Pickup -> Customer/Drop) ─────────
-  const lastRoute2CalcRef = useRef({ restLat: null, custLat: null, orderId: null });
+  // ── Route 2: Static Road Route (Pickup Points Sequence -> Customer) ──────────
+  const lastRoute2CalcRef = useRef({ hash: '', orderId: null });
 
   useEffect(() => {
     if (!isLoaded || mode !== 'tracking') return;
-    if (!restaurantPos || !customerPos) {
+    const firstPickup = getFirstPickupPos();
+    if (!firstPickup || !customerPos) {
       setRoute2Path([]);
       setRoute2Info({ distanceKm: null, durationMinutes: null });
       return;
     }
 
-    const isSameCoords = 
-      lastRoute2CalcRef.current.restLat === restaurantPos.lat &&
-      lastRoute2CalcRef.current.custLat === customerPos.lat &&
-      lastRoute2CalcRef.current.orderId === orderId;
+    // Waypoints between first pickup and customer
+    const intermediateStops = [];
+    if (Array.isArray(supplierDeliveries) && supplierDeliveries.length > 1) {
+      supplierDeliveries.slice(1).forEach(sup => {
+        if (typeof sup.latitude === 'number' && typeof sup.longitude === 'number') {
+          intermediateStops.push({ lat: sup.latitude, lng: sup.longitude });
+        }
+      });
+    }
 
-    if (isSameCoords) return;
+    const routeHash = `${firstPickup.lat}_${firstPickup.lng}_${customerPos.lat}_${customerPos.lng}_${intermediateStops.length}`;
+    if (lastRoute2CalcRef.current.hash === routeHash && lastRoute2CalcRef.current.orderId === orderId) {
+      return;
+    }
 
-    lastRoute2CalcRef.current = {
-      restLat: restaurantPos.lat,
-      restLng: restaurantPos.lng,
-      custLat: customerPos.lat,
-      custLng: customerPos.lng,
-      orderId
-    };
+    lastRoute2CalcRef.current = { hash: routeHash, orderId };
 
     const fetchRoute2 = async () => {
       try {
         const res = await fetch(`${API_BASE}/maps/routes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ origin: restaurantPos, destination: customerPos, travelMode: 'DRIVE' }),
+          body: JSON.stringify({ 
+            origin: firstPickup, 
+            destination: customerPos, 
+            travelMode: 'DRIVE' 
+          }),
         });
         const data = await res.json();
         if (data.success && data.data) {
-          setRoute2Path(data.data.polyline || [restaurantPos, customerPos]);
+          setRoute2Path(data.data.polyline || [firstPickup, ...intermediateStops, customerPos]);
           setRoute2Info({ distanceKm: data.data.distanceKm, durationMinutes: data.data.durationMinutes });
           if (onRouteInfo) onRouteInfo({ route2: data.data });
         } else {
-          setRoute2Path([restaurantPos, customerPos]);
+          setRoute2Path([firstPickup, ...intermediateStops, customerPos]);
         }
       } catch (err) {
         console.error('[GoogleMapContainer] Route 2 fetch failed:', err);
-        setRoute2Path([restaurantPos, customerPos]);
+        setRoute2Path([firstPickup, ...intermediateStops, customerPos]);
       }
     };
 
     fetchRoute2();
-  }, [isLoaded, mode, restaurantPos, customerPos, orderId, onRouteInfo]);
+  }, [isLoaded, mode, getFirstPickupPos, customerPos, supplierDeliveries, orderId, onRouteInfo]);
 
   // ── Socket.IO Live location subscriber (for secondary sync) ────────────────
   useEffect(() => {
@@ -522,7 +608,7 @@ export default function GoogleMapContainer({
   }, [isLoaded, orderId, mode]);
 
   // ── Polyline Options ───────────────────────────────────────────────────────
-  // Route 1 (Rider -> Restaurant) — Blue (#1A73E8)
+  // Route 1 (Rider -> First Pickup) — Blue (#1A73E8)
   const route1GlowOptions = {
     strokeColor: '#1A73E8',
     strokeOpacity: 0.25,
@@ -538,7 +624,7 @@ export default function GoogleMapContainer({
     zIndex: 3,
   };
 
-  // Route 2 (Restaurant -> Customer) — Green (#16A34A)
+  // Route 2 (Pickup -> Customer) — Green (#16A34A)
   const route2GlowOptions = {
     strokeColor: '#16A34A',
     strokeOpacity: 0.25,
@@ -561,16 +647,16 @@ export default function GoogleMapContainer({
   // ── Render: Error / Loading ────────────────────────────────────────────────
   if (loadError || error) {
     return (
-      <div className="w-full h-full min-h-[280px] bg-red-50 flex items-center justify-center flex-col gap-2 rounded-2xl border border-red-100 text-red-500 p-4">
+      <div className="w-full h-full min-h-[380px] bg-red-50 flex items-center justify-center flex-col gap-2 rounded-2xl border border-red-100 text-red-500 p-4">
         <MapPin className="w-6 h-6" />
-        <span className="text-xs font-bold text-center">{error || 'Failed to load Google Maps.'}</span>
+        <span className="text-xs font-bold text-center">{error || 'Failed to load Google Maps. Please check your network connection.'}</span>
       </div>
     );
   }
 
   if (!isLoaded) {
     return (
-      <div className="w-full h-full min-h-[280px] bg-base flex items-center justify-center flex-col gap-2 rounded-2xl border border-line">
+      <div className="w-full h-full min-h-[380px] bg-base flex items-center justify-center flex-col gap-2 rounded-2xl border border-line">
         <Loader className="w-8 h-8 text-primary animate-spin" />
         <span className="text-xs text-muted font-bold">Loading Map & Routes...</span>
       </div>
@@ -578,8 +664,8 @@ export default function GoogleMapContainer({
   }
 
   return (
-    <div className="w-full h-full relative rounded-2xl overflow-hidden border border-line shadow-inner flex flex-col justify-between">
-      <div ref={containerRef} className="w-full h-full relative flex-1">
+    <div className="w-full h-full min-h-[380px] relative rounded-2xl overflow-hidden border border-line shadow-inner flex flex-col justify-between">
+      <div ref={containerRef} className="w-full h-full min-h-[320px] relative flex-1">
         <GoogleMap
           mapContainerStyle={MAP_CONTAINER_STYLE}
           center={mapCenter}
@@ -611,7 +697,7 @@ export default function GoogleMapContainer({
             />
           )}
 
-          {/* ── TRACKING MODE: Route 1 (Rider -> Restaurant in Blue) ── */}
+          {/* ── TRACKING MODE: Route 1 (Rider -> First Pickup in Blue) ── */}
           {mode === 'tracking' && route1Path.length > 1 && (
             <>
               <Polyline path={route1Path} options={route1GlowOptions} />
@@ -619,7 +705,7 @@ export default function GoogleMapContainer({
             </>
           )}
 
-          {/* ── TRACKING MODE: Route 2 (Restaurant -> Customer in Green) ── */}
+          {/* ── TRACKING MODE: Route 2 (Pickup Sequence -> Customer in Green) ── */}
           {mode === 'tracking' && route2Path.length > 1 && (
             <>
               <Polyline path={route2Path} options={route2GlowOptions} />
@@ -632,7 +718,7 @@ export default function GoogleMapContainer({
             <Marker
               position={restaurantPos}
               icon={restaurantIcon}
-              title={isRideOrder ? 'Pickup Point' : 'Restaurant Location'}
+              title={isRideOrder ? 'Pickup Point' : (restaurantName || 'Restaurant Location')}
               zIndex={10}
               onClick={() => setActivePopup(activePopup === 'restaurant' ? null : 'restaurant')}
             >
@@ -668,7 +754,7 @@ export default function GoogleMapContainer({
             const popupKey = `supplier_${sIdx}`;
             return (
               <Marker
-                key={sup._id || sIdx}
+                key={sup._id || sup.supplierId || sIdx}
                 position={supPos}
                 icon={storeIcon}
                 title={sup.supplierName || 'Store Location'}
@@ -706,7 +792,7 @@ export default function GoogleMapContainer({
             <Marker
               position={customerPos}
               icon={homeIcon}
-              title={isRideOrder ? 'Drop Location' : 'Customer Location'}
+              title={isRideOrder ? 'Drop Location' : (customerName || 'Customer Location')}
               zIndex={10}
               onClick={() => setActivePopup(activePopup === 'customer' ? null : 'customer')}
             >
@@ -938,12 +1024,12 @@ export default function GoogleMapContainer({
       {/* ── Bottom Route Info Summary Bar ── */}
       {mode === 'tracking' && (
         <div className="bg-surface/95 backdrop-blur-md border-t border-line px-4 py-2.5 z-20 flex items-center justify-between shadow-sm text-xs font-semibold">
-          {/* Leg 1: Rider -> Restaurant */}
+          {/* Leg 1: Rider -> First Pickup */}
           <div className="flex items-center gap-2">
             <span className="w-3.5 h-1.5 bg-[#1A73E8] rounded-full inline-block flex-shrink-0" />
             <div>
               <div className="text-[9px] uppercase tracking-wider text-muted font-bold">
-                {isRideOrder ? 'Rider → Pickup' : 'Rider → Restaurant'}
+                {isRideOrder ? 'Rider → Pickup' : (restaurantPos ? 'Rider → Restaurant' : 'Rider → Store')}
               </div>
               <div className="text-[11px] font-black text-main leading-tight">
                 {route1Info.distanceKm != null ? `${route1Info.distanceKm} km • ${route1Info.durationMinutes} min` : (riderPos ? 'Calculating...' : 'GPS Pending')}
@@ -951,12 +1037,12 @@ export default function GoogleMapContainer({
             </div>
           </div>
 
-          {/* Leg 2: Restaurant -> Customer */}
+          {/* Leg 2: Pickups -> Customer */}
           <div className="flex items-center gap-2">
             <span className="w-3.5 h-1.5 bg-[#16A34A] rounded-full inline-block flex-shrink-0" />
             <div>
               <div className="text-[9px] uppercase tracking-wider text-muted font-bold">
-                {isRideOrder ? 'Pickup → Drop' : 'Restaurant → Customer'}
+                {isRideOrder ? 'Pickup → Drop' : (restaurantPos ? 'Restaurant → Customer' : 'Store → Customer')}
               </div>
               <div className="text-[11px] font-black text-main leading-tight">
                 {route2Info.distanceKm != null ? `${route2Info.distanceKm} km • ${route2Info.durationMinutes} min` : 'Calculating...'}

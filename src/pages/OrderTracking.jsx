@@ -396,8 +396,12 @@ export default function OrderTracking() {
       {!['Delivered', 'Completed'].includes(order.status) && (
         <InteractiveMap 
           status={order.status} 
+          restaurantName={order.orderType === 'ride' ? 'Pickup Point' : (order.restaurant?.name || order.restaurantLocation?.formattedAddress || 'Restaurant')}
+          restaurantAddress={order.orderType === 'ride' ? (order.pickupLocation?.formattedAddress || order.pickupAddress?.street || '') : (order.restaurantLocation?.formattedAddress || '')}
           restaurantLat={order.orderType !== 'ride' ? order.restaurantLocation?.lat : undefined}
           restaurantLng={order.orderType !== 'ride' ? order.restaurantLocation?.lng : undefined}
+          customerName={order.customerName || order.user?.name || 'Customer Location'}
+          customerAddress={order.orderType === 'ride' ? (order.dropLocation?.formattedAddress || order.address?.street || '') : (order.customerLocation?.formattedAddress || order.address?.street || '')}
           customerLat={order.orderType !== 'ride' ? order.customerLocation?.lat : undefined}
           customerLng={order.orderType !== 'ride' ? order.customerLocation?.lng : undefined}
           deliveryMethod={order.orderType === 'ride' ? 'Ride' : 'Standard'}
@@ -409,7 +413,9 @@ export default function OrderTracking() {
           rideDropLng={order.orderType === 'ride' ? (order.dropLocation?.lng ?? order.restaurantLocation?.lng) : undefined}
           riderLat={riderLoc?.lat}
           riderLng={riderLoc?.lng}
-          supplierDeliveries={order.supplierDeliveries}
+          gpsStatus={gpsStatus}
+          supplierDeliveries={order.supplierDeliveries || []}
+          routeSequence={order.routeSequence || []}
         />
       )}
 

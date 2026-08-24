@@ -1031,6 +1031,7 @@ export default function DeliveryDashboard() {
                         riderLng={riderLoc?.lng}
                         gpsStatus={gpsStatus}
                         supplierDeliveries={selectedOrder.supplierDeliveries || []}
+                        routeSequence={selectedOrder.routeSequence || []}
                       />
                     )}
 
