@@ -34,13 +34,19 @@ export default function Favourites() {
   };
 
   const handleAddToCart = (dish) => {
-    const result = addItem(dish, dish.restaurant || { name: 'Jinkzo Store', _id: 'rest_default' });
+    const isCatalog =
+      dish.itemModel === 'CatalogItem' ||
+      Boolean(dish.supplierId) ||
+      Boolean(dish.supplier) ||
+      (dish.service && dish.service !== 'food') ||
+      ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes((dish.category || '').toLowerCase());
+    const result = addItem(dish, isCatalog ? null : (dish.restaurant || null));
     if (result && result.conflict) {
       setConflictModal({
         isOpen: true,
         message: result.message,
         pendingItem: dish,
-        pendingRestaurant: dish.restaurant
+        pendingRestaurant: isCatalog ? null : dish.restaurant
       });
     }
   };

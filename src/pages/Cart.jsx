@@ -1,11 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShoppingCart, Trash2, Plus, Minus, Tag, Percent, ArrowRight, ShieldCheck, AlertCircle, UtensilsCrossed, ChevronUp, FileText } from 'lucide-react';
+import { ShoppingCart, Trash2, Plus, Minus, Tag, Percent, ArrowRight, ShieldCheck, AlertCircle, UtensilsCrossed, ChevronUp, FileText, Store } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import VegBadge from '../components/VegBadge';
+
+// ── Reliable source classification helper ──────────────────────────────────────
+export const getCartItemSource = (item) => {
+  const isCatalog =
+    item.itemModel === 'CatalogItem' ||
+    Boolean(item.supplierId) ||
+    Boolean(item.supplier) ||
+    (item.service && item.service !== 'food') ||
+    ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes((item.category || '').toLowerCase());
+
+  if (isCatalog) {
+    const sId = item.supplierId ? String(item.supplierId) : (item.supplier?._id ? String(item.supplier._id) : (item.category ? `supplier_${item.category}` : 'supplier_default'));
+    const sName = item.supplierName || item.supplier?.name || (item.supplier && typeof item.supplier === 'string' ? item.supplier : null) || (item.category ? `${item.category.toUpperCase().replace(/_/g, ' ')} STORE` : 'Supplier information unavailable');
+    
+    return {
+      sourceType: 'supplier',
+      sourceKey: `supplier:${sId}`,
+      sourceId: sId,
+      sourceName: sName,
+      category: item.category || 'Store',
+      image: item.image || '',
+      isClosed: false
+    };
+  }
+
+  // Food / Restaurant
+  const rId = item.restaurantId ? String(item.restaurantId) : 'restaurant_default';
+  const rName = item.restaurantName || (item.restaurant && item.restaurant.name) || 'RESTAURANT';
+  return {
+    sourceType: 'restaurant',
+    sourceKey: `restaurant:${rId}`,
+    sourceId: rId,
+    sourceName: rName,
+    category: 'food',
+    image: item.restaurantImage || (item.restaurant && (item.restaurant.image || item.restaurant.logo)) || '',
+    isClosed: item.restaurantIsClosed || false
+  };
+};
 
 export default function Cart() {
   const { items, restaurant, promoCode, promoDiscount, updateQuantity, removeItem, clearCart, applyPromo, removePromo, getCalculations, fetchPlatformSettings, platformSettings } = useCartStore();
@@ -33,19 +71,23 @@ export default function Cart() {
     activeSurcharges
   } = getCalculations();
 
-  // Group items by restaurant with calculated subtotal and counts
+  // Group items by authoritative source: restaurant:${restaurantId} or supplier:${supplierId}
   const groupedItems = items.reduce((acc, item) => {
-    const rId = item.restaurantId || 'unknown';
-    if (!acc[rId]) {
-      acc[rId] = {
-        restaurantId: rId,
-        restaurantName: item.restaurantName || 'Unknown Restaurant',
-        restaurantImage: item.restaurantImage || '',
-        isClosed: item.restaurantIsClosed || false,
+    const source = getCartItemSource(item);
+    const key = source.sourceKey;
+    if (!acc[key]) {
+      acc[key] = {
+        sourceKey: key,
+        sourceType: source.sourceType, // 'restaurant' | 'supplier'
+        sourceId: source.sourceId,
+        sourceName: source.sourceName,
+        sourceCategory: source.category,
+        sourceImage: source.image,
+        isClosed: source.isClosed,
         items: []
       };
     }
-    acc[rId].items.push(item);
+    acc[key].items.push(item);
     return acc;
   }, {});
 
@@ -61,8 +103,11 @@ export default function Cart() {
     };
   });
 
-  const closedRestaurants = groupedList.filter(g => g.isClosed);
+  const closedRestaurants = groupedList.filter(g => g.sourceType === 'restaurant' && g.isClosed);
   const isAnyClosed = closedRestaurants.length > 0;
+
+  const restaurantGroups = groupedList.filter(g => g.sourceType === 'restaurant');
+  const supplierGroups = groupedList.filter(g => g.sourceType === 'supplier');
 
   const handlePromoApply = (e) => {
     e.preventDefault();
@@ -141,7 +186,7 @@ export default function Cart() {
             </p>
             <ul className="list-disc list-inside mt-1 font-bold">
               {closedRestaurants.map(r => (
-                <li key={r.restaurantId}>{r.restaurantName}</li>
+                <li key={r.sourceKey}>{r.sourceName}</li>
               ))}
             </ul>
             <p className="mt-2 text-[11px] text-red-700 font-medium font-semibold">
@@ -152,31 +197,44 @@ export default function Cart() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        {/* Left Column: Restaurant-Wise Order Cards */}
+        {/* Left Column: Source-Wise Order Cards (Restaurants & Suppliers) */}
         <div className="lg:col-span-2 flex flex-col gap-5">
           {groupedList.map((group) => (
-            <div key={group.restaurantId} className="bg-surface rounded-3xl border border-line shadow-2xs overflow-hidden p-5 flex flex-col gap-4 transition-all">
-              {/* Restaurant Header */}
+            <div key={group.sourceKey} className="bg-surface rounded-3xl border border-line shadow-2xs overflow-hidden p-5 flex flex-col gap-4 transition-all">
+              {/* Card Header */}
               <div className="flex items-center justify-between border-b border-line pb-3.5">
                 <div className="flex items-center gap-3">
-                  {group.restaurantImage ? (
-                    <img
-                      src={getImageUrl(group.restaurantImage, 'restaurant')}
-                      alt={group.restaurantName}
-                      onError={(e) => handleImageError(e, 'restaurant')}
-                      className="w-11 h-11 object-cover rounded-xl border border-line bg-base flex-shrink-0"
-                    />
+                  {group.sourceType === 'restaurant' ? (
+                    group.sourceImage ? (
+                      <img
+                        src={getImageUrl(group.sourceImage, 'restaurant')}
+                        alt={group.sourceName}
+                        onError={(e) => handleImageError(e, 'restaurant')}
+                        className="w-11 h-11 object-cover rounded-xl border border-line bg-base flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-11 h-11 rounded-xl border border-line bg-violet-50 text-primary flex items-center justify-center font-black text-sm flex-shrink-0 uppercase">
+                        {group.sourceName.charAt(0)}
+                      </div>
+                    )
                   ) : (
-                    <div className="w-11 h-11 rounded-xl border border-line bg-violet-50 text-primary flex items-center justify-center font-black text-sm flex-shrink-0 uppercase">
-                      {group.restaurantName.charAt(0)}
+                    <div className="w-11 h-11 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-lg flex-shrink-0 shadow-2xs">
+                      🏪
                     </div>
                   )}
                   <div className="flex flex-col gap-1">
-                    <h3 className="font-display font-black text-sm md:text-base text-main tracking-tight uppercase">
-                      {group.restaurantName}
-                    </h3>
                     <div className="flex items-center gap-2">
-                      {!group.items.some(i => i.service && i.service !== 'food') && (
+                      {group.sourceType === 'restaurant' ? (
+                        <span className="text-xs">🍴</span>
+                      ) : (
+                        <span className="text-xs">🏪</span>
+                      )}
+                      <h3 className="font-display font-black text-sm md:text-base text-main tracking-tight uppercase">
+                        {group.sourceName}
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {group.sourceType === 'restaurant' ? (
                         group.isAllVeg ? (
                           <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -188,6 +246,10 @@ export default function Cart() {
                             Non Veg
                           </span>
                         )
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider">
+                          {group.sourceCategory ? group.sourceCategory.replace(/_/g, ' ') : 'Store'}
+                        </span>
                       )}
                       {group.isClosed && (
                         <span className="bg-red-100 text-red-700 text-[10px] font-extrabold px-2 py-0.5 rounded-md">
@@ -206,7 +268,7 @@ export default function Cart() {
                 </div>
               </div>
 
-              {/* Items List in Restaurant Card */}
+              {/* Items List in Card */}
               <div className="flex flex-col divide-y divide-gray-100">
                 {group.items.map((item) => (
                   <div key={item.cartKey || `${item.menuItemId}_${item.unit || ''}`} className="py-3.5 first:pt-1 last:pb-1 flex items-center justify-between gap-4">
@@ -257,10 +319,10 @@ export default function Cart() {
                 ))}
               </div>
 
-              {/* Restaurant Card Footer: Item Total */}
+              {/* Card Footer: Item Total */}
               <div className="border-t border-dashed border-line pt-3 flex items-center justify-between">
                 <span className="text-xs md:text-sm text-muted font-medium">
-                  Item Total ({group.restaurantName})
+                  Item Total ({group.sourceName})
                 </span>
                 <span className="text-sm md:text-base font-bold text-primary">
                   ₹{group.subtotal}
@@ -298,35 +360,41 @@ export default function Cart() {
                   <Percent className="w-4 h-4 text-emerald-700" />
                   <div>
                     <p className="text-xs font-bold text-emerald-800">{promoCode} Applied</p>
-                    <p className="text-[10px] text-emerald-700">Saved ₹{promoDiscount} on this order</p>
+                    <p className="text-[10px] text-emerald-600 font-medium">₹{promoDiscount} discount saved on this order</p>
                   </div>
                 </div>
                 <button
                   onClick={removePromo}
-                  className="text-[10px] font-bold text-red-500 hover:text-red-700 cursor-pointer uppercase transition-colors"
+                  className="text-xs text-red-500 font-bold hover:underline cursor-pointer"
                 >
-                  {t('cart.remove', 'Remove')}
+                  Remove
                 </button>
               </div>
             ) : (
               <form onSubmit={handlePromoApply} className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="WELCOME50 OR QUICK20"
                   value={promoInput}
-                  onChange={(e) => setPromoInput(e.target.value)}
-                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs font-semibold text-main outline-none flex-grow placeholder:text-muted uppercase"
+                  onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                  placeholder={t('cart.enterPromo', 'Enter coupon code (e.g. QUICK20)')}
+                  className="flex-1 bg-base border border-line rounded-xl px-3 py-2 text-xs font-bold text-main uppercase focus:outline-none focus:border-primary tracking-wider"
                 />
                 <button
                   type="submit"
-                  className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer"
+                  className="bg-primary hover:bg-primary-hover text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer"
                 >
                   {t('cart.apply', 'Apply')}
                 </button>
               </form>
             )}
 
-            {promoError && <p className="text-[10px] font-bold text-red-500 px-1">{promoError}</p>}
+            {promoError && (
+              <p className="text-xs text-red-555 font-medium flex items-center gap-1 animate-shake">
+                <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                <span>{promoError}</span>
+              </p>
+            )}
+
             {!promoCode && (
               <div className="text-[10px] text-muted mt-0.5 leading-relaxed font-medium px-1">
                 Use <strong className="text-main">WELCOME50</strong> (flat ₹50 off on orders &gt; ₹200) or <strong className="text-main">QUICK20</strong> (20% off on orders &gt; ₹400).
@@ -342,43 +410,70 @@ export default function Cart() {
             </h3>
 
             {/* Subsection 1: Items from Restaurants */}
-            <div className="flex flex-col gap-2.5">
-              <h4 className="text-[11px] font-extrabold text-primary uppercase tracking-wider">
-                Items from Restaurants
-              </h4>
+            {restaurantGroups.length > 0 && (
               <div className="flex flex-col gap-2.5">
-                {groupedList.map((g) => (
-                  <div key={g.restaurantId} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2.5">
-                      {g.restaurantImage ? (
-                        <img
-                          src={getImageUrl(g.restaurantImage, 'restaurant')}
-                          alt={g.restaurantName}
-                          onError={(e) => handleImageError(e, 'restaurant')}
-                          className="w-7 h-7 rounded-lg object-cover bg-base border border-line flex-shrink-0"
-                        />
-                      ) : (
-                        <div className="w-7 h-7 rounded-lg bg-violet-50 text-primary border border-line flex items-center justify-center font-bold text-xs flex-shrink-0 uppercase">
-                          {g.restaurantName.charAt(0)}
+                <h4 className="text-[11px] font-extrabold text-primary uppercase tracking-wider">
+                  Items from Restaurants
+                </h4>
+                <div className="flex flex-col gap-2.5">
+                  {restaurantGroups.map((g) => (
+                    <div key={g.sourceKey} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2.5">
+                        {g.sourceImage ? (
+                          <img
+                            src={getImageUrl(g.sourceImage, 'restaurant')}
+                            alt={g.sourceName}
+                            onError={(e) => handleImageError(e, 'restaurant')}
+                            className="w-7 h-7 rounded-lg object-cover bg-base border border-line flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-7 h-7 rounded-lg bg-violet-50 text-primary border border-line flex items-center justify-center font-bold text-xs flex-shrink-0 uppercase">
+                            {g.sourceName.charAt(0)}
+                          </div>
+                        )}
+                        <div className="flex flex-col">
+                          <span className="font-bold text-main uppercase tracking-tight line-clamp-1">{g.sourceName}</span>
+                          <span className="text-[10px] text-muted font-medium">{g.itemsCount} {g.itemsCount === 1 ? 'Item' : 'Items'}</span>
                         </div>
-                      )}
-                      <div className="flex flex-col">
-                        <span className="font-bold text-main uppercase tracking-tight line-clamp-1">{g.restaurantName}</span>
-                        <span className="text-[10px] text-muted font-medium">{g.itemsCount} {g.itemsCount === 1 ? 'Item' : 'Items'}</span>
                       </div>
+                      <span className="text-main font-bold">₹{g.subtotal}</span>
                     </div>
-                    <span className="text-main font-bold">₹{g.subtotal}</span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
+            )}
 
-              <div className="border-t border-line pt-2.5 flex items-center justify-between text-xs font-bold text-main">
-                <span>Subtotal (Items Total)</span>
-                <span>₹{subtotal}</span>
+            {/* Subsection 2: Items from Suppliers */}
+            {supplierGroups.length > 0 && (
+              <div className="flex flex-col gap-2.5 border-t border-line pt-2.5">
+                <h4 className="text-[11px] font-extrabold text-indigo-600 uppercase tracking-wider">
+                  Items from Suppliers
+                </h4>
+                <div className="flex flex-col gap-2.5">
+                  {supplierGroups.map((g) => (
+                    <div key={g.sourceKey} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                          🏪
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-main uppercase tracking-tight line-clamp-1">{g.sourceName}</span>
+                          <span className="text-[10px] text-muted font-medium">{g.itemsCount} {g.itemsCount === 1 ? 'Item' : 'Items'}</span>
+                        </div>
+                      </div>
+                      <span className="text-main font-bold">₹{g.subtotal}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
+
+            <div className="border-t border-line pt-2.5 flex items-center justify-between text-xs font-bold text-main">
+              <span>Subtotal (Items Total)</span>
+              <span>₹{subtotal}</span>
             </div>
 
-            {/* Subsection 2: Delivery & Other Charges */}
+            {/* Subsection 3: Delivery & Other Charges */}
             <div className="flex flex-col gap-2.5 border-t border-line pt-3">
               <h4 className="text-[11px] font-extrabold text-primary uppercase tracking-wider">
                 Delivery & Other Charges
@@ -387,37 +482,37 @@ export default function Cart() {
               <div className="flex flex-col gap-2 text-xs text-muted font-medium">
                 {selectedHotelsCount >= 1 && (
                   <div className="flex items-center justify-between">
-                    <span>First Hotel Delivery Fee</span>
+                    <span>First Hotel / Store Delivery Fee</span>
                     <span className="text-main font-bold">+₹{baseFoodDeliveryFee}</span>
                   </div>
                 )}
                 {selectedHotelsCount >= 2 && (
                   <div className="flex items-center justify-between">
-                    <span>Second Hotel Delivery Fee</span>
+                    <span>Second Store / Hotel Delivery Fee</span>
                     <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
                   </div>
                 )}
                 {selectedHotelsCount >= 3 && (
                   <div className="flex items-center justify-between">
-                    <span>Third Hotel Delivery Fee</span>
+                    <span>Third Store / Hotel Delivery Fee</span>
                     <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
                   </div>
                 )}
                 {selectedHotelsCount > 3 && Array.from({ length: selectedHotelsCount - 3 }).map((_, idx) => (
                   <div key={idx} className="flex items-center justify-between">
-                    <span>Hotel {idx + 4} Delivery Fee</span>
+                    <span>Store / Hotel {idx + 4} Delivery Fee</span>
                     <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
                   </div>
                 ))}
                 {foodExtraItemCharge > 0 && (
                   <div className="flex items-center justify-between">
-                    <span>Food Extra Item Charge</span>
+                    <span>Extra Item Charge</span>
                     <span className="text-main font-bold">+₹{foodExtraItemCharge}</span>
                   </div>
                 )}
                 
                 <div className="flex items-center justify-between border-t border-b border-line py-1.5 font-semibold text-main">
-                  <span>Total Food Delivery Fees</span>
+                  <span>Total Delivery Fees</span>
                   <span className="font-bold">₹{deliveryFee}</span>
                 </div>
 
@@ -448,13 +543,17 @@ export default function Cart() {
               <span className="font-display font-black text-xl text-primary">₹{total}</span>
             </div>
 
-            {/* Proceed to Checkout CTA Button */}
+            {/* Checkout CTA */}
             <button
               onClick={handleCheckout}
               disabled={isAnyClosed}
-              className="w-full bg-primary hover:bg-primary-hover text-white text-xs md:text-sm font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-violet-500/10 hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer mt-1 disabled:bg-gray-100 disabled:text-muted disabled:shadow-none disabled:cursor-not-allowed"
+              className={`w-full py-4 rounded-2xl font-display font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer ${
+                isAnyClosed
+                  ? 'bg-gray-200 text-muted cursor-not-allowed shadow-none'
+                  : 'bg-primary hover:bg-primary-hover text-white shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 active:translate-y-0'
+              }`}
             >
-              <span>{isAnyClosed ? t('restaurant.closed', 'Restaurant Closed') : t('cart.proceedToCheckout', 'Proceed to Checkout')}</span>
+              <span>{user ? t('cart.proceedToCheckout', 'Proceed to Checkout') : t('cart.loginToCheckout', 'Login to Checkout')}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

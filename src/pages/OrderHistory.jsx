@@ -129,15 +129,25 @@ export default function OrderHistory() {
     }
 
     order.items.forEach(item => {
+      const isCatalog = item.itemModel === 'CatalogItem' || Boolean(item.supplierId) || (item.service && item.service !== 'food') || ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes((item.category || '').toLowerCase());
+
       const reorderItem = {
-        _id: item.menuItemId,
+        _id: item.menuItemId || item._id,
         name: item.name,
         price: item.price,
         image: item.image,
-        isVeg: item.isVeg
+        isVeg: item.isVeg,
+        unit: item.unit || '',
+        category: item.category || '',
+        itemModel: isCatalog ? 'CatalogItem' : 'MenuItem',
+        supplierId: item.supplierId || null,
+        supplierName: item.supplierName || null,
+        supplierAddress: item.supplierAddress || '',
+        supplierLatitude: item.supplierLatitude || null,
+        supplierLongitude: item.supplierLongitude || null,
       };
-      for (let q = 0; q < item.quantity; q++) {
-        addItem(reorderItem, actualRestaurant);
+      for (let q = 0; q < (item.quantity || 1); q++) {
+        addItem(reorderItem, isCatalog ? null : actualRestaurant);
       }
     });
 

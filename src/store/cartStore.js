@@ -56,8 +56,9 @@ export const useCartStore = create(
     const { items, platformSettings } = get();
 
     const isCatalog = (item.service && item.service !== 'food') || 
-      (item.category && ['grocery', 'meat', 'veg_fruits', 'bakery_beverages', 'cool_hot', 'hot_cool'].includes(item.category.toLowerCase())) ||
+      (item.category && ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes(item.category.toLowerCase())) ||
       Boolean(item.supplierId) ||
+      Boolean(item.supplier) ||
       item.itemModel === 'CatalogItem';
 
     if (isCatalog) {
@@ -129,8 +130,8 @@ export const useCartStore = create(
         service: isCatalog ? (item.service || item.category || 'catalog') : 'food',
         category: item.category || '',
         itemModel: isCatalog ? 'CatalogItem' : 'MenuItem',
-        supplierId: item.supplierId || item.supplier?._id || item.supplier?.id || null,
-        supplierName: item.supplierName || item.supplier?.name || null,
+        supplierId: item.supplierId || item.supplier?._id || item.supplier?.id || (isCatalog && item.category ? `sup_${item.category}` : null),
+        supplierName: item.supplierName || item.supplier?.name || (typeof item.supplier === 'string' ? item.supplier : null) || (isCatalog && item.category ? `${item.category.toUpperCase().replace(/_/g, ' ')} STORE` : null),
         supplierAddress: supAddr,
         supplierLatitude: supLat,
         supplierLongitude: supLng,
@@ -347,13 +348,16 @@ export const useCartStore = create(
     // Group unique pickup sources (Restaurants + Catalog Suppliers)
     const uniquePickupSources = {};
     items.forEach(item => {
-      if (item.supplierId) {
-        const supKey = `supplier_${item.supplierId}`;
+      const isCatalog = item.itemModel === 'CatalogItem' || Boolean(item.supplierId) || (item.service && item.service !== 'food') || ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes((item.category || '').toLowerCase());
+
+      if (isCatalog) {
+        const supId = item.supplierId ? String(item.supplierId) : (item.category ? `sup_${item.category}` : 'store_default');
+        const supKey = `supplier_${supId}`;
         if (!uniquePickupSources[supKey]) {
           uniquePickupSources[supKey] = {
             type: 'supplier',
-            id: item.supplierId,
-            name: item.supplierName || 'Store Pickup'
+            id: supId,
+            name: item.supplierName || (item.category ? `${item.category.toUpperCase().replace(/_/g, ' ')} STORE` : 'Store Pickup')
           };
         }
       } else if (item.restaurantId) {

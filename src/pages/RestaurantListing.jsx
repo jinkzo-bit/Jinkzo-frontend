@@ -588,8 +588,10 @@ export default function RestaurantListing() {
     } : dish;
 
     const isCatalogItem = (activeDish.service && activeDish.service !== 'food') ||
-      ['grocery', 'meat', 'veg_fruits', 'bakery_beverages', 'cool_hot'].includes((activeDish.category || '').toLowerCase()) ||
-      Boolean(activeDish.supplierId);
+      ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes((activeDish.category || '').toLowerCase()) ||
+      Boolean(activeDish.supplierId) ||
+      Boolean(activeDish.supplier) ||
+      activeDish.itemModel === 'CatalogItem';
 
     const result = addItem(activeDish, isCatalogItem ? null : dish.restaurant);
     if (result && result.conflict) {

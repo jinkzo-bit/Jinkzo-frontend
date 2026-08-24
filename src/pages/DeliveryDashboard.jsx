@@ -722,7 +722,7 @@ export default function DeliveryDashboard() {
     return 'bg-green-100 text-green-700 border-green-200';
   };
 
-  const getNextRiderAction = (status, orderType) => {
+  const getNextRiderAction = (status, orderType, order = null) => {
     if (orderType === 'ride') {
       if (status === 'Rider_Accepted') return { next: 'Rider_At_Pickup', label: 'Reached Pickup Point' };
       if (status === 'Rider_At_Pickup') return { next: 'Picked_Up', label: 'Picked Up Customer' };
@@ -730,14 +730,18 @@ export default function DeliveryDashboard() {
       return null;
     }
 
-    // Food/Parcel Orders
-    // Before reaching restaurant
+    const hasSupplierPickups = order && Array.isArray(order.supplierDeliveries) && order.supplierDeliveries.length > 0;
+    const hasRestaurant = order && order.restaurantId && Array.isArray(order.items) && order.items.some(i => i.itemModel === 'MenuItem' && !i.supplierId);
+    const pickupLabel = (hasSupplierPickups && !hasRestaurant) ? 'Reached Store' : (hasSupplierPickups && hasRestaurant ? 'Reached Pickup Stop' : 'Reached Restaurant');
+
+    // Food/Catalog/Parcel Orders
+    // Before reaching first pickup
     if (['Rider_Accepted', 'Placed', 'Accepted', 'Confirmed', 'Preparing'].includes(status)) {
-      return { next: 'Rider_At_Restaurant', label: 'Reached Restaurant' };
+      return { next: (hasSupplierPickups && !hasRestaurant) ? 'Rider_At_Pickup' : 'Rider_At_Restaurant', label: pickupLabel };
     }
     
-    // At restaurant waiting for food, or food is ready
-    if (['Rider_At_Restaurant', 'Ready_for_Pickup'].includes(status)) {
+    // At restaurant/store waiting for items, or food is ready
+    if (['Rider_At_Restaurant', 'Rider_At_Pickup', 'Ready_for_Pickup'].includes(status)) {
       return { next: 'Picked_Up', label: 'Pick Up Order' };
     }
 
@@ -1131,16 +1135,16 @@ export default function DeliveryDashboard() {
                           </button>
                         </div>
                       </div>
-                    ) : getNextRiderAction(selectedOrder.status, selectedOrder.orderType) ? (
+                    ) : getNextRiderAction(selectedOrder.status, selectedOrder.orderType, selectedOrder) ? (
                       <div className="bg-base border border-gray-150 p-4 rounded-2xl flex flex-col gap-2">
                         <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Milestone Control</span>
                         <button
-                          onClick={() => handleUpdateStatus(selectedOrder._id, getNextRiderAction(selectedOrder.status, selectedOrder.orderType).next)}
+                          onClick={() => handleUpdateStatus(selectedOrder._id, getNextRiderAction(selectedOrder.status, selectedOrder.orderType, selectedOrder).next)}
                           disabled={updatingId === selectedOrder._id}
                           className="bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                         >
                           <CheckCircle className="w-4.5 h-4.5" />
-                          <span>{getNextRiderAction(selectedOrder.status, selectedOrder.orderType).label}</span>
+                          <span>{getNextRiderAction(selectedOrder.status, selectedOrder.orderType, selectedOrder).label}</span>
                         </button>
                       </div>
                     ) : ['Delivered', 'Completed'].includes(selectedOrder.status) ? (
