@@ -124,6 +124,19 @@ const DROP_SVG = `
   </g>
 </svg>`;
 
+// Store marker — Purple/indigo pin with store icon
+const STORE_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
+  <filter id="sshadow" x="-30%" y="-10%" width="160%" height="140%">
+    <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="rgba(0,0,0,0.28)" />
+  </filter>
+  <g filter="url(#sshadow)">
+    <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 34 16 34s16-22.75 16-34C38 9.163 30.837 2 22 2z" fill="#7C3AED"/>
+    <circle cx="22" cy="18" r="9" fill="white"/>
+    <text x="22" y="23" text-anchor="middle" font-size="12" font-family="Arial">&#127978;</text>
+  </g>
+</svg>`;
+
 // Convert SVG string to Google Maps icon object
 const svgToIcon = (svgString, width, height, anchorX, anchorY, rotation = 0) => {
   let finalSvg = svgString;
@@ -155,6 +168,7 @@ export default function GoogleMapContainer({
   deliveryMethod = 'Standard',
   orderId = null,
   onRouteInfo = null,
+  supplierDeliveries = [],
   // Ride-specific props (ride orders only; food orders leave these undefined/null)
   isRide = false,
   ridePickupLat = null,
@@ -206,6 +220,7 @@ export default function GoogleMapContainer({
     ? (isRideOrder ? svgToIcon(DROP_SVG, 44, 56, 22, 52) : svgToIcon(HOME_SVG, 44, 56, 22, 52))
     : undefined;
 
+  const storeIcon  = isLoaded ? svgToIcon(STORE_SVG, 44, 56, 22, 52) : undefined;
   const riderIcon  = isLoaded ? svgToIcon(RIDER_SVG, 52, 52, 26, 26, riderBearing)  : undefined;
   const rideIcon   = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26, riderBearing)   : undefined;
   const pickerIcon = isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50) : undefined;
@@ -645,6 +660,46 @@ export default function GoogleMapContainer({
               )}
             </Marker>
           )}
+
+          {/* ── TRACKING MODE: Supplier / Store Markers ── */}
+          {mode === 'tracking' && Array.isArray(supplierDeliveries) && supplierDeliveries.map((sup, sIdx) => {
+            if (typeof sup.latitude !== 'number' || typeof sup.longitude !== 'number') return null;
+            const supPos = { lat: sup.latitude, lng: sup.longitude };
+            const popupKey = `supplier_${sIdx}`;
+            return (
+              <Marker
+                key={sup._id || sIdx}
+                position={supPos}
+                icon={storeIcon}
+                title={sup.supplierName || 'Store Location'}
+                zIndex={12}
+                onClick={() => setActivePopup(activePopup === popupKey ? null : popupKey)}
+              >
+                {activePopup === popupKey && (
+                  <InfoWindow onCloseClick={() => setActivePopup(null)}>
+                    <div style={{
+                      fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+                      fontSize: '12px',
+                      color: '#1a1a1a',
+                      padding: '2px 4px',
+                    }}>
+                      <div style={{ fontWeight: '800', color: '#7C3AED' }}>
+                        🏪 {sup.supplierName || 'Store Location'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#4B5563', marginTop: '2px', maxWidth: '200px' }}>
+                        {sup.address || 'Store Location'}
+                      </div>
+                      {sup.distanceKm != null && (
+                        <div style={{ fontSize: '11px', color: '#1A73E8', fontWeight: '700', marginTop: '2px' }}>
+                          Distance: {sup.distanceKm} km ({sup.durationMinutes || 5} min)
+                        </div>
+                      )}
+                    </div>
+                  </InfoWindow>
+                )}
+              </Marker>
+            );
+          })}
 
           {/* ── TRACKING MODE: Customer Marker ── */}
           {mode === 'tracking' && customerPos && (

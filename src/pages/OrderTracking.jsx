@@ -409,6 +409,7 @@ export default function OrderTracking() {
           rideDropLng={order.orderType === 'ride' ? (order.dropLocation?.lng ?? order.restaurantLocation?.lng) : undefined}
           riderLat={riderLoc?.lat}
           riderLng={riderLoc?.lng}
+          supplierDeliveries={order.supplierDeliveries}
         />
       )}
 

@@ -322,8 +322,19 @@ export default function SuppliersAndItemsTab({ token }) {
 
   const handleAddSupplier = async (e) => {
     e.preventDefault();
-    setIsAddingSupplier(true);
     setAddSupplierError('');
+
+    if (
+      addSupplierForm.latitude === '' ||
+      addSupplierForm.longitude === '' ||
+      isNaN(Number(addSupplierForm.latitude)) ||
+      isNaN(Number(addSupplierForm.longitude))
+    ) {
+      setAddSupplierError('Store location is not configured. Please select the supplier location on the map.');
+      return;
+    }
+
+    setIsAddingSupplier(true);
     try {
       const res = await fetch(`${API_BASE}/admin/suppliers`, {
         method: 'POST',
@@ -333,6 +344,8 @@ export default function SuppliersAndItemsTab({ token }) {
         },
         body: JSON.stringify({
           ...addSupplierForm,
+          latitude: Number(addSupplierForm.latitude),
+          longitude: Number(addSupplierForm.longitude),
           category: activeCategory
         })
       });
@@ -353,8 +366,19 @@ export default function SuppliersAndItemsTab({ token }) {
 
   const handleEditSupplier = async (e) => {
     e.preventDefault();
-    setIsEditingSupplier(true);
     setEditSupplierError('');
+
+    if (
+      editSupplierForm.latitude === '' ||
+      editSupplierForm.longitude === '' ||
+      isNaN(Number(editSupplierForm.latitude)) ||
+      isNaN(Number(editSupplierForm.longitude))
+    ) {
+      setEditSupplierError('Store location is not configured. Please select the supplier location on the map.');
+      return;
+    }
+
+    setIsEditingSupplier(true);
     try {
       const res = await fetch(`${API_BASE}/admin/suppliers/${editSupplierForm._id}`, {
         method: 'PUT',
@@ -362,7 +386,11 @@ export default function SuppliersAndItemsTab({ token }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(editSupplierForm)
+        body: JSON.stringify({
+          ...editSupplierForm,
+          latitude: Number(editSupplierForm.latitude),
+          longitude: Number(editSupplierForm.longitude)
+        })
       });
       const data = await res.json();
       if (!res.ok) {

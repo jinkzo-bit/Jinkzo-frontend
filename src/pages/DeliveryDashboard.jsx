@@ -1030,7 +1030,71 @@ export default function DeliveryDashboard() {
                         riderLat={riderLoc?.lat}
                         riderLng={riderLoc?.lng}
                         gpsStatus={gpsStatus}
+                        supplierDeliveries={selectedOrder.supplierDeliveries || []}
                       />
+                    )}
+
+                    {/* Multi-Store Pickup Milestones (Catalog / Multi-Supplier Orders) */}
+                    {Array.isArray(selectedOrder.supplierDeliveries) && selectedOrder.supplierDeliveries.length > 0 && (
+                      <div className="bg-base border border-line rounded-2xl p-4 flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-xs font-extrabold uppercase tracking-wider text-main flex items-center gap-1.5">
+                            <span>🏪 Store Pickup Stops ({selectedOrder.supplierDeliveries.length})</span>
+                          </h5>
+                          <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                            Multi-Store Run
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-2.5">
+                          {selectedOrder.supplierDeliveries.map((sup, sIdx) => (
+                            <div
+                              key={sup.supplierId || sIdx}
+                              className="bg-surface border border-line rounded-xl p-3 flex flex-col gap-2 shadow-2xs"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-violet-600 text-white font-extrabold text-[10px] flex items-center justify-center flex-shrink-0">
+                                    {sIdx + 1}
+                                  </span>
+                                  <div>
+                                    <h6 className="font-bold text-xs text-main">{sup.supplierName || 'Store Pickup'}</h6>
+                                    <p className="text-[10px] text-muted line-clamp-1">{sup.address || 'Store Location'}</p>
+                                  </div>
+                                </div>
+                                {sup.distanceKm != null && (
+                                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex-shrink-0">
+                                    {sup.distanceKm} km
+                                  </span>
+                                )}
+                              </div>
+
+                              {Array.isArray(sup.items) && sup.items.length > 0 && (
+                                <div className="bg-base/70 rounded-lg p-2 flex flex-col gap-1 border border-line/60">
+                                  <span className="text-[9px] uppercase font-extrabold text-muted">Items to Collect:</span>
+                                  {sup.items.map((it, itIdx) => (
+                                    <div key={itIdx} className="flex justify-between text-[11px] font-medium text-main">
+                                      <span>• {it.itemName || it.name} {it.unit ? `(${it.unit})` : ''}</span>
+                                      <span className="font-bold text-muted">x{it.quantity}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {sup.supplierPhone && (
+                                <div className="flex justify-end pt-1">
+                                  <a
+                                    href={`tel:${sup.supplierPhone}`}
+                                    className="text-[10px] font-bold text-violet-600 hover:text-violet-700 bg-violet-50 px-2.5 py-1 rounded-md transition-colors"
+                                  >
+                                    📞 Call Store ({sup.supplierPhone})
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
 
                     {/* Driver Instructions */}

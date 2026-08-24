@@ -469,25 +469,25 @@ export default function RestaurantListing() {
                 name: item.name,
                 price: Number(item.price),
                 unit: item.unit || '',
+                variants: item.variants || [],
                 image: item.image || '',
                 description: item.description || '',
-                category: item.category || sName,
+                category: item.category || categoryBackendKey,
                 service: sId,
                 serviceName: sName,
-                supplierId: item.supplierId || null,
-                supplierName: item.supplierName || null,
-                supplierAddress: item.supplierAddress || null,
-                supplierActive: item.supplierActive !== false,
-                isAvailable: item.isAvailable !== false,
-                restaurant: {
-                  _id: item.supplierId || 'jinkzo_catalog',
-                  name: item.supplierName || 'Jinkzo Store',
-                  address: item.supplierAddress || '',
-                  isActive: item.supplierActive !== false
-                }
+                itemModel: 'CatalogItem',
+                supplierId: item.supplierId || item.supplier?._id || item.supplier?.id || null,
+                supplierName: item.supplierName || item.supplier?.name || null,
+                supplierPhone: item.supplierPhone || item.supplier?.phone || '',
+                supplierAddress: item.supplierAddress || item.supplier?.address || '',
+                supplierLatitude: item.supplierLatitude ?? item.supplier?.latitude ?? null,
+                supplierLongitude: item.supplierLongitude ?? item.supplier?.longitude ?? null,
+                supplier: item.supplier || null,
+                supplierActive: item.supplierActive !== false && item.supplier?.isActive !== false,
+                isAvailable: item.isAvailable !== false
               }));
             } else {
-              dataset = staticFallback.map(d => ({ ...d, service: sId, serviceName: sName }));
+              dataset = staticFallback.map(d => ({ ...d, service: sId, serviceName: sName, itemModel: 'CatalogItem' }));
             }
 
             let filtered = dataset;
@@ -587,7 +587,11 @@ export default function RestaurantListing() {
       unit: currentVariant.unit
     } : dish;
 
-    const result = addItem(activeDish, dish.restaurant || { name: 'Jinkzo Store', _id: 'rest_default' });
+    const isCatalogItem = (activeDish.service && activeDish.service !== 'food') ||
+      ['grocery', 'meat', 'veg_fruits', 'bakery_beverages', 'cool_hot'].includes((activeDish.category || '').toLowerCase()) ||
+      Boolean(activeDish.supplierId);
+
+    const result = addItem(activeDish, isCatalogItem ? null : dish.restaurant);
     if (result && result.conflict) {
       setConflictModal({
         isOpen: true,

@@ -59,41 +59,120 @@ export default function Checkout() {
     checkRiderAvailability();
   }, [token]);
 
+  const [storeRoutes, setStoreRoutes] = useState([]);
+
   React.useEffect(() => {
     const activeAddress = user?.addresses?.[selectedAddressIndex];
-    const restAddress = restaurant?.address || '';
     
-    if (activeAddress && restAddress) {
+    if (activeAddress) {
       const fetchRouteInfo = async () => {
-        let restPos = (restaurant?.lat && restaurant?.lng) ? { lat: restaurant.lat, lng: restaurant.lng } : null;
-        if (!restPos) {
-          try {
-            const res = await fetch(`${API_BASE}/maps/geocode?address=${encodeURIComponent(restAddress)}`);
-            const data = await res.json();
-            if (data.success && data.data) restPos = { lat: data.data.lat, lng: data.data.lng };
-          } catch (err) { console.error('Failed to geocode restaurant address:', err); }
-        }
-
-        let custPos = (activeAddress?.lat && activeAddress?.lng) ? { lat: activeAddress.lat, lng: activeAddress.lng } : null;
+        let custPos = (activeAddress?.lat != null && activeAddress?.lng != null) ? { lat: Number(activeAddress.lat), lng: Number(activeAddress.lng) } : null;
         if (!custPos) {
           const fullCustAddress = `${activeAddress.street}, ${activeAddress.city}, ${activeAddress.state} ${activeAddress.zip}`;
           try {
             const res = await fetch(`${API_BASE}/maps/geocode?address=${encodeURIComponent(fullCustAddress)}`);
             const data = await res.json();
-            if (data.success && data.data) custPos = { lat: data.data.lat, lng: data.data.lng };
+            if (data.success && data.data) custPos = { lat: Number(data.data.lat), lng: Number(data.data.lng) };
           } catch (err) { console.error('Failed to geocode customer address:', err); }
         }
 
-        if (restPos && custPos) {
-          const route = await getRoute(restPos, custPos);
-          if (route && route.success === true) {
-            setRouteInfo({ distanceKm: route.distanceKm, durationMinutes: route.durationMinutes });
+        if (!custPos) return;
+
+        // Fetch fresh supplier list from backend to guarantee authoritative coordinates
+        let freshSuppliersMap = {};
+        try {
+          const supRes = await fetch(`${API_BASE}/catalog-items/suppliers`);
+          if (supRes.ok) {
+            const supJson = await supRes.json();
+            const supList = Array.isArray(supJson) ? supJson : (supJson.suppliers || []);
+            freshSuppliersMap = supList.reduce((acc, s) => {
+              acc[String(s._id || s.id)] = s;
+              return acc;
+            }, {});
           }
+        } catch (e) {
+          console.error('Failed to fetch fresh suppliers for route calculation:', e);
+        }
+
+        // Collect all distinct pickup sources (Suppliers + Restaurants)
+        const uniqueStores = [];
+        const seenStoreKeys = new Set();
+
+        for (const item of items) {
+          const isCatalog = ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'bakery_beverages', 'cool_hot', 'hot_cool', 'beverages'].includes((item.category || item.service || '').toLowerCase()) || Boolean(item.supplierId) || item.itemModel === 'CatalogItem';
+          
+          if (isCatalog) {
+            const sId = item.supplierId ? String(item.supplierId) : 'store_default';
+            if (!seenStoreKeys.has(sId)) {
+              seenStoreKeys.add(sId);
+              const freshSup = freshSuppliersMap[sId];
+              uniqueStores.push({
+                id: sId,
+                type: 'supplier',
+                name: freshSup?.name || item.supplierName || 'Store Pickup',
+                category: freshSup?.category || item.category || 'Store',
+                lat: freshSup?.latitude ?? item.supplierLatitude ?? item.supplier?.latitude ?? null,
+                lng: freshSup?.longitude ?? item.supplierLongitude ?? item.supplier?.longitude ?? null,
+                address: freshSup?.address || item.supplierAddress || item.supplier?.address || ''
+              });
+            }
+          } else {
+            const rId = item.restaurantId ? String(item.restaurantId) : (restaurant?._id ? String(restaurant._id) : 'rest_default');
+            if (!seenStoreKeys.has(rId)) {
+              seenStoreKeys.add(rId);
+              uniqueStores.push({
+                id: rId,
+                type: 'restaurant',
+                name: item.restaurantName || restaurant?.name || 'Restaurant',
+                category: 'Food',
+                lat: restaurant?.lat ?? null,
+                lng: restaurant?.lng ?? null,
+                address: restaurant?.address || ''
+              });
+            }
+          }
+        }
+
+        const calculatedRoutes = [];
+        let maxDist = 0;
+        let maxDuration = 0;
+
+        for (const store of uniqueStores) {
+          let storePos = (store.lat != null && store.lng != null && !isNaN(Number(store.lat)) && !isNaN(Number(store.lng))) 
+            ? { lat: Number(store.lat), lng: Number(store.lng) } 
+            : null;
+
+          if (storePos) {
+            try {
+              const route = await getRoute(storePos, custPos);
+              if (route && route.success === true) {
+                const dist = Number(route.distanceKm || 0);
+                const dur = Number(route.durationMinutes || 5);
+                calculatedRoutes.push({
+                  id: store.id,
+                  type: store.type,
+                  name: store.name,
+                  category: store.category,
+                  distanceKm: dist,
+                  durationMinutes: dur
+                });
+                if (dist > maxDist) maxDist = dist;
+                if (dur > maxDuration) maxDuration = dur;
+              }
+            } catch (err) {
+              console.warn(`Routing error for ${store.name}:`, err.message);
+            }
+          }
+        }
+
+        setStoreRoutes(calculatedRoutes);
+        if (maxDist > 0) {
+          setRouteInfo({ distanceKm: maxDist, durationMinutes: maxDuration });
         }
       };
       fetchRouteInfo();
     }
-  }, [restaurant?.lat, restaurant?.lng, user?.addresses?.[selectedAddressIndex]?.lat, user?.addresses?.[selectedAddressIndex]?.lng]); // eslint-disable-line
+  }, [restaurant?.lat, restaurant?.lng, user?.addresses?.[selectedAddressIndex]?.lat, user?.addresses?.[selectedAddressIndex]?.lng, items]); // eslint-disable-line
 
   const {
     subtotal,
@@ -102,6 +181,7 @@ export default function Checkout() {
     foodHotelChangeFeeRate,
     foodExtraItemCharge,
     selectedHotelsCount,
+    totalPickupPointsCount,
     deliveryFee,
     platformFee,
     promoDiscount,
@@ -109,17 +189,20 @@ export default function Checkout() {
     activeSurcharges
   } = getCalculations(routeInfo?.distanceKm);
 
-  // Group items by restaurant
+  // Group items by restaurant or supplier store
   const groupedItems = items.reduce((acc, item) => {
-    const rId = item.restaurantId || 'unknown';
-    if (!acc[rId]) {
-      acc[rId] = {
-        restaurantId: rId,
-        restaurantName: item.restaurantName || 'Unknown Restaurant',
+    const isSupplier = Boolean(item.supplierId);
+    const key = isSupplier ? `supplier_${item.supplierId}` : `restaurant_${item.restaurantId || 'food'}`;
+    const name = isSupplier ? (item.supplierName || 'Store Pickup') : (item.restaurantName || 'Restaurant');
+    if (!acc[key]) {
+      acc[key] = {
+        key,
+        type: isSupplier ? 'supplier' : 'restaurant',
+        sourceName: name,
         items: []
       };
     }
-    acc[rId].items.push(item);
+    acc[key].items.push(item);
     return acc;
   }, {});
 
@@ -258,19 +341,27 @@ export default function Checkout() {
     setIsSubmitting(true);
     try {
       const activeAddress = activeAddresses[selectedAddressIndex] || activeAddresses[0];
+      const foodItems = items.filter(i => !i.supplierId && i.restaurantId);
+      const primaryRestaurantId = foodItems.length > 0 ? (foodItems[0].restaurantId || restaurant?._id || null) : null;
 
       const orderPayload = {
         items: items.map(i => ({
           menuItemId: i.menuItemId,
+          itemModel: i.supplierId ? 'CatalogItem' : 'MenuItem',
           name: i.name,
           quantity: i.quantity,
           price: i.price,
-          image: i.image,
-          isVeg: i.isVeg,
-          restaurantId: i.restaurantId
+          unit: i.unit || '',
+          service: i.service || i.category || (i.supplierId ? 'catalog' : 'food'),
+          category: i.category || '',
+          supplierId: i.supplierId || null,
+          supplierName: i.supplierName || null,
+          image: i.image || '',
+          isVeg: i.isVeg || false,
+          restaurantId: i.supplierId ? null : (i.restaurantId || null)
         })),
         addressId: activeAddress._id,
-        restaurantId: items[0]?.restaurantId || restaurant?._id,
+        restaurantId: primaryRestaurantId,
         paymentMethod,
         promoCode: promoCode || '',
         instruction: deliveryInstructions
@@ -492,14 +583,15 @@ export default function Checkout() {
             {/* Collapsed Item list preview */}
             <div className="flex flex-col gap-3 border-b border-line pb-3">
               {groupedList.map((group) => (
-                <div key={group.restaurantId} className="flex flex-col gap-1.5">
-                  <div className="text-[10px] uppercase tracking-wider font-extrabold text-primary">
-                    {group.restaurantName}
+                <div key={group.key} className="flex flex-col gap-1.5">
+                  <div className="text-[11px] uppercase tracking-wider font-black text-primary flex items-center gap-1.5">
+                    <span>{group.type === 'supplier' ? '🏪' : '🍴'}</span>
+                    <span>{group.sourceName}</span>
                   </div>
                   <div className="flex flex-col gap-1 pl-1">
                     {group.items.map((i) => (
-                      <div key={i.menuItemId} className="flex justify-between items-center text-muted font-semibold">
-                        <span className="truncate max-w-[70%]">{i.name} <strong className="text-muted font-medium">x{i.quantity}</strong></span>
+                      <div key={i.menuItemId} className="flex justify-between items-center text-muted font-semibold text-xs">
+                        <span className="truncate max-w-[70%]">{i.name} {i.unit ? `(${i.unit})` : ''} <strong className="text-muted font-medium">x{i.quantity}</strong></span>
                         <span className="text-main font-bold">₹{i.price * i.quantity}</span>
                       </div>
                     ))}
@@ -510,7 +602,20 @@ export default function Checkout() {
 
             {/* Invoice Breakdown */}
             <div className="flex flex-col gap-2 text-xs text-muted font-medium border-b border-line pb-3.5">
-              {routeInfo && (
+              {storeRoutes && storeRoutes.length > 0 ? (
+                <div className="flex flex-col gap-1.5 mb-2">
+                  <span className="text-[10px] uppercase tracking-wider font-extrabold text-muted">Pickup & Delivery Routes</span>
+                  {storeRoutes.map((sr, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-blue-700 bg-blue-50/80 dark:bg-blue-950/30 p-2 rounded-xl border border-blue-100 dark:border-blue-900/40">
+                      <span className="font-bold flex items-center gap-1.5 truncate max-w-[60%]">
+                        <span className="text-sm">{sr.type === 'supplier' ? '🏪' : '🍴'}</span>
+                        <span className="truncate">{sr.name}</span>
+                      </span>
+                      <span className="font-extrabold text-[11px] flex-shrink-0">{sr.distanceKm} km · {sr.durationMinutes} min</span>
+                    </div>
+                  ))}
+                </div>
+              ) : routeInfo && (
                 <div className="flex items-center justify-between text-blue-700 bg-blue-50 p-2 rounded-lg mb-1 border border-blue-100">
                   <span className="font-bold flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5" /> Estimated Delivery Distance:
@@ -522,38 +627,32 @@ export default function Checkout() {
                 <span>{t('cart.itemSubtotal', 'Subtotal')}</span>
                 <span className="text-main font-bold">₹{subtotal}</span>
               </div>
-              {selectedHotelsCount >= 1 && (
+              {selectedHotelsCount === 1 && (
                 <div className="flex items-center justify-between">
-                  <span>First Hotel Delivery Fee</span>
+                  <span>Base Delivery Fee</span>
                   <span className="text-main font-bold">+₹{baseFoodDeliveryFee}</span>
                 </div>
               )}
-              {selectedHotelsCount >= 2 && (
-                <div className="flex items-center justify-between">
-                  <span>Second Hotel Delivery Fee</span>
-                  <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
-                </div>
+              {selectedHotelsCount > 1 && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span>Base Delivery Fee (1st Pickup)</span>
+                    <span className="text-main font-bold">+₹{baseFoodDeliveryFee}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Additional Pickup Points ({selectedHotelsCount - 1})</span>
+                    <span className="text-main font-bold">+₹{foodHotelChangeFee}</span>
+                  </div>
+                </>
               )}
-              {selectedHotelsCount >= 3 && (
-                <div className="flex items-center justify-between">
-                  <span>Third Hotel Delivery Fee</span>
-                  <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
-                </div>
-              )}
-              {selectedHotelsCount > 3 && Array.from({ length: selectedHotelsCount - 3 }).map((_, idx) => (
-                <div key={idx} className="flex items-center justify-between">
-                  <span>Hotel {idx + 4} Delivery Fee</span>
-                  <span className="text-main font-bold">+₹{foodHotelChangeFeeRate || 15}</span>
-                </div>
-              ))}
               {foodExtraItemCharge > 0 && (
                 <div className="flex items-center justify-between">
-                  <span>Food Extra Item Charge</span>
+                  <span>Extra Item Charge</span>
                   <span className="text-main font-bold">+₹{foodExtraItemCharge}</span>
                 </div>
               )}
               <div className="flex items-center justify-between border-t border-b border-line py-1.5 font-semibold">
-                <span>Total Food Delivery Fees</span>
+                <span>Total Delivery Fee</span>
                 <span className="text-main font-bold">₹{deliveryFee}</span>
               </div>
               {activeSurcharges && activeSurcharges.map((sc, idx) => (

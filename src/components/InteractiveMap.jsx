@@ -14,6 +14,7 @@ export default function InteractiveMap({
   deliveryMethod = 'Standard',
   orderId = null,
   onRouteInfo = null,
+  supplierDeliveries = [],
   // Ride-specific props
   isRide = false,
   ridePickupLat = null,
@@ -77,6 +78,7 @@ export default function InteractiveMap({
         deliveryMethod={deliveryMethod}
         orderId={orderId}
         onRouteInfo={onRouteInfo}
+        supplierDeliveries={supplierDeliveries}
         isRide={isRide}
         ridePickupLat={ridePickupLat}
         ridePickupLng={ridePickupLng}
