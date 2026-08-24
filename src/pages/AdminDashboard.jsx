@@ -7,9 +7,10 @@ import {
   XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare,
   AlertCircle, ChevronLeft, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2,
   Pencil, Plus, UserCircle, Activity, FileText, Star, TrendingUp, Search, Menu, Filter, Info, Shield, RefreshCw,
-  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical, Save, Sparkles, Utensils
+  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical, Save, Sparkles, Utensils, Boxes
 } from 'lucide-react';
 import InteractiveMap from '../components/InteractiveMap';
+import SuppliersAndItemsTab from '../components/admin/SuppliersAndItemsTab';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
@@ -1520,6 +1521,7 @@ export default function AdminDashboard() {
         <div className="lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex flex-col gap-1">
           {[
             { id: 'analytics', label: 'Ecosystem Analytics', icon: DollarSign },
+            { id: 'suppliers_items', label: 'Suppliers & Items', icon: Boxes },
             { id: 'categories', label: 'Categories', icon: Layers, badge: categoriesList.length },
             { id: 'kyc', label: 'KYC Document Approvals', icon: ShieldCheck, badge: pendingKyc.length },
             { id: 'users', label: 'User Directory Manager', icon: Users, badge: allUsers.length },
@@ -1560,6 +1562,11 @@ export default function AdminDashboard() {
 
         {/* Right Side: Tab Contents Body */}
         <div className="lg:col-span-3">
+
+          {/* SUPPLIERS & ITEMS TAB */}
+          {activeSubTab === 'suppliers_items' && (
+            <SuppliersAndItemsTab token={token} />
+          )}
 
           {/* ECOSYSTEM ANALYTICS TAB */}
           {activeSubTab === 'analytics' && (
