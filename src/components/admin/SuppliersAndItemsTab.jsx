@@ -1420,15 +1420,15 @@ export default function SuppliersAndItemsTab({ token }) {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-main block mb-1">
-                  Item Image (Optional)
-                </label>
                 <ImageUploadInput
+                  label="Item Image (Optional)"
+                  imageType="food"
                   value={addItemForm.image}
-                  onChange={(val) => setAddItemForm({ ...addItemForm, image: val })}
-                  onFileSelect={(file) => setAddItemFile(file)}
-                  placeholder="Paste Image URL or select file"
-                  category="menu"
+                  file={addItemFile}
+                  onFileChange={(f) => setAddItemFile(f)}
+                  onUrlChange={(url) => setAddItemForm(prev => ({ ...prev, image: url }))}
+                  previewShape="square"
+                  helperText="Upload a JPG, PNG, or WebP image or paste an external image URL."
                 />
               </div>
 
@@ -1574,15 +1574,15 @@ export default function SuppliersAndItemsTab({ token }) {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-main block mb-1">
-                  Item Image
-                </label>
                 <ImageUploadInput
+                  label="Item Image (Optional)"
+                  imageType="food"
                   value={editItemForm.image}
-                  onChange={(val) => setEditItemForm({ ...editItemForm, image: val })}
-                  onFileSelect={(file) => setEditItemFile(file)}
-                  placeholder="Paste Image URL or select file"
-                  category="menu"
+                  file={editItemFile}
+                  onFileChange={(f) => setEditItemFile(f)}
+                  onUrlChange={(url) => setEditItemForm(prev => ({ ...prev, image: url }))}
+                  previewShape="square"
+                  helperText="Upload a new image or paste a URL to replace the current image."
                 />
               </div>
 

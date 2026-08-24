@@ -55,41 +55,54 @@ export const useCartStore = create(
   addItem: (item, restaurant) => {
     const { items, platformSettings } = get();
 
-    // 0. Check restaurant open status and item custom availability
-    const timingStatus = checkRestaurantOpenStatus(restaurant?.openingHours, restaurant?.isClosed);
-    if (!timingStatus.isOpen) {
-      get().showToast('This restaurant is currently closed.', 'error');
-      return { success: false, message: 'This restaurant is currently closed.' };
-    }
+    const isCatalog = (item.service && item.service !== 'food') || 
+      (item.category && ['grocery', 'meat', 'veg_fruits', 'bakery_beverages'].includes(item.category));
 
-    const normItem = normalizeMenuItem(item);
-    const itemStatus = checkItemAvailability(normItem, timingStatus.isOpen);
-    if (!itemStatus.isAvailable) {
-      get().showToast(itemStatus.message || 'This item is currently unavailable.', 'error');
-      return { success: false, message: itemStatus.message || 'This item is currently unavailable.' };
-    }
+    if (isCatalog) {
+      if (item.isAvailable === false) {
+        get().showToast('This item is currently out of stock.', 'error');
+        return { success: false, message: 'This item is currently out of stock.' };
+      }
+    } else {
+      // 0. Check food restaurant open status and item custom availability
+      const timingStatus = checkRestaurantOpenStatus(restaurant?.openingHours, restaurant?.isClosed);
+      if (!timingStatus.isOpen) {
+        get().showToast('This restaurant is currently closed.', 'error');
+        return { success: false, message: 'This restaurant is currently closed.' };
+      }
 
-    // 1. Check food item limit
-    const currentTotalItems = items.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
-    const maxFoodItems = (platformSettings?.foodBaseItemLimit ?? 4) + (platformSettings?.foodExtraItemLimit ?? 3);
-    if (currentTotalItems + 1 > maxFoodItems) {
-      get().showToast(`Maximum ${maxFoodItems} food items are allowed per order.`, 'error');
-      return { success: false, message: `Maximum ${maxFoodItems} food items are allowed per order.` };
-    }
+      const normItem = normalizeMenuItem(item);
+      const itemStatus = checkItemAvailability(normItem, timingStatus.isOpen);
+      if (!itemStatus.isAvailable) {
+        get().showToast(itemStatus.message || 'This item is currently unavailable.', 'error');
+        return { success: false, message: itemStatus.message || 'This item is currently unavailable.' };
+      }
 
-    // 2. Check unique hotel limit
-    const currentHotelIds = new Set(items.map(i => String(i.restaurantId)).filter(Boolean));
-    const isNewHotel = restaurant?._id && !currentHotelIds.has(String(restaurant._id));
-    if (isNewHotel) {
-      const maxHotels = platformSettings?.foodMaxHotels ?? 3;
-      if (currentHotelIds.size >= maxHotels) {
-        get().showToast(`You can order from a maximum of ${maxHotels} hotels per food order.`, 'error');
-        return { success: false, message: `You can order from a maximum of ${maxHotels} hotels per food order.` };
+      // 1. Check food item limit
+      const currentTotalItems = items.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
+      const maxFoodItems = (platformSettings?.foodBaseItemLimit ?? 4) + (platformSettings?.foodExtraItemLimit ?? 3);
+      if (currentTotalItems + 1 > maxFoodItems) {
+        get().showToast(`Maximum ${maxFoodItems} food items are allowed per order.`, 'error');
+        return { success: false, message: `Maximum ${maxFoodItems} food items are allowed per order.` };
+      }
+
+      // 2. Check unique hotel limit
+      const currentHotelIds = new Set(items.map(i => String(i.restaurantId)).filter(Boolean));
+      const isNewHotel = restaurant?._id && !currentHotelIds.has(String(restaurant._id));
+      if (isNewHotel) {
+        const maxHotels = platformSettings?.foodMaxHotels ?? 3;
+        if (currentHotelIds.size >= maxHotels) {
+          get().showToast(`You can order from a maximum of ${maxHotels} hotels per food order.`, 'error');
+          return { success: false, message: `You can order from a maximum of ${maxHotels} hotels per food order.` };
+        }
       }
     }
 
     let updatedItems = [...items];
     const existingIndex = items.findIndex(i => String(i.menuItemId) === String(item._id));
+
+    const storeId = item.supplierId || item.storeId || restaurant?._id || (isCatalog ? 'jinkzo_store' : 'rest_default');
+    const storeName = item.supplierName || item.storeName || restaurant?.name || (isCatalog ? 'Jinkzo Store' : 'Restaurant');
 
     if (existingIndex > -1) {
       updatedItems[existingIndex].quantity += 1;
@@ -98,21 +111,28 @@ export const useCartStore = create(
         menuItemId: item._id,
         name: item.name,
         price: item.price,
-        image: item.image,
+        image: item.image || '',
         isVeg: item.isVeg,
+        unit: item.unit || '',
+        service: item.service || item.category || 'food',
+        category: item.category || '',
+        supplierId: item.supplierId || null,
+        supplierName: item.supplierName || null,
+        storeId: storeId,
+        storeName: storeName,
         quantity: 1,
-        restaurantId: restaurant._id,
-        restaurantName: restaurant.name,
-        restaurantImage: restaurant.image || restaurant.logo || '',
-        restaurantDeliveryTime: restaurant.deliveryTime || 30,
-        restaurantOffers: restaurant.offers || [],
-        restaurantIsClosed: restaurant.isClosed || false
+        restaurantId: storeId,
+        restaurantName: storeName,
+        restaurantImage: restaurant?.image || restaurant?.logo || item.image || '',
+        restaurantDeliveryTime: restaurant?.deliveryTime || 30,
+        restaurantOffers: restaurant?.offers || [],
+        restaurantIsClosed: restaurant?.isClosed || false
       });
     }
 
     set({ 
       items: updatedItems, 
-      restaurant: restaurant 
+      restaurant: restaurant || { _id: storeId, name: storeName }
     });
     
     get().showToast(`Added "${item.name}" to cart!`);

@@ -1,7 +1,7 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Search, SlidersHorizontal, ArrowUpDown, AlertTriangle, Heart, ShoppingBag, Store, Sparkles, X } from 'lucide-react';
+import { Search, SlidersHorizontal, ArrowUpDown, AlertTriangle, Heart, ShoppingBag, Store, Sparkles, X, MapPin } from 'lucide-react';
 import RestaurantCard from '../components/RestaurantCard';
 import { useCartStore } from '../store/cartStore';
 import { useFavoriteStore } from '../store/favoriteStore';
@@ -305,30 +305,67 @@ export default function RestaurantListing() {
             closedMessage: foodState.message,
           }));
 
-          // Helper filter for static datasets
-          const filterDataset = (dataset, serviceId, serviceName, serviceState) => {
+          // Fetch live catalog items for non-food services
+          let liveCatalogItems = [];
+          try {
+            const catRes = await fetch(`${API_BASE}/catalog-items`);
+            if (catRes.ok) {
+              const catJson = await catRes.json();
+              liveCatalogItems = Array.isArray(catJson) ? catJson : (catJson.items || []);
+            }
+          } catch (err) {
+            console.error('Error fetching global catalog items:', err);
+          }
+
+          // Helper filter for catalog items or static fallback
+          const filterLiveOrStatic = (dataset, catKey, sId, sName, serviceState) => {
             if (!serviceState.isEnabled) return [];
-            return dataset
+            const liveForCat = liveCatalogItems.filter(i => i.category === catKey);
+            const sourceData = liveForCat.length > 0 ? liveForCat.map(i => ({
+              _id: i._id || i.id,
+              id: i._id || i.id,
+              name: i.name,
+              price: Number(i.price),
+              unit: i.unit || '',
+              image: i.image || '',
+              description: i.description || '',
+              category: i.category || sName,
+              service: sId,
+              serviceName: sName,
+              supplierId: i.supplierId || null,
+              supplierName: i.supplierName || null,
+              supplierAddress: i.supplierAddress || null,
+              supplierActive: i.supplierActive !== false,
+              isAvailable: i.isAvailable !== false,
+              restaurant: {
+                _id: i.supplierId || 'jinkzo_catalog',
+                name: i.supplierName || 'Jinkzo Store',
+                address: i.supplierAddress || '',
+                isActive: i.supplierActive !== false
+              }
+            })) : dataset.map(d => ({ ...d, service: sId, serviceName: sName }));
+
+            return sourceData
               .filter(item => {
                 const name = (item.name || '').toLowerCase();
                 const desc = (item.description || '').toLowerCase();
                 const cat = (item.category || '').toLowerCase();
-                const restName = (item.restaurant?.name || '').toLowerCase();
+                const restName = (item.supplierName || item.restaurant?.name || '').toLowerCase();
                 return name.includes(query) || desc.includes(query) || cat.includes(query) || restName.includes(query);
               })
               .map(item => ({
                 ...item,
-                service: serviceId,
-                serviceName: serviceName,
+                service: sId,
+                serviceName: sName,
                 isServiceClosed: serviceState.isClosed,
                 closedMessage: serviceState.message,
               }));
           };
 
-          const matchedGrocery = filterDataset(groceryDataset, 'grocery', 'Grocery', groceryState);
-          const matchedMeat = filterDataset(meatDataset, 'meat', 'Meat', meatState);
-          const matchedVegFruits = filterDataset(vegFruitsDataset, 'veg_fruits', 'Veg & Fruits', vegFruitsState);
-          const matchedCoolHot = filterDataset(coolHotDataset, 'cool_hot', 'Bakery & Beverages', coolHotState);
+          const matchedGrocery = filterLiveOrStatic(groceryDataset, 'grocery', 'grocery', 'Grocery', groceryState);
+          const matchedMeat = filterLiveOrStatic(meatDataset, 'meat', 'meat', 'Meat', meatState);
+          const matchedVegFruits = filterLiveOrStatic(vegFruitsDataset, 'veg_fruits', 'veg_fruits', 'Veg & Fruits', vegFruitsState);
+          const matchedCoolHot = filterLiveOrStatic(coolHotDataset, 'bakery_beverages', 'cool_hot', 'Bakery & Beverages', coolHotState);
 
           if (!isCancelled) {
             // Aggregate all matched dishes from all active services
@@ -380,32 +417,77 @@ export default function RestaurantListing() {
               }
             }
           } else {
-            // NON-FOOD DASHBOARDS: Dedicated isolated dataset for current category
+            // NON-FOOD DASHBOARDS: Fetch live items from backend /api/catalog-items
             setRestaurants([]);
 
-            let dataset = [];
             let sId = 'grocery';
             let sName = 'Grocery';
+            let categoryBackendKey = 'grocery';
+            let staticFallback = groceryDataset;
 
             if (activeDashboard === 'cool_hot') {
-              dataset = coolHotDataset;
               sId = 'cool_hot';
               sName = 'Bakery & Beverages';
+              categoryBackendKey = 'bakery_beverages';
+              staticFallback = coolHotDataset;
             } else if (activeDashboard === 'grocery') {
-              dataset = groceryDataset;
               sId = 'grocery';
               sName = 'Grocery';
+              categoryBackendKey = 'grocery';
+              staticFallback = groceryDataset;
             } else if (activeDashboard === 'meat') {
-              dataset = meatDataset;
               sId = 'meat';
               sName = 'Meat';
+              categoryBackendKey = 'meat';
+              staticFallback = meatDataset;
             } else if (activeDashboard === 'veg_fruits') {
-              dataset = vegFruitsDataset;
               sId = 'veg_fruits';
               sName = 'Veg & Fruits';
+              categoryBackendKey = 'veg_fruits';
+              staticFallback = vegFruitsDataset;
             }
 
-            let filtered = dataset.map(d => ({ ...d, service: sId, serviceName: sName }));
+            let liveItems = [];
+            try {
+              const res = await fetch(`${API_BASE}/catalog-items?category=${categoryBackendKey}`);
+              if (res.ok) {
+                const json = await res.json();
+                liveItems = Array.isArray(json) ? json : (json.items || []);
+              }
+            } catch (err) {
+              console.error(`Error fetching live ${sName} catalog:`, err);
+            }
+
+            let dataset = [];
+            if (liveItems && liveItems.length > 0) {
+              dataset = liveItems.map(item => ({
+                _id: item._id || item.id,
+                id: item._id || item.id,
+                name: item.name,
+                price: Number(item.price),
+                unit: item.unit || '',
+                image: item.image || '',
+                description: item.description || '',
+                category: item.category || sName,
+                service: sId,
+                serviceName: sName,
+                supplierId: item.supplierId || null,
+                supplierName: item.supplierName || null,
+                supplierAddress: item.supplierAddress || null,
+                supplierActive: item.supplierActive !== false,
+                isAvailable: item.isAvailable !== false,
+                restaurant: {
+                  _id: item.supplierId || 'jinkzo_catalog',
+                  name: item.supplierName || 'Jinkzo Store',
+                  address: item.supplierAddress || '',
+                  isActive: item.supplierActive !== false
+                }
+              }));
+            } else {
+              dataset = staticFallback.map(d => ({ ...d, service: sId, serviceName: sName }));
+            }
+
+            let filtered = dataset;
 
             if (selectedCuisine && selectedCuisine !== 'All') {
               filtered = filtered.filter(item =>
@@ -535,6 +617,36 @@ export default function RestaurantListing() {
     return list;
   }, [dishes, isGlobalSearch, activeSearchTab, activeSort]);
 
+  // Group dishes by Store / Supplier for Catalog Categories
+  const storeGroups = useMemo(() => {
+    if (activeDashboard === 'food' || isGlobalSearch) return null;
+    if (!Array.isArray(sortedDishes) || sortedDishes.length === 0) return [];
+
+    const groupsMap = {};
+    const UNASSIGNED_ID = '__unassigned__';
+
+    sortedDishes.forEach(dish => {
+      const supId = dish.supplierId || (dish.supplierName ? dish.supplierName : UNASSIGNED_ID);
+      const supName = dish.supplierName || (dish.restaurant?.name !== 'Jinkzo Store' && dish.restaurant?.name ? dish.restaurant.name : 'Available from Jinkzo Catalog');
+      const supAddress = dish.supplierAddress || dish.restaurant?.address || '';
+      const isStoreActive = dish.supplierActive !== false;
+
+      if (!groupsMap[supId]) {
+        groupsMap[supId] = {
+          id: supId,
+          name: supName,
+          address: supAddress,
+          isActive: isStoreActive,
+          isUnassigned: supId === UNASSIGNED_ID || !dish.supplierId,
+          items: []
+        };
+      }
+      groupsMap[supId].items.push(dish);
+    });
+
+    return Object.values(groupsMap);
+  }, [sortedDishes, activeDashboard, isGlobalSearch]);
+
   // Counts by service for search tabs
   const serviceCounts = useMemo(() => {
     if (!Array.isArray(dishes)) return {};
@@ -612,15 +724,19 @@ export default function RestaurantListing() {
 
   // Render an individual item card
   const renderDishCard = (dish) => {
-    const quantity = getItemQuantity(dish._id);
+    const dishId = dish._id || dish.id;
+    const quantity = getItemQuantity(dishId);
     const isRestClosed = dish.restaurant?.isClosed || dish.isServiceClosed;
     const isItemUnavailable = dish.isAvailable === false;
     const isDisabled = isRestClosed || isItemUnavailable;
-    const isFav = favouriteItems.some((i) => String(i._id) === String(dish._id));
+    const isFav = favouriteItems.some((i) => String(i._id || i.id) === String(dishId));
+
+    const isFood = dish.service === 'food' || (!dish.service && activeDashboard === 'food');
+    const storeDisplayName = dish.supplierName || dish.restaurant?.name || (isFood ? 'Jinkzo Verified Restaurant' : 'Available from Jinkzo Catalog');
 
     return (
       <div
-        key={dish._id}
+        key={dishId}
         className={`bg-surface rounded-3xl p-4 shadow-2xs border border-line flex flex-col justify-between gap-4 transition-all hover:shadow-md hover:scale-[1.01] duration-300 animate-fade-in ${isDisabled ? 'opacity-75' : ''}`}
       >
         <div className="flex gap-4">
@@ -648,7 +764,7 @@ export default function RestaurantListing() {
               loading="lazy"
             />
             {/* Veg / Non-Veg Badge (Food items only) */}
-            {(!dish.service || dish.service === 'food') && (
+            {isFood && (
               <div className="absolute top-2 left-2 z-10">
                 <VegBadge isVeg={dish.isVeg} size="xs" className="shadow-xs backdrop-blur-xs bg-white/95 dark:bg-[#141926]/95" />
               </div>
@@ -677,8 +793,13 @@ export default function RestaurantListing() {
             <div>
               <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                 {getServiceBadge(dish.service, dish.serviceName)}
+                {dish.unit && (
+                  <span className="text-[10px] font-extrabold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
+                    {dish.unit}
+                  </span>
+                )}
                 {dish.category && (
-                  <span className="text-[10px] font-bold text-muted bg-base px-2 py-0.5 rounded-md border border-line truncate max-w-[140px]">
+                  <span className="text-[10px] font-bold text-muted bg-base px-2 py-0.5 rounded-md border border-line truncate max-w-[130px]">
                     {dish.category}
                   </span>
                 )}
@@ -697,12 +818,14 @@ export default function RestaurantListing() {
           </div>
         </div>
 
-        {/* Sold by & Add to Cart button */}
+        {/* Sold by / Store & Add to Cart button */}
         <div className="border-t border-line pt-3 mt-1 flex justify-between items-center">
           <div className="flex flex-col gap-0.5 max-w-[60%] min-w-0">
-            <span className="text-[10px] text-muted font-bold uppercase tracking-wider">{t('restaurant.soldBy', 'Sold by')}</span>
+            <span className="text-[10px] text-muted font-bold uppercase tracking-wider">
+              {isFood ? t('restaurant.soldBy', 'Sold by') : 'Store'}
+            </span>
             <span className="text-xs font-bold text-main truncate">
-              {dish.restaurant?.name || 'Jinkzo Verified Store'}
+              {storeDisplayName}
             </span>
           </div>
 
@@ -717,7 +840,7 @@ export default function RestaurantListing() {
               {quantity > 0 ? (
                 <>
                   <button
-                    onClick={() => removeItem(dish._id)}
+                    onClick={() => removeItem(dishId)}
                     className="w-8 h-full flex items-center justify-center hover:bg-base text-primary font-black text-sm cursor-pointer transition-colors"
                   >
                     -
@@ -1112,8 +1235,76 @@ export default function RestaurantListing() {
               </button>
             </div>
           )
+        ) : activeDashboard !== 'food' ? (
+          /* ── CATALOG STORE-GROUPED ITEMS VIEW (Grocery, Meat, Veg & Fruits, Bakery & Beverages) ── */
+          storeGroups && storeGroups.length > 0 ? (
+            <div className="flex flex-col gap-8">
+              {storeGroups.map((group) => (
+                <div key={group.id} className="flex flex-col gap-4">
+                  {/* Store Header Banner */}
+                  <div className="flex items-center justify-between bg-surface p-4 sm:p-5 rounded-3xl border border-line shadow-2xs">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-11 h-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                        <Store className="w-5 h-5" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-display font-extrabold text-base sm:text-lg text-main truncate">
+                            {group.name}
+                          </h3>
+                          {!group.isUnassigned && group.isActive && (
+                            <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                              Verified Store
+                            </span>
+                          )}
+                          {group.isUnassigned && (
+                            <span className="bg-base text-muted text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-line">
+                              Direct Catalog
+                            </span>
+                          )}
+                        </div>
+                        {group.address && (
+                          <p className="text-xs text-muted font-medium flex items-center gap-1 mt-0.5 truncate">
+                            <MapPin className="w-3.5 h-3.5 text-muted flex-shrink-0" />
+                            <span className="truncate">{group.address}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-muted bg-base px-3 py-1.5 rounded-xl border border-line flex-shrink-0">
+                      {group.items.length} {group.items.length === 1 ? 'Item' : 'Items'}
+                    </span>
+                  </div>
+
+                  {/* Items Grid for this Store */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {group.items.map((dish) => renderDishCard(dish))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+              <div className="w-16 h-16 rounded-full bg-violet-50 dark:bg-violet-950/40 text-primary flex items-center justify-center mb-2">
+                <SlidersHorizontal className="w-8 h-8" />
+              </div>
+              <h3 className="font-display font-extrabold text-xl text-main">{t('restaurant.noItemsMatch', 'No items match your filters')}</h3>
+              <p className="text-sm text-muted max-w-xs">{t('restaurant.tryClearingFilters', 'Try clearing filters or selecting another category.')}</p>
+              <button
+                onClick={() => {
+                  setSelectedCuisine('All');
+                  setIsPureVeg(false);
+                  setActiveSort('rating');
+                  setSearchParams({ category: categoryParam });
+                }}
+                className="bg-primary text-white font-bold text-xs px-5 py-2.5 rounded-xl mt-3 shadow-md cursor-pointer hover:bg-primary-hover"
+              >
+                Clear All Filters
+              </button>
+            </div>
+          )
         ) : (
-          /* ── SERVICE-SPECIFIC BROWSING ITEMS GRID (Grocery, Meat, Veg & Fruits, Cool & Hot, or Food Cuisine) ── */
+          /* ── FOOD CUISINE ITEMS GRID ── */
           sortedDishes.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {sortedDishes.map((dish) => renderDishCard(dish))}
@@ -1124,13 +1315,13 @@ export default function RestaurantListing() {
                 <SlidersHorizontal className="w-8 h-8" />
               </div>
               <h3 className="font-display font-extrabold text-xl text-main">{t('restaurant.noItemsMatch', 'No items match your filters')}</h3>
-              <p className="text-sm text-muted max-w-xs">{t('restaurant.tryClearingFilters', 'Try clearing vegetarian checks or selecting another category.')}</p>
+              <p className="text-sm text-muted max-w-xs">{t('restaurant.tryClearingFilters', 'Try selecting another category.')}</p>
               <button
                 onClick={() => {
                   setSelectedCuisine('All');
                   setIsPureVeg(false);
                   setActiveSort('rating');
-                  setSearchParams({ category: categoryParam });
+                  setSearchParams({});
                 }}
                 className="bg-primary text-white font-bold text-xs px-5 py-2.5 rounded-xl mt-3 shadow-md cursor-pointer hover:bg-primary-hover"
               >
