@@ -176,16 +176,18 @@ export default function Cart() {
                       {group.restaurantName}
                     </h3>
                     <div className="flex items-center gap-2">
-                      {group.isAllVeg ? (
-                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          Veg
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                          Non Veg
-                        </span>
+                      {!group.items.some(i => i.service && i.service !== 'food') && (
+                        group.isAllVeg ? (
+                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Veg
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            Non Veg
+                          </span>
+                        )
                       )}
                       {group.isClosed && (
                         <span className="bg-red-100 text-red-700 text-[10px] font-extrabold px-2 py-0.5 rounded-md">

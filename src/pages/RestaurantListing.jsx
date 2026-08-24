@@ -310,7 +310,6 @@ export default function RestaurantListing() {
             if (!serviceState.isEnabled) return [];
             return dataset
               .filter(item => {
-                if (isPureVeg && item.isVeg !== true) return false;
                 const name = (item.name || '').toLowerCase();
                 const desc = (item.description || '').toLowerCase();
                 const cat = (item.category || '').toLowerCase();
@@ -413,10 +412,6 @@ export default function RestaurantListing() {
                 item.category?.toLowerCase() === selectedCuisine.toLowerCase() ||
                 item.name?.toLowerCase().includes(selectedCuisine.toLowerCase())
               );
-            }
-
-            if (isPureVeg) {
-              filtered = filtered.filter(item => item.isVeg === true);
             }
 
             if (!isCancelled) {
@@ -652,10 +647,12 @@ export default function RestaurantListing() {
               className="w-full h-full object-cover rounded-2xl bg-base border border-line shadow-2xs"
               loading="lazy"
             />
-            {/* Veg / Non-Veg Badge */}
-            <div className="absolute top-2 left-2 z-10">
-              <VegBadge isVeg={dish.isVeg} size="xs" className="shadow-xs backdrop-blur-xs bg-white/95 dark:bg-[#141926]/95" />
-            </div>
+            {/* Veg / Non-Veg Badge (Food items only) */}
+            {(!dish.service || dish.service === 'food') && (
+              <div className="absolute top-2 left-2 z-10">
+                <VegBadge isVeg={dish.isVeg} size="xs" className="shadow-xs backdrop-blur-xs bg-white/95 dark:bg-[#141926]/95" />
+              </div>
+            )}
 
             {/* Heart Button */}
             <button
@@ -869,21 +866,23 @@ export default function RestaurantListing() {
               )}
             </div>
 
-            {/* Pure Veg + Sort Controls */}
+            {/* Pure Veg (Food / All only) + Sort Controls */}
             <div className="flex items-center gap-3 flex-shrink-0">
-              <button
-                onClick={handleVegToggle}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-                  isPureVeg
-                    ? 'bg-green-50 dark:bg-green-950/40 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 font-extrabold'
-                    : 'bg-base dark:bg-[#1C2233] border-line text-muted hover:border-line-strong'
-                }`}
-              >
-                <span className={`w-3.5 h-3.5 border-2 rounded-sm flex items-center justify-center ${isPureVeg ? 'border-green-600 dark:border-green-400' : 'border-gray-400'}`}>
-                  {isPureVeg && <span className="w-1.5 h-1.5 bg-green-600 dark:bg-green-400 rounded-xs" />}
-                </span>
-                <span>{t('restaurant.pureVeg', 'Pure Veg')}</span>
-              </button>
+              {(activeSearchTab === 'all' || activeSearchTab === 'food') && (
+                <button
+                  onClick={handleVegToggle}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
+                    isPureVeg
+                      ? 'bg-green-50 dark:bg-green-950/40 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 font-extrabold'
+                      : 'bg-base dark:bg-[#1C2233] border-line text-muted hover:border-line-strong'
+                  }`}
+                >
+                  <span className={`w-3.5 h-3.5 border-2 rounded-sm flex items-center justify-center ${isPureVeg ? 'border-green-600 dark:border-green-400' : 'border-gray-400'}`}>
+                    {isPureVeg && <span className="w-1.5 h-1.5 bg-green-600 dark:bg-green-400 rounded-xs" />}
+                  </span>
+                  <span>{t('restaurant.pureVeg', 'Pure Veg')}</span>
+                </button>
+              )}
 
               <div className="flex items-center gap-2 text-muted border border-line bg-base dark:bg-[#1C2233] rounded-2xl px-3 py-2 text-xs font-bold shadow-2xs">
                 <ArrowUpDown className="w-3.5 h-3.5 text-muted flex-shrink-0" />
@@ -957,9 +956,9 @@ export default function RestaurantListing() {
             </div>
           </div>
 
-          {/* Pure Veg + Sort Controls */}
-          {activeDashboard !== 'meat' && (
-            <div className="flex flex-row lg:flex-col items-stretch justify-end gap-3 flex-shrink-0 pt-3 lg:pt-0 lg:pl-6 border-t lg:border-t-0 lg:border-l border-line">
+          {/* Pure Veg (Food only) + Sort Controls */}
+          <div className="flex flex-row lg:flex-col items-stretch justify-end gap-3 flex-shrink-0 pt-3 lg:pt-0 lg:pl-6 border-t lg:border-t-0 lg:border-l border-line">
+            {activeDashboard === 'food' && (
               <button
                 onClick={handleVegToggle}
                 className={`flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 rounded-2xl border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
@@ -973,22 +972,22 @@ export default function RestaurantListing() {
                 </span>
                 <span>{t('restaurant.pureVeg', 'Pure Veg')}</span>
               </button>
+            )}
 
-              <div className="flex items-center gap-2 text-muted border border-line bg-base dark:bg-[#1C2233] rounded-2xl px-3.5 py-2.5 text-xs font-bold shadow-2xs">
-                <ArrowUpDown className="w-4 h-4 text-muted flex-shrink-0" />
-                <select
-                  value={activeSort}
-                  onChange={handleSortChange}
-                  className="bg-transparent outline-none border-none text-main dark:text-white cursor-pointer text-xs font-bold pr-1 w-full"
-                >
-                  <option value="rating" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortRating', 'Sort by: Rating (High to Low)')}</option>
-                  <option value="deliveryTime" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortDeliveryTime', 'Sort by: Delivery Time')}</option>
-                  <option value="costAsc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortPriceLowHigh', 'Sort by: Price (Low to High)')}</option>
-                  <option value="costDesc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortPriceHighLow', 'Sort by: Price (High to Low)')}</option>
-                </select>
-              </div>
+            <div className="flex items-center gap-2 text-muted border border-line bg-base dark:bg-[#1C2233] rounded-2xl px-3.5 py-2.5 text-xs font-bold shadow-2xs">
+              <ArrowUpDown className="w-4 h-4 text-muted flex-shrink-0" />
+              <select
+                value={activeSort}
+                onChange={handleSortChange}
+                className="bg-transparent outline-none border-none text-main dark:text-white cursor-pointer text-xs font-bold pr-1 w-full"
+              >
+                <option value="rating" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortRating', 'Sort by: Rating (High to Low)')}</option>
+                <option value="deliveryTime" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortDeliveryTime', 'Sort by: Delivery Time')}</option>
+                <option value="costAsc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortPriceLowHigh', 'Sort by: Price (Low to High)')}</option>
+                <option value="costDesc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortPriceHighLow', 'Sort by: Price (High to Low)')}</option>
+              </select>
             </div>
-          )}
+          </div>
         </section>
       )}
 

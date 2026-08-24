@@ -370,44 +370,46 @@ export default function RestaurantDetail() {
           )}
         </section>
 
-        {/* Food Type Filter Toggle Pills */}
-        <div className="flex items-center gap-1.5 bg-surface border border-line p-1 rounded-2xl shadow-2xs w-fit self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setFoodTypeFilter('ALL')}
-            className={`px-3.5 py-1.8 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-              foodTypeFilter === 'ALL'
-                ? 'bg-primary text-white shadow-xs'
-                : 'text-muted hover:text-main hover:bg-base'
-            }`}
-          >
-            ALL
-          </button>
-          <button
-            type="button"
-            onClick={() => setFoodTypeFilter('VEG')}
-            className={`px-3.5 py-1.8 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
-              foodTypeFilter === 'VEG'
-                ? 'bg-green-600 text-white shadow-xs'
-                : 'text-green-700 hover:bg-green-50'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-green-500 ring-2 ring-white/50"></span>
-            VEG
-          </button>
-          <button
-            type="button"
-            onClick={() => setFoodTypeFilter('NON_VEG')}
-            className={`px-3.5 py-1.8 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
-              foodTypeFilter === 'NON_VEG'
-                ? 'bg-red-600 text-white shadow-xs'
-                : 'text-red-700 hover:bg-red-50'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-red-500 ring-2 ring-white/50"></span>
-            NON-VEG
-          </button>
-        </div>
+        {/* Food Type Filter Toggle Pills (Food only) */}
+        {(!restaurant?.service || restaurant.service === 'food') && (
+          <div className="flex items-center gap-1.5 bg-surface border border-line p-1 rounded-2xl shadow-2xs w-fit self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setFoodTypeFilter('ALL')}
+              className={`px-3.5 py-1.8 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                foodTypeFilter === 'ALL'
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'text-muted hover:text-main hover:bg-base'
+              }`}
+            >
+              ALL
+            </button>
+            <button
+              type="button"
+              onClick={() => setFoodTypeFilter('VEG')}
+              className={`px-3.5 py-1.8 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+                foodTypeFilter === 'VEG'
+                  ? 'bg-green-600 text-white shadow-xs'
+                  : 'text-green-700 hover:bg-green-50'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-green-500 ring-2 ring-white/50"></span>
+              VEG
+            </button>
+            <button
+              type="button"
+              onClick={() => setFoodTypeFilter('NON_VEG')}
+              className={`px-3.5 py-1.8 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 ${
+                foodTypeFilter === 'NON_VEG'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'text-red-700 hover:bg-red-50'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-red-500 ring-2 ring-white/50"></span>
+              NON-VEG
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main menu content */}
@@ -522,7 +524,9 @@ export default function RestaurantDetail() {
                         <div className="flex-grow flex flex-col gap-1.5 max-w-[70%]">
                           {/* Veg/Non-Veg & Timing Badges */}
                           <div className="flex items-center gap-2 flex-wrap">
-                            <VegBadge isVeg={item.isVeg} />
+                            {(!item?.service || item.service === 'food') && (!restaurant?.service || restaurant.service === 'food') && (
+                              <VegBadge isVeg={item.isVeg} />
+                            )}
                             {item.availabilityMode === 'custom' && (
                               <span className="text-[9px] font-bold text-muted bg-base px-2 py-0.5 rounded-md border border-line">
                                 🕒 {formatTime12(item.availableFrom)} – {formatTime12(item.availableTo)}

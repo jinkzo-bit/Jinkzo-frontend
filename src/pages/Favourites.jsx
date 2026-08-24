@@ -165,10 +165,12 @@ export default function Favourites() {
                           className="w-full h-full object-cover rounded-2xl bg-base border border-line shadow-2xs"
                           loading="lazy"
                         />
-                        {/* Veg / Non-Veg Badge */}
-                        <div className="absolute top-2 left-2 z-10">
-                          <VegBadge isVeg={dish.isVeg} size="xs" className="shadow-xs backdrop-blur-xs bg-white/95 dark:bg-[#141926]/95" />
-                        </div>
+                        {/* Veg / Non-Veg Badge (Food items only) */}
+                        {(!dish.service || dish.service === 'food') && (
+                          <div className="absolute top-2 left-2 z-10">
+                            <VegBadge isVeg={dish.isVeg} size="xs" className="shadow-xs backdrop-blur-xs bg-white/95 dark:bg-[#141926]/95" />
+                          </div>
+                        )}
 
                         {/* Heart Button */}
                         <button
