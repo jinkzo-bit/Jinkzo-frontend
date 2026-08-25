@@ -219,7 +219,7 @@ export default function Home() {
       id: 'food',
       name: 'Food',
       title: t('home.categoryFood', 'Food'),
-      subtitle: t('home.foodSubtitle', 'Tasty meals from top restaurants'),
+      subtitle: t('home.foodSubtitle', 'Tasty meals from top...'),
       background: '/assets/home/categories/backgrounds/food-bg.png',
       image: '/assets/home/categories/png/food.png',
       titleColor: 'text-[#FF5722]',
@@ -249,7 +249,7 @@ export default function Home() {
       id: 'grocery',
       name: 'Grocery',
       title: t('home.categoryGrocery', 'Grocery'),
-      subtitle: t('home.grocerySubtitle', 'Daily essentials delivered fast'),
+      subtitle: t('home.grocerySubtitle', 'Daily essentials delivered...'),
       background: '/assets/home/categories/backgrounds/grocery-bg.png',
       image: '/assets/home/categories/png/grocery.png',
       titleColor: 'text-[#00C853]',
@@ -264,7 +264,7 @@ export default function Home() {
       id: 'bakery_beverages',
       name: 'Bakery & Beverages',
       title: t('home.categoryBakery', 'Bakery & Beverages'),
-      subtitle: t('home.bakerySubtitle', 'Fresh cakes, puffs, snacks & cool drinks'),
+      subtitle: t('home.bakerySubtitle', 'Fresh cakes, puffs, snacks...'),
       background: '/assets/home/categories/backgrounds/bakery-bg.png',
       image: '/assets/home/categories/png/bakery.png',
       titleColor: 'text-[#E91E63]',
@@ -310,7 +310,10 @@ export default function Home() {
   const activeBanner = bannerSlides[currentSlide] || bannerSlides[0];
 
   return (
-    <div className="flex flex-col gap-3.5 sm:gap-5 md:gap-8 pb-24 md:pb-20 max-w-7xl mx-auto px-3 sm:px-4 md:px-8 w-full animate-fade-in transition-colors duration-300">
+    <div
+      style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
+      className="flex flex-col gap-3.5 sm:gap-5 md:gap-8 max-w-7xl mx-auto px-3 sm:px-4 md:px-8 w-full box-border animate-fade-in transition-colors duration-300"
+    >
 
       {/* 1. HERO ADVERTISEMENT CAROUSEL (PURPLE -> PINK -> ORANGE VIBRANT GRADIENT) */}
       <section
@@ -319,7 +322,7 @@ export default function Home() {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`relative rounded-3xl sm:rounded-[32px] overflow-hidden ${activeBanner.bgGradient} text-white p-4 sm:p-6 md:p-10 lg:p-12 shadow-[0_8px_30px_rgba(123,31,162,0.25)] flex flex-row items-center justify-between min-h-[160px] sm:min-h-[220px] md:min-h-[300px] transition-all duration-700 group select-none`}
+        className={`relative rounded-3xl sm:rounded-[32px] overflow-hidden ${activeBanner.bgGradient} text-white p-4 sm:p-6 md:p-10 lg:p-12 shadow-[0_8px_30px_rgba(123,31,162,0.25)] flex flex-row items-center justify-between min-h-[160px] sm:min-h-[220px] md:min-h-[300px] transition-all duration-700 group select-none w-full box-border`}
       >
 
         {/* Decorative Floating Shapes & Watermark Accents */}
@@ -439,8 +442,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 3. CATEGORY CARDS (3-COLUMN GRID ON DESKTOP, MATCHING TARGET DESIGN) */}
-      <section className="grid grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-5 md:gap-6 lg:gap-7">
+      {/* 3. CATEGORY CARDS (2-COLUMN RESPONSIVE GRID ON MOBILE, 3-COLUMN ON DESKTOP) */}
+      <section className="grid grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-5 md:gap-6 lg:gap-7 w-full box-border">
         {categories.map((cat) => {
           const currentCat = categoryStatus[cat.id] || { status: 'OPEN', isEnabled: true, message: null };
           const isEnabled = typeof currentCat === 'boolean' ? currentCat : currentCat.isEnabled !== false;
@@ -519,7 +522,7 @@ export default function Home() {
                   backgroundPosition: 'center',
                   backgroundRepeat: 'no-repeat'
                 }}
-                className="relative rounded-3xl sm:rounded-[36px] md:rounded-[40px] p-2.5 sm:p-5 md:p-6 lg:p-7 pt-2.5 sm:pt-6 md:pt-8 pb-3 sm:pb-6 md:pb-8 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group flex flex-col items-center justify-between text-center cursor-pointer overflow-hidden shadow-xs select-none aspect-square sm:aspect-auto sm:min-h-[370px] md:min-h-[450px] lg:min-h-[490px]"
+                className="relative rounded-3xl sm:rounded-[36px] md:rounded-[40px] p-2.5 sm:p-5 md:p-6 lg:p-7 pt-2.5 sm:pt-6 md:pt-8 pb-3 sm:pb-6 md:pb-8 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group flex flex-col items-center justify-between text-center cursor-pointer overflow-hidden shadow-xs select-none aspect-square sm:aspect-auto sm:min-h-[370px] md:min-h-[450px] lg:min-h-[490px] w-full"
               >
                 {cardContent}
               </Link>
@@ -551,7 +554,7 @@ export default function Home() {
                 backgroundPosition: 'center',
                 backgroundRepeat: 'no-repeat'
               }}
-              className="relative rounded-3xl sm:rounded-[36px] md:rounded-[40px] p-2.5 sm:p-5 md:p-6 lg:p-7 pt-2.5 sm:pt-6 md:pt-8 pb-3 sm:pb-6 md:pb-8 transition-all duration-300 group flex flex-col items-center justify-between text-center cursor-not-allowed overflow-hidden shadow-xs select-none opacity-95 aspect-square sm:aspect-auto sm:min-h-[370px] md:min-h-[450px] lg:min-h-[490px]"
+              className="relative rounded-3xl sm:rounded-[36px] md:rounded-[40px] p-2.5 sm:p-5 md:p-6 lg:p-7 pt-2.5 sm:pt-6 md:pt-8 pb-3 sm:pb-6 md:pb-8 transition-all duration-300 group flex flex-col items-center justify-between text-center cursor-not-allowed overflow-hidden shadow-xs select-none opacity-95 aspect-square sm:aspect-auto sm:min-h-[370px] md:min-h-[450px] lg:min-h-[490px] w-full"
             >
               {cardContent}
             </div>

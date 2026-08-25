@@ -64,7 +64,7 @@ export default function App() {
     <ErrorBoundary>
       {showIntro && <AppIntro onComplete={handleIntroComplete} />}
       <BrowserRouter>
-        <div className="flex flex-col min-h-screen relative overflow-x-hidden">
+        <div className="flex flex-col min-h-[100dvh] relative overflow-x-hidden">
           
           {/* Clean ambient background */}
           <div className="fixed inset-0 pointer-events-none z-[-1] bg-[#F8F9FD] dark:bg-[#0B0E17] transition-colors duration-300"></div>
