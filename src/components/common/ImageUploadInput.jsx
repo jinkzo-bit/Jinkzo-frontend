@@ -3,8 +3,8 @@ import { Upload, Link as LinkIcon, Image as ImageIcon, X, AlertCircle, CheckCirc
 import { getImageUrl, handleImageError, importImageFromUrl } from '../../utils/uploadUtil';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
-const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'];
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 
 /**
  * Standard format bytes helper
@@ -45,6 +45,7 @@ export default function ImageUploadInput({
   previewShape = 'square',
   helperText = '',
 }) {
+  const fileInputRef = useRef(null);
   const [sourceType, setSourceType] = useState('file');
   const [urlInput, setUrlInput] = useState('');
   const [fileError, setFileError] = useState('');

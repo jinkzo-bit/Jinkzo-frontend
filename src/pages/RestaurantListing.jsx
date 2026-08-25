@@ -21,111 +21,6 @@ const foodCategories = [
   { name: 'Noodles', image: 'https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&w=200&h=200&q=80' }
 ];
 
-// ─── 2. COOL & HOT CATEGORIES (EXACT 12) ───
-const coolHotCategories = [
-  { name: 'Cool Cakes', image: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Cool Drinks', image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Normal Cakes', image: 'https://images.unsplash.com/photo-1535141192574-5d4897c13136?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Puffs', image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Mini Cakes', image: 'https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Plain Cake', image: 'https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Sweet Items', image: 'https://images.unsplash.com/photo-1599785209707-a456fc1337bb?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Bred Items', image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Milk Shakes', image: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Lassi', image: 'https://images.unsplash.com/photo-1546173159-315724a31696?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Ice Creams', image: 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Golisoda', image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=200&h=200&q=80' }
-];
-
-// ─── 3. GROCERY CATEGORIES ───
-const groceryCategories = [
-  { name: 'Atta & Rice', image: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Cooking Oils', image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Dairy & Eggs', image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Snacks & Biscuits', image: 'https://images.unsplash.com/photo-1599490659213-e2b9527bd087?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Masalas & Spices', image: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Beverages', image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Cleaning & Home', image: 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&w=200&h=200&q=80' }
-];
-
-// ─── 4. MEAT CATEGORIES ───
-const meatCategories = [
-  { name: 'Fresh Chicken', image: 'https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Mutton & Lamb', image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Fresh Fish', image: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Prawns & Seafood', image: 'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Farm Fresh Eggs', image: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Steaks & Chops', image: 'https://images.unsplash.com/photo-1600891964599-f61ba0e24092?auto=format&fit=crop&w=200&h=200&q=80' }
-];
-
-// ─── 5. VEG & FRUITS CATEGORIES ───
-const vegFruitsCategories = [
-  { name: 'Fresh Vegetables', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Fresh Fruits', image: 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Leafy Greens', image: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Organic Produce', image: 'https://images.unsplash.com/photo-1597362925123-77861d3fbac7?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Seasonal Fruits', image: 'https://images.unsplash.com/photo-1528825871115-3581a5387919?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Herbs & Sprouts', image: 'https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=200&h=200&q=80' }
-];
-
-// ─── CURATED ITEMS FOR COOL & HOT DASHBOARD (Bakery & Beverages) ───
-const coolHotDataset = [
-  { _id: 'ch_cc1', name: 'Black Forest Cool Cake (500g)', price: 380, isVeg: true, category: 'Cool Cakes', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Fresh whipped cream, juicy cherries, and dark chocolate shavings.', image: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Bakery & Confectionery', _id: 'rest_b1', rating: 4.6, deliveryTime: 25 } },
-  { _id: 'ch_cc2', name: 'Strawberry Cool Pastry', price: 95, isVeg: true, category: 'Cool Cakes', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Chilled strawberry layered pastry with strawberry glaze.', image: 'https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Bakery & Confectionery', _id: 'rest_b1', rating: 4.6, deliveryTime: 25 } },
-  { _id: 'ch_cd1', name: 'Classic Iced Cola', price: 50, isVeg: true, category: 'Cool Drinks', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Refreshing sparkling iced cola with lemon slice.', image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Cool Zone Cafe', _id: 'rest_c1', rating: 4.3, deliveryTime: 20 } },
-  { _id: 'ch_cd2', name: 'Fresh Lime Soda (Sweet & Salt)', price: 45, isVeg: true, category: 'Cool Drinks', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Freshly squeezed chilled lemon soda made to order.', image: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Cool Zone Cafe', _id: 'rest_c1', rating: 4.3, deliveryTime: 20 } },
-  { _id: 'ch_nc1', name: 'Rich Fruit Plum Cake', price: 220, isVeg: true, category: 'Normal Cakes', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Traditional baked fruit cake rich in raisins and nuts.', image: 'https://images.unsplash.com/photo-1588195538326-c5b1e9f80a1b?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Sweet Treat Confectionery', _id: 'rest_b1', rating: 4.5, deliveryTime: 30 } },
-  { _id: 'ch_nc2', name: 'Honey Almond Tea Cake', price: 180, isVeg: true, category: 'Normal Cakes', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Freshly baked buttery cake infused with organic honey.', image: 'https://images.unsplash.com/photo-1535141192574-5d4897c13136?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Sweet Treat Confectionery', _id: 'rest_b1', rating: 4.5, deliveryTime: 30 } },
-  { _id: 'ch_pf1', name: 'Crispy Veg Paneer Puff', price: 30, isVeg: true, category: 'Puffs', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Golden flaky puff pastry stuffed with spicy paneer masala.', image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Hot Oven Bakery', _id: 'rest_b2', rating: 4.4, deliveryTime: 15 } },
-  { _id: 'ch_pf2', name: 'Crispy Egg Puff', price: 35, isVeg: false, category: 'Puffs', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Flaky baked pastry filled with spiced roasted boiled egg.', image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Hot Oven Bakery', _id: 'rest_b2', rating: 4.4, deliveryTime: 15 } },
-  { _id: 'ch_mc1', name: 'Vanilla Cream Mini Cake (2 Pcs)', price: 80, isVeg: true, category: 'Mini Cakes', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Bite-sized individual vanilla sponge cakes with frosting.', image: 'https://images.unsplash.com/photo-1587314168485-3236d6710814?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Bakery & Confectionery', _id: 'rest_b1', rating: 4.6, deliveryTime: 25 } },
-  { _id: 'ch_mc2', name: 'Molten Choco Lava Cup', price: 75, isVeg: true, category: 'Mini Cakes', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Warm chocolate cup cake with molten chocolate core.', image: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Bakery & Confectionery', _id: 'rest_b1', rating: 4.6, deliveryTime: 25 } },
-  { _id: 'ch_pc1', name: 'Classic Vanilla Plain Cake (400g)', price: 140, isVeg: true, category: 'Plain Cake', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Soft and airy traditional tea-time golden sponge cake.', image: 'https://images.unsplash.com/photo-1549576490-b0b4831ef60a?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Sweet Treat Confectionery', _id: 'rest_b1', rating: 4.5, deliveryTime: 30 } },
-  { _id: 'ch_pc2', name: 'Tutti Frutti Plain Cake', price: 150, isVeg: true, category: 'Plain Cake', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Classic bakery cake studded with colorful fruit candies.', image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Sweet Treat Confectionery', _id: 'rest_b1', rating: 4.5, deliveryTime: 30 } },
-  { _id: 'ch_sw1', name: 'Special Kaju Katli (250g)', price: 280, isVeg: true, category: 'Sweet Items', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Premium cashew fudge diamond sweets made with pure ghee.', image: 'https://images.unsplash.com/photo-1599785209707-a456fc1337bb?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Royal Sweets & Mithai', _id: 'rest_s1', rating: 4.8, deliveryTime: 20 } },
-  { _id: 'ch_sw2', name: 'Hot Ghee Gulab Jamun (4 Pcs)', price: 90, isVeg: true, category: 'Sweet Items', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Soft fried khoya dumplings soaked in saffron rose syrup.', image: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Royal Sweets & Mithai', _id: 'rest_s1', rating: 4.8, deliveryTime: 20 } },
-  { _id: 'ch_br1', name: 'Fresh Milk Bread (400g)', price: 45, isVeg: true, category: 'Bred Items', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Daily freshly baked soft sliced white milk bread.', image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Daily Fresh Bakery', _id: 'rest_b3', rating: 4.2, deliveryTime: 15 } },
-  { _id: 'ch_br2', name: 'Soft Pav Buns (Pack of 6)', price: 35, isVeg: true, category: 'Bred Items', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Super soft dinner rolls for pav bhaji and vada pav.', image: 'https://images.unsplash.com/photo-1586444248902-2f64eddc13df?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Daily Fresh Bakery', _id: 'rest_b3', rating: 4.2, deliveryTime: 15 } },
-  { _id: 'ch_ms1', name: 'Creamy Mango Milkshake', price: 110, isVeg: true, category: 'Milk Shakes', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Real Alphonso mango pulp blended with rich vanilla ice cream.', image: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Cool Zone Cafe', _id: 'rest_c1', rating: 4.3, deliveryTime: 20 } },
-  { _id: 'ch_ms2', name: 'Belgian Chocolate Milkshake', price: 130, isVeg: true, category: 'Milk Shakes', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Decadent chocolate shake with choco chips and syrup.', image: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Cool Zone Cafe', _id: 'rest_c1', rating: 4.3, deliveryTime: 20 } },
-  { _id: 'ch_ls1', name: 'Amritsari Kulhad Sweet Lassi', price: 80, isVeg: true, category: 'Lassi', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Thick creamy churned yogurt lassi with cardamom in clay cup.', image: 'https://images.unsplash.com/photo-1546173159-315724a31696?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Punjab Lassi House', _id: 'rest_l1', rating: 4.7, deliveryTime: 20 } },
-  { _id: 'ch_ls2', name: 'Mango Kesari Lassi', price: 95, isVeg: true, category: 'Lassi', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Rich curd blended with mango puree and saffron threads.', image: 'https://images.unsplash.com/photo-1546173159-315724a31696?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Punjab Lassi House', _id: 'rest_l1', rating: 4.7, deliveryTime: 20 } },
-  { _id: 'ch_ic1', name: 'Belgian Dark Chocolate Scoop', price: 90, isVeg: true, category: 'Ice Creams', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Rich artisan chocolate ice cream made with real cocoa.', image: 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Frosty Scoops Parlour', _id: 'rest_i1', rating: 4.6, deliveryTime: 20 } },
-  { _id: 'ch_ic2', name: 'Alphonso Mango Real Fruit Ice Cream', price: 85, isVeg: true, category: 'Ice Creams', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Creamy mango ice cream made with authentic fruit chunks.', image: 'https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Frosty Scoops Parlour', _id: 'rest_i1', rating: 4.6, deliveryTime: 20 } },
-  { _id: 'ch_gs1', name: 'Original Paneer Goli Soda', price: 35, isVeg: true, category: 'Golisoda', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Nostalgic sweet rose flavored sparkling marble bottle soda.', image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Desi Goli Soda Corner', _id: 'rest_g1', rating: 4.4, deliveryTime: 15 } },
-  { _id: 'ch_gs2', name: 'Masala Jeera Goli Soda', price: 35, isVeg: true, category: 'Golisoda', service: 'cool_hot', serviceName: 'Bakery & Beverages', description: 'Spiced digestive cumin and lemon marble fizz soda.', image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Desi Goli Soda Corner', _id: 'rest_g1', rating: 4.4, deliveryTime: 15 } }
-];
-
-// ─── CURATED ITEMS FOR GROCERY DASHBOARD ───
-const groceryDataset = [
-  { _id: 'gr_1', name: 'Aashirvaad Superior MP Sharbati Atta (5kg)', price: 275, isVeg: true, category: 'Atta & Rice', service: 'grocery', serviceName: 'Grocery', description: '100% whole wheat flour for soft Rotis.', image: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Supermarket', _id: 'rest_groc', rating: 4.7, deliveryTime: 30 } },
-  { _id: 'gr_2', name: 'Fortune Sunlite Refined Sunflower Oil (1L)', price: 145, isVeg: true, category: 'Cooking Oils', service: 'grocery', serviceName: 'Grocery', description: 'Light and healthy refined cooking oil enriched with vitamins.', image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Supermarket', _id: 'rest_groc', rating: 4.7, deliveryTime: 30 } },
-  { _id: 'gr_3', name: 'Amul Taaza Fresh Toned Milk (1L)', price: 56, isVeg: true, category: 'Dairy & Eggs', service: 'grocery', serviceName: 'Grocery', description: 'Homogenised toned milk packed with nutrition.', image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Supermarket', _id: 'rest_groc', rating: 4.7, deliveryTime: 30 } },
-  { _id: 'gr_4', name: 'Lay\'s Magic Masala Potato Chips (115g)', price: 40, isVeg: true, category: 'Snacks & Biscuits', service: 'grocery', serviceName: 'Grocery', description: 'Crunchy potato chips infused with exotic Indian spices.', image: 'https://images.unsplash.com/photo-1599490659213-e2b9527bd087?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Supermarket', _id: 'rest_groc', rating: 4.7, deliveryTime: 30 } },
-  { _id: 'gr_5', name: 'Tata Sampann Turmeric Powder (200g)', price: 65, isVeg: true, category: 'Masalas & Spices', service: 'grocery', serviceName: 'Grocery', description: 'Pure ground turmeric with natural curcumin.', image: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Supermarket', _id: 'rest_groc', rating: 4.7, deliveryTime: 30 } },
-  { _id: 'gr_6', name: 'Amul Butter Pasteurized (100g)', price: 58, isVeg: true, category: 'Dairy & Eggs', service: 'grocery', serviceName: 'Grocery', description: 'Delicious creamy salted pasteurized butter.', image: 'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Supermarket', _id: 'rest_groc', rating: 4.7, deliveryTime: 30 } },
-  { _id: 'gr_7', name: 'Nandini Pure Cow Ghee (500ml)', price: 310, isVeg: true, category: 'Cooking Oils', service: 'grocery', serviceName: 'Grocery', description: 'Pure aromatic golden cow ghee for traditional cooking.', image: 'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Supermarket', _id: 'rest_groc', rating: 4.7, deliveryTime: 30 } }
-];
-
-// ─── CURATED ITEMS FOR MEAT DASHBOARD ───
-const meatDataset = [
-  { _id: 'mt_1', name: 'Fresh Chicken Curry Cut (500g)', price: 160, isVeg: false, category: 'Fresh Chicken', service: 'meat', serviceName: 'Meat', description: 'Tender skinless bone-in chicken pieces cleaned and dressed.', image: 'https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Fresh Meat Store', _id: 'rest_meat', rating: 4.5, deliveryTime: 25 } },
-  { _id: 'mt_2', name: 'Chicken Boneless Breast Fillet (500g)', price: 210, isVeg: false, category: 'Fresh Chicken', service: 'meat', serviceName: 'Meat', description: 'Lean, high-protein tender cut breast fillets.', image: 'https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Fresh Meat Store', _id: 'rest_meat', rating: 4.5, deliveryTime: 25 } },
-  { _id: 'mt_3', name: 'Fresh Mutton Curry Cut (500g)', price: 440, isVeg: false, category: 'Mutton & Lamb', service: 'meat', serviceName: 'Meat', description: 'Tender goat meat cuts ideal for rich gravies.', image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Fresh Meat Store', _id: 'rest_meat', rating: 4.5, deliveryTime: 25 } },
-  { _id: 'mt_4', name: 'Fresh Rohu Fish Steaks (500g)', price: 190, isVeg: false, category: 'Fresh Fish', service: 'meat', serviceName: 'Meat', description: 'Freshwater Rohu fish cut into neat steaks with center bone.', image: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Fresh Meat Store', _id: 'rest_meat', rating: 4.5, deliveryTime: 25 } },
-  { _id: 'mt_5', name: 'Farm Fresh White Eggs (Pack of 12)', price: 84, isVeg: false, category: 'Farm Fresh Eggs', service: 'meat', serviceName: 'Meat', description: 'Hygienically sorted fresh poultry table eggs.', image: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Fresh Meat Store', _id: 'rest_meat', rating: 4.5, deliveryTime: 25 } },
-  { _id: 'mt_6', name: 'Fresh Chicken Lollipops (500g)', price: 190, isVeg: false, category: 'Fresh Chicken', service: 'meat', serviceName: 'Meat', description: 'Cleaned wingette chicken lollipops ready to fry.', image: 'https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Fresh Meat Store', _id: 'rest_meat', rating: 4.5, deliveryTime: 25 } }
-];
-
-// ─── CURATED ITEMS FOR VEG & FRUITS DASHBOARD ───
-const vegFruitsDataset = [
-  { _id: 'vf_1', name: 'Fresh Red Onions (1kg)', price: 35, isVeg: true, category: 'Fresh Vegetables', service: 'veg_fruits', serviceName: 'Veg & Fruits', description: 'Farm fresh crisp pungent red onions.', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Fresh Veggies & Fruits', _id: 'rest_veg', rating: 4.6, deliveryTime: 20 } },
-  { _id: 'vf_2', name: 'Hybrid Red Tomatoes (1kg)', price: 28, isVeg: true, category: 'Fresh Vegetables', service: 'veg_fruits', serviceName: 'Veg & Fruits', description: 'Juicy firm red ripe tomatoes for cooking and salads.', image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Fresh Veggies & Fruits', _id: 'rest_veg', rating: 4.6, deliveryTime: 20 } },
-  { _id: 'vf_3', name: 'Fresh Shimla Apples (4 Pcs)', price: 140, isVeg: true, category: 'Fresh Fruits', service: 'veg_fruits', serviceName: 'Veg & Fruits', description: 'Crisp, sweet, and aromatic mountain apples.', image: 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Fresh Veggies & Fruits', _id: 'rest_veg', rating: 4.6, deliveryTime: 20 } },
-  { _id: 'vf_4', name: 'Robusta Golden Bananas (1kg)', price: 45, isVeg: true, category: 'Fresh Fruits', service: 'veg_fruits', serviceName: 'Veg & Fruits', description: 'Naturally ripened energy-rich fresh bananas.', image: 'https://images.unsplash.com/photo-1528825871115-3581a5387919?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Fresh Veggies & Fruits', _id: 'rest_veg', rating: 4.6, deliveryTime: 20 } },
-  { _id: 'vf_5', name: 'Organic Fresh Spinach Palak (250g)', price: 20, isVeg: true, category: 'Leafy Greens', service: 'veg_fruits', serviceName: 'Veg & Fruits', description: 'Cleaned tender green palak leaves rich in iron.', image: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?auto=format&fit=crop&w=300&h=300&q=80', restaurant: { name: 'Jinkzo Fresh Veggies & Fruits', _id: 'rest_veg', rating: 4.6, deliveryTime: 20 } }
-];
-
 export default function RestaurantListing() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation();
@@ -147,16 +42,16 @@ export default function RestaurantListing() {
 
   if (categoryParam === 'beverages' || categoryParam === 'hot_cool' || categoryParam === 'cool_hot') {
     activeDashboard = 'cool_hot';
-    defaultCategories = coolHotCategories;
+    defaultCategories = [];
   } else if (categoryParam === 'grocery') {
     activeDashboard = 'grocery';
-    defaultCategories = groceryCategories;
+    defaultCategories = [];
   } else if (categoryParam === 'meat') {
     activeDashboard = 'meat';
-    defaultCategories = meatCategories;
+    defaultCategories = [];
   } else if (categoryParam === 'fruits-vegetables' || categoryParam === 'veg_fruits') {
     activeDashboard = 'veg_fruits';
-    defaultCategories = vegFruitsCategories;
+    defaultCategories = [];
   }
 
   const [dynamicCategories, setDynamicCategories] = useState([]);
@@ -320,16 +215,17 @@ export default function RestaurantListing() {
             console.error('Error fetching global catalog items:', err);
           }
 
-          // Helper filter for catalog items or static fallback
-          const filterLiveOrStatic = (dataset, catKey, sId, sName, serviceState) => {
+          // Helper filter for live catalog items across services
+          const filterLiveCatalog = (catKey, sId, sName, serviceState) => {
             if (!serviceState.isEnabled) return [];
             const liveForCat = liveCatalogItems.filter(i => i.category === catKey);
-            const sourceData = liveForCat.length > 0 ? liveForCat.map(i => ({
+            const sourceData = liveForCat.map(i => ({
               _id: i._id || i.id,
               id: i._id || i.id,
               name: i.name,
               price: Number(i.price),
               unit: i.unit || '',
+              variants: i.variants || [],
               image: i.image || '',
               description: i.description || '',
               category: i.category || sName,
@@ -337,6 +233,7 @@ export default function RestaurantListing() {
               serviceName: sName,
               supplierId: i.supplierId || null,
               supplierName: i.supplierName || null,
+              supplierPhone: i.supplierPhone || '',
               supplierAddress: i.supplierAddress || null,
               supplierActive: i.supplierActive !== false,
               isAvailable: i.isAvailable !== false,
@@ -346,7 +243,7 @@ export default function RestaurantListing() {
                 address: i.supplierAddress || '',
                 isActive: i.supplierActive !== false
               }
-            })) : dataset.map(d => ({ ...d, service: sId, serviceName: sName }));
+            }));
 
             return sourceData
               .filter(item => {
@@ -365,10 +262,10 @@ export default function RestaurantListing() {
               }));
           };
 
-          const matchedGrocery = filterLiveOrStatic(groceryDataset, 'grocery', 'grocery', 'Grocery', groceryState);
-          const matchedMeat = filterLiveOrStatic(meatDataset, 'meat', 'meat', 'Meat', meatState);
-          const matchedVegFruits = filterLiveOrStatic(vegFruitsDataset, 'veg_fruits', 'veg_fruits', 'Veg & Fruits', vegFruitsState);
-          const matchedCoolHot = filterLiveOrStatic(coolHotDataset, 'bakery_beverages', 'cool_hot', 'Bakery & Beverages', coolHotState);
+          const matchedGrocery = filterLiveCatalog('grocery', 'grocery', 'Grocery', groceryState);
+          const matchedMeat = filterLiveCatalog('meat', 'meat', 'Meat', meatState);
+          const matchedVegFruits = filterLiveCatalog('veg_fruits', 'veg_fruits', 'Veg & Fruits', vegFruitsState);
+          const matchedCoolHot = filterLiveCatalog('bakery_beverages', 'cool_hot', 'Bakery & Beverages', coolHotState);
 
           if (!isCancelled) {
             // Aggregate all matched dishes from all active services
@@ -426,28 +323,23 @@ export default function RestaurantListing() {
             let sId = 'grocery';
             let sName = 'Grocery';
             let categoryBackendKey = 'grocery';
-            let staticFallback = groceryDataset;
 
             if (activeDashboard === 'cool_hot') {
               sId = 'cool_hot';
               sName = 'Bakery & Beverages';
               categoryBackendKey = 'bakery_beverages';
-              staticFallback = coolHotDataset;
             } else if (activeDashboard === 'grocery') {
               sId = 'grocery';
               sName = 'Grocery';
               categoryBackendKey = 'grocery';
-              staticFallback = groceryDataset;
             } else if (activeDashboard === 'meat') {
               sId = 'meat';
               sName = 'Meat';
               categoryBackendKey = 'meat';
-              staticFallback = meatDataset;
             } else if (activeDashboard === 'veg_fruits') {
               sId = 'veg_fruits';
               sName = 'Veg & Fruits';
               categoryBackendKey = 'veg_fruits';
-              staticFallback = vegFruitsDataset;
             }
 
             let liveItems = [];
@@ -486,8 +378,6 @@ export default function RestaurantListing() {
                 supplierActive: item.supplierActive !== false && item.supplier?.isActive !== false,
                 isAvailable: item.isAvailable !== false
               }));
-            } else {
-              dataset = staticFallback.map(d => ({ ...d, service: sId, serviceName: sName, itemModel: 'CatalogItem' }));
             }
 
             let filtered = dataset;
@@ -1098,56 +988,64 @@ export default function RestaurantListing() {
             B. SERVICE-SPECIFIC BROWSING HEADER ("WHAT'S ON YOUR MIND?")
            ═══════════════════════════════════════════════════════════════════════ */
         <section className="bg-surface rounded-3xl p-5 sm:p-6 shadow-2xs border border-line flex flex-col lg:flex-row lg:items-center justify-between gap-6 transition-colors">
-          <div className="flex-1 flex flex-col gap-4 min-w-0">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display font-black text-lg sm:text-xl text-main tracking-tight">
-                {t('restaurant.whatsOnYourMind', "What's on your mind?")}
-              </h2>
-              {selectedCuisine !== 'All' && (
-                <button
-                  onClick={() => handleCuisineClick('All')}
-                  className="text-xs font-bold text-primary hover:underline cursor-pointer"
-                >
-                  {t('restaurant.resetFilter', 'Reset Filter')}
-                </button>
-              )}
-            </div>
-
-            {/* Circular Categories Row */}
-            <div className="flex items-center gap-4 sm:gap-5 overflow-x-auto no-scrollbar py-1">
-              {activeCategories.map((cat) => {
-                const isSelected = selectedCuisine.toLowerCase() === cat.name.toLowerCase();
-                return (
+          {activeCategories && activeCategories.length > 0 ? (
+            <div className="flex-1 flex flex-col gap-4 min-w-0">
+              <div className="flex items-center justify-between">
+                <h2 className="font-display font-black text-lg sm:text-xl text-main tracking-tight">
+                  {t('restaurant.whatsOnYourMind', "What's on your mind?")}
+                </h2>
+                {selectedCuisine !== 'All' && (
                   <button
-                    key={cat.name}
-                    onClick={() => handleCuisineClick(cat.name)}
-                    className="flex flex-col items-center gap-1.5 flex-shrink-0 group cursor-pointer"
+                    onClick={() => handleCuisineClick('All')}
+                    className="text-xs font-bold text-primary hover:underline cursor-pointer"
                   >
-                    <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-2 p-0.5 transition-all duration-200 group-hover:scale-105 shadow-sm ${
-                      isSelected
-                        ? 'border-[#7C3AED] ring-3 ring-[#7C3AED]/25 scale-105 shadow-md'
-                        : 'border-transparent hover:border-gray-200 dark:hover:border-white/20'
-                    }`}>
-                      <img
-                        src={getImageUrl(cat.image, 'category')}
-                        alt={cat.name}
-                        onError={(e) => handleImageError(e, 'category')}
-                        className="w-full h-full object-cover rounded-full"
-                        loading="lazy"
-                      />
-                    </div>
-                    <span className={`text-[11px] sm:text-xs font-bold text-center max-w-[76px] sm:max-w-[88px] leading-tight transition-colors ${
-                      isSelected
-                        ? 'text-[#7C3AED] dark:text-[#A78BFA] font-black'
-                        : 'text-muted group-hover:text-main'
-                    }`}>
-                      {cat.name}
-                    </span>
+                    {t('restaurant.resetFilter', 'Reset Filter')}
                   </button>
-                );
-              })}
+                )}
+              </div>
+
+              {/* Circular Categories Row */}
+              <div className="flex items-center gap-4 sm:gap-5 overflow-x-auto no-scrollbar py-1">
+                {activeCategories.map((cat) => {
+                  const isSelected = selectedCuisine.toLowerCase() === cat.name.toLowerCase();
+                  return (
+                    <button
+                      key={cat.name}
+                      onClick={() => handleCuisineClick(cat.name)}
+                      className="flex flex-col items-center gap-1.5 flex-shrink-0 group cursor-pointer"
+                    >
+                      <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-2 p-0.5 transition-all duration-200 group-hover:scale-105 shadow-sm ${
+                        isSelected
+                          ? 'border-[#7C3AED] ring-3 ring-[#7C3AED]/25 scale-105 shadow-md'
+                          : 'border-transparent hover:border-gray-200 dark:hover:border-white/20'
+                      }`}>
+                        <img
+                          src={getImageUrl(cat.image, 'category')}
+                          alt={cat.name}
+                          onError={(e) => handleImageError(e, 'category')}
+                          className="w-full h-full object-cover rounded-full"
+                          loading="lazy"
+                        />
+                      </div>
+                      <span className={`text-[11px] sm:text-xs font-bold text-center max-w-[76px] sm:max-w-[88px] leading-tight transition-colors ${
+                        isSelected
+                          ? 'text-[#7C3AED] dark:text-[#A78BFA] font-black'
+                          : 'text-muted group-hover:text-main'
+                      }`}>
+                        {cat.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex-1 flex items-center min-w-0">
+              <h2 className="font-display font-black text-lg sm:text-xl text-main tracking-tight capitalize">
+                {activeDashboard === 'cool_hot' ? 'Bakery & Beverages' : activeDashboard.replace('_', ' & ')}
+              </h2>
+            </div>
+          )}
 
           {/* Pure Veg (Food only) + Sort Controls */}
           <div className="flex flex-row lg:flex-col items-stretch justify-end gap-3 flex-shrink-0 pt-3 lg:pt-0 lg:pl-6 border-t lg:border-t-0 lg:border-l border-line">
