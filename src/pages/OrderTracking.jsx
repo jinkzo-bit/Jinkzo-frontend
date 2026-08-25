@@ -559,16 +559,72 @@ export default function OrderTracking() {
                     {isCompleted ? <Check className="w-3.5 h-3.5" /> : idx + 1}
                   </div>
                   
-                  <h4 className={`text-sm font-bold transition-colors ${
+                  <h4 className={`text-sm font-bold transition-colors flex items-center gap-2 flex-wrap ${
                     isActive 
                       ? order.orderType === 'ride' ? 'text-yellow-600' : 'text-primary' 
                       : isCompleted ? 'text-green-700' : 'text-muted'
                   }`}>
-                    {step.label}
+                    <span>{step.label}</span>
+                    {step.mappedState === 2 && Array.isArray(order.pickupStops) && order.pickupStops.length > 0 && (
+                      <span className="text-[10px] font-extrabold text-primary bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
+                        {order.pickupStops.filter(s => s.status === 'Collected').length}/{order.pickupStops.length} Collected
+                      </span>
+                    )}
                   </h4>
                   <p className="text-xs text-muted leading-relaxed font-semibold">
                     {step.desc}
                   </p>
+
+                  {/* Multi-stop pickup sources progress breakdown */}
+                  {step.mappedState === 2 && Array.isArray(order.pickupStops) && order.pickupStops.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-1.5 bg-base/80 border border-line rounded-2xl p-3">
+                      <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">
+                        Pickup Sources ({order.pickupStops.filter(s => s.status === 'Collected').length} of {order.pickupStops.length} Completed)
+                      </span>
+                      <div className="flex flex-col gap-1.5 mt-0.5">
+                        {order.pickupStops.map((stop, sIdx) => {
+                          const isCollected = stop.status === 'Collected';
+                          const isArrived = stop.status === 'Rider_Arrived';
+                          const isReady = stop.status === 'Ready';
+                          return (
+                            <div
+                              key={stop._id || stop.stopId || sIdx}
+                              className={`flex items-center justify-between p-2 rounded-xl border text-xs ${
+                                isCollected
+                                  ? 'bg-green-50/70 border-green-200 text-green-900'
+                                  : isArrived || isReady
+                                  ? 'bg-violet-50/70 border-violet-200 text-violet-950'
+                                  : 'bg-surface border-line text-main'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm flex-shrink-0">
+                                  {isCollected ? '✅' : stop.sourceType === 'restaurant' ? '🍽️' : '🏪'}
+                                </span>
+                                <div className="flex flex-col min-w-0">
+                                  <span className={`font-bold truncate ${isCollected ? 'line-through text-green-800' : 'text-main'}`}>
+                                    {stop.sourceName}
+                                  </span>
+                                  {stop.address && (
+                                    <span className="text-[10px] text-muted truncate">{stop.address}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md capitalize flex-shrink-0 ${
+                                isCollected ? 'bg-green-100 text-green-800' :
+                                isArrived ? 'bg-violet-100 text-violet-800' :
+                                isReady ? 'bg-emerald-100 text-emerald-800' :
+                                stop.status === 'Preparing' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-600'
+                              }`}>
+                                {stop.status}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

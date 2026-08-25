@@ -7,7 +7,7 @@ import { useAuthStore } from '../store/authStore';
 import { useTranslation } from '../store/languageStore';
 import { playOrderPlacedSound } from '../utils/audio';
 import LocationPickerModal from '../components/LocationPickerModal';
-import { getRoute } from '../services/routingService';
+import { getCartItemSource, CATEGORY_META, normalizeCategory } from './Cart';
 
 export default function Checkout() {
   const { items, restaurant, getCalculations, clearCart, showToast, promoCode, fetchPlatformSettings, platformSettings } = useCartStore();
@@ -189,16 +189,23 @@ export default function Checkout() {
     activeSurcharges
   } = getCalculations(routeInfo?.distanceKm);
 
-  // Group items by restaurant or supplier store
+  // Group items by authoritative source using getCartItemSource
   const groupedItems = items.reduce((acc, item) => {
-    const isSupplier = Boolean(item.supplierId);
-    const key = isSupplier ? `supplier_${item.supplierId}` : `restaurant_${item.restaurantId || 'food'}`;
-    const name = isSupplier ? (item.supplierName || 'Store Pickup') : (item.restaurantName || 'Restaurant');
+    const source = getCartItemSource(item);
+    const key = source.sourceKey;
     if (!acc[key]) {
       acc[key] = {
         key,
-        type: isSupplier ? 'supplier' : 'restaurant',
-        sourceName: name,
+        sourceKey: key,
+        type: source.sourceType,
+        sourceId: source.sourceId,
+        sourceName: source.sourceName,
+        categoryKey: source.categoryKey,
+        categoryLabel: source.categoryLabel,
+        categoryIcon: source.categoryIcon,
+        address: source.address,
+        latitude: source.latitude,
+        longitude: source.longitude,
         items: []
       };
     }
@@ -580,24 +587,58 @@ export default function Checkout() {
               <span>{t('checkout.orderSummary', 'Order Summary')}</span>
             </h3>
 
-            {/* Collapsed Item list preview */}
-            <div className="flex flex-col gap-3 border-b border-line pb-3">
-              {groupedList.map((group) => (
-                <div key={group.key} className="flex flex-col gap-1.5">
-                  <div className="text-[11px] uppercase tracking-wider font-black text-primary flex items-center gap-1.5">
-                    <span>{group.type === 'supplier' ? '🏪' : '🍴'}</span>
-                    <span>{group.sourceName}</span>
-                  </div>
-                  <div className="flex flex-col gap-1 pl-1">
-                    {group.items.map((i) => (
-                      <div key={i.menuItemId} className="flex justify-between items-center text-muted font-semibold text-xs">
-                        <span className="truncate max-w-[70%]">{i.name} {i.unit ? `(${i.unit})` : ''} <strong className="text-muted font-medium">x{i.quantity}</strong></span>
-                        <span className="text-main font-bold">₹{i.price * i.quantity}</span>
+            {/* Grouped Order Items Preview (Category -> Source -> Items & Distance) */}
+            <div className="flex flex-col gap-3.5 border-b border-line pb-3.5">
+              {groupedList.map((group) => {
+                const matchedRoute = storeRoutes.find(sr => String(sr.id) === String(group.sourceId) || sr.name === group.sourceName);
+                const displayDistance = matchedRoute?.distanceKm ?? routeInfo?.distanceKm ?? null;
+                const displayDuration = matchedRoute?.durationMinutes ?? routeInfo?.durationMinutes ?? null;
+
+                return (
+                  <div key={group.key} className="bg-base/60 border border-line rounded-xl p-3 flex flex-col gap-2">
+                    <div className="flex items-start justify-between gap-2 border-b border-line/60 pb-2">
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        {/* 1. CATEGORY */}
+                        <span className="text-[9px] font-extrabold uppercase tracking-wider text-muted flex items-center gap-1">
+                          <span>{group.categoryIcon || (group.type === 'supplier' ? '🏪' : '🍽️')}</span>
+                          <span>{group.categoryLabel || (group.type === 'supplier' ? 'STORE' : 'FOOD')}</span>
+                        </span>
+                        {/* 2. SOURCE / RESTAURANT */}
+                        <h4 className="font-display font-bold text-xs text-main tracking-tight uppercase truncate">
+                          {group.sourceName}
+                        </h4>
+                        {/* 3. LOCATION & DISTANCE */}
+                        <div className="flex items-center gap-2 text-[10px] text-muted font-medium mt-0.5">
+                          {group.address && (
+                            <span className="truncate max-w-[160px]">📍 {group.address}</span>
+                          )}
+                          {displayDistance != null && (
+                            <span className="text-blue-600 font-bold flex-shrink-0">📏 {displayDistance} km</span>
+                          )}
+                        </div>
                       </div>
-                    ))}
+                      {displayDuration != null && (
+                        <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md flex-shrink-0">
+                          ⏱️ {displayDuration} min
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 4. ORDERED ITEMS */}
+                    <div className="flex flex-col gap-1.5 pt-0.5">
+                      {group.items.map((i) => (
+                        <div key={i.cartKey || i.menuItemId} className="flex justify-between items-center text-xs font-semibold">
+                          <span className="text-main truncate max-w-[70%]">
+                            {i.name} {i.unit ? <span className="text-[10px] font-extrabold text-primary bg-primary/10 px-1.5 py-0.2 rounded border border-primary/20">{i.unit}</span> : ''}
+                            <span className="text-muted font-medium ml-1">× {i.quantity}</span>
+                          </span>
+                          <span className="text-main font-bold">₹{i.price * i.quantity}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Invoice Breakdown */}

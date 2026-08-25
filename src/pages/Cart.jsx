@@ -7,25 +7,54 @@ import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import VegBadge from '../components/VegBadge';
 
+// ── Category Metadata & Normalization Helper ─────────────────────────────────
+export const CATEGORY_META = {
+  food: { label: 'FOOD', icon: '🍽️', badgeClass: 'bg-orange-50 text-orange-700 border-orange-200' },
+  grocery: { label: 'GROCERY', icon: '🛒', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  meat: { label: 'MEAT', icon: '🥩', badgeClass: 'bg-red-50 text-red-700 border-red-200' },
+  bakery_beverages: { label: 'BAKERY & BEVERAGES', icon: '🥐', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' },
+  veg_fruits: { label: 'VEG & FRUITS', icon: '🥦', badgeClass: 'bg-green-50 text-green-700 border-green-200' },
+};
+
+export const normalizeCategory = (cat, service) => {
+  const val = String(cat || service || '').toLowerCase().trim().replace(/[\s\-_&]+/g, '_');
+  if (val.includes('grocery') || val.includes('groceries') || val.includes('atta') || val.includes('oil') || val.includes('masala')) return 'grocery';
+  if (val.includes('meat') || val.includes('chicken') || val.includes('mutton') || val.includes('fish') || val.includes('non_veg') || val.includes('nonveg') || val.includes('seafood')) return 'meat';
+  if (val.includes('veg_fruits') || val.includes('veg_and_fruits') || val.includes('fruits_vegetables') || val.includes('fruits') || val.includes('vegetables') || val.includes('vegetable') || val.includes('fruit')) return 'veg_fruits';
+  if (val.includes('bakery_beverages') || val.includes('bakery') || val.includes('beverage') || val.includes('cool_hot') || val.includes('hot_cool') || val.includes('cake') || val.includes('sweet') || val.includes('drink')) return 'bakery_beverages';
+  return 'food';
+};
+
 // ── Reliable source classification helper ──────────────────────────────────────
 export const getCartItemSource = (item) => {
+  const normCat = normalizeCategory(item.category, item.service);
   const isCatalog =
     item.itemModel === 'CatalogItem' ||
     Boolean(item.supplierId) ||
     Boolean(item.supplier) ||
-    (item.service && item.service !== 'food') ||
-    ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes((item.category || '').toLowerCase());
+    (normCat !== 'food' && item.itemModel !== 'MenuItem');
+
+  const catMeta = CATEGORY_META[normCat] || CATEGORY_META.food;
 
   if (isCatalog) {
-    const sId = item.supplierId ? String(item.supplierId) : (item.supplier?._id ? String(item.supplier._id) : (item.category ? `supplier_${item.category}` : 'supplier_default'));
-    const sName = item.supplierName || item.supplier?.name || (item.supplier && typeof item.supplier === 'string' ? item.supplier : null) || (item.category ? `${item.category.toUpperCase().replace(/_/g, ' ')} STORE` : 'Supplier information unavailable');
+    const sId = item.supplierId ? String(item.supplierId) : (item.supplier?._id ? String(item.supplier._id) : (item.category ? `supplier_${normCat}` : 'supplier_default'));
+    const sName = item.supplierName || item.supplier?.name || (item.supplier && typeof item.supplier === 'string' ? item.supplier : null) || `${catMeta.label} STORE`;
+    const sAddr = item.supplierAddress || item.supplier?.address || '';
+    const sLat = item.supplierLatitude ?? item.supplier?.latitude ?? null;
+    const sLng = item.supplierLongitude ?? item.supplier?.longitude ?? null;
     
     return {
       sourceType: 'supplier',
       sourceKey: `supplier:${sId}`,
       sourceId: sId,
       sourceName: sName,
-      category: item.category || 'Store',
+      categoryKey: normCat,
+      categoryLabel: catMeta.label,
+      categoryIcon: catMeta.icon,
+      categoryBadge: catMeta.badgeClass,
+      address: sAddr,
+      latitude: sLat,
+      longitude: sLng,
       image: item.image || '',
       isClosed: false
     };
@@ -34,12 +63,22 @@ export const getCartItemSource = (item) => {
   // Food / Restaurant
   const rId = item.restaurantId ? String(item.restaurantId) : 'restaurant_default';
   const rName = item.restaurantName || (item.restaurant && item.restaurant.name) || 'RESTAURANT';
+  const rAddr = item.restaurantAddress || item.restaurant?.address || '';
+  const rLat = item.restaurantLatitude ?? item.restaurant?.lat ?? null;
+  const rLng = item.restaurantLongitude ?? item.restaurant?.lng ?? null;
+
   return {
     sourceType: 'restaurant',
     sourceKey: `restaurant:${rId}`,
     sourceId: rId,
     sourceName: rName,
-    category: 'food',
+    categoryKey: 'food',
+    categoryLabel: CATEGORY_META.food.label,
+    categoryIcon: CATEGORY_META.food.icon,
+    categoryBadge: CATEGORY_META.food.badgeClass,
+    address: rAddr,
+    latitude: rLat,
+    longitude: rLng,
     image: item.restaurantImage || (item.restaurant && (item.restaurant.image || item.restaurant.logo)) || '',
     isClosed: item.restaurantIsClosed || false
   };
@@ -81,7 +120,13 @@ export default function Cart() {
         sourceType: source.sourceType, // 'restaurant' | 'supplier'
         sourceId: source.sourceId,
         sourceName: source.sourceName,
-        sourceCategory: source.category,
+        categoryKey: source.categoryKey,
+        categoryLabel: source.categoryLabel,
+        categoryIcon: source.categoryIcon,
+        categoryBadge: source.categoryBadge,
+        address: source.address,
+        latitude: source.latitude,
+        longitude: source.longitude,
         sourceImage: source.image,
         isClosed: source.isClosed,
         items: []
@@ -159,23 +204,25 @@ export default function Cart() {
             <UtensilsCrossed className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-display font-extrabold text-2xl text-main leading-tight">
-              Your Order
+            <h1 className="font-display font-black text-xl md:text-2xl text-main tracking-tight">
+              {t('cart.title', 'Order Cart')}
             </h1>
             <p className="text-xs text-muted font-medium mt-0.5">
-              Review your items and order summary
+              {items.length} {items.length === 1 ? 'item' : 'items'} from {groupedList.length} {groupedList.length === 1 ? 'pickup source' : 'pickup sources'}
             </p>
           </div>
         </div>
+
         <button
           onClick={clearCart}
-          className="flex items-center gap-1.5 text-xs text-muted hover:text-red-500 font-semibold cursor-pointer transition-colors px-3 py-1.5 rounded-xl hover:bg-red-50 border border-transparent hover:border-red-100"
+          className="text-xs text-red-600 hover:text-red-700 font-bold flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100/70 transition-colors cursor-pointer"
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          <Trash2 className="w-4 h-4" />
           <span>{t('cart.clearCart', 'Clear Cart')}</span>
         </button>
       </div>
 
+      {/* Temporarily Closed Alert */}
       {isAnyClosed && (
         <div className="bg-red-50 border border-red-200 text-red-800 p-5 rounded-3xl flex gap-3 text-xs animate-fade-in shadow-2xs">
           <AlertCircle className="w-5.5 h-5.5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -189,7 +236,7 @@ export default function Cart() {
                 <li key={r.sourceKey}>{r.sourceName}</li>
               ))}
             </ul>
-            <p className="mt-2 text-[11px] text-red-700 font-medium font-semibold">
+            <p className="mt-2 text-[11px] text-red-700 font-semibold">
               Please remove items from these kitchens or clear your cart to proceed to checkout.
             </p>
           </div>
@@ -201,58 +248,47 @@ export default function Cart() {
         <div className="lg:col-span-2 flex flex-col gap-5">
           {groupedList.map((group) => (
             <div key={group.sourceKey} className="bg-surface rounded-3xl border border-line shadow-2xs overflow-hidden p-5 flex flex-col gap-4 transition-all">
-              {/* Card Header */}
+              {/* Card Header: 1. CATEGORY -> 2. RELATED RESTAURANT / SUPPLIER */}
               <div className="flex items-center justify-between border-b border-line pb-3.5">
                 <div className="flex items-center gap-3">
-                  {group.sourceType === 'restaurant' ? (
-                    group.sourceImage ? (
+                  <div className="w-11 h-11 rounded-xl border border-line bg-base flex items-center justify-center font-black text-lg flex-shrink-0 shadow-2xs overflow-hidden">
+                    {group.sourceType === 'restaurant' && group.sourceImage ? (
                       <img
                         src={getImageUrl(group.sourceImage, 'restaurant')}
                         alt={group.sourceName}
                         onError={(e) => handleImageError(e, 'restaurant')}
-                        className="w-11 h-11 object-cover rounded-xl border border-line bg-base flex-shrink-0"
+                        className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-11 h-11 rounded-xl border border-line bg-violet-50 text-primary flex items-center justify-center font-black text-sm flex-shrink-0 uppercase">
-                        {group.sourceName.charAt(0)}
-                      </div>
-                    )
-                  ) : (
-                    <div className="w-11 h-11 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-lg flex-shrink-0 shadow-2xs">
-                      🏪
-                    </div>
-                  )}
-                  <div className="flex flex-col gap-1">
+                      <span>{group.categoryIcon || '🏪'}</span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    {/* 1. CATEGORY */}
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted flex items-center gap-1">
+                      <span>{group.categoryIcon || '🏪'}</span>
+                      <span>{group.categoryLabel || 'CATEGORY'}</span>
+                    </span>
+                    {/* 2. RELATED RESTAURANT / SUPPLIER */}
                     <div className="flex items-center gap-2">
-                      {group.sourceType === 'restaurant' ? (
-                        <span className="text-xs">🍴</span>
-                      ) : (
-                        <span className="text-xs">🏪</span>
-                      )}
-                      <h3 className="font-display font-black text-sm md:text-base text-main tracking-tight uppercase">
+                      <h3 className="font-display font-black text-sm md:text-base text-main tracking-tight uppercase truncate">
                         {group.sourceName}
                       </h3>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {group.sourceType === 'restaurant' ? (
+                      {group.sourceType === 'restaurant' && (
                         group.isAllVeg ? (
-                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             Veg
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                          <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
                             Non Veg
                           </span>
                         )
-                      ) : (
-                        <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider">
-                          {group.sourceCategory ? group.sourceCategory.replace(/_/g, ' ') : 'Store'}
-                        </span>
                       )}
                       {group.isClosed && (
-                        <span className="bg-red-100 text-red-700 text-[10px] font-extrabold px-2 py-0.5 rounded-md">
+                        <span className="bg-red-100 text-red-700 text-[10px] font-extrabold px-2 py-0.5 rounded">
                           {t('restaurant.temporarilyClosed', 'Temporarily Closed')}
                         </span>
                       )}
@@ -261,7 +297,7 @@ export default function Cart() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-primary bg-violet-50 border border-violet-100 px-3 py-1 rounded-full">
+                  <span className="text-[11px] font-bold text-primary bg-violet-50 border border-violet-100 px-3 py-1 rounded-full flex-shrink-0">
                     {group.itemsCount} {group.itemsCount === 1 ? 'Item' : 'Items'}
                   </span>
                   <ChevronUp className="w-4 h-4 text-muted" />

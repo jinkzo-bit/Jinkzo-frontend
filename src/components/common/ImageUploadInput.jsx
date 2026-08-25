@@ -55,7 +55,12 @@ export default function ImageUploadInput({
   const [importSuccess, setImportSuccess] = useState(false);
   const [importMetadata, setImportMetadata] = useState(null);
 
-  const fileInputRef = useRef(null);
+  // Sync urlInput when value changes from external source (e.g. edit modal)
+  useEffect(() => {
+    if (value && typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+      setUrlInput(value);
+    }
+  }, [value]);
 
   // Manage blob preview lifecycle
   useEffect(() => {
@@ -188,7 +193,6 @@ export default function ImageUploadInput({
 
   // Determine current active preview
   const hasSelectedFile = Boolean(file && blobPreview);
-  const hasImportedImage = Boolean(importSuccess && value);
   const hasExistingImage = Boolean(value && !hasSelectedFile);
 
   let previewSrc = null;
@@ -203,9 +207,10 @@ export default function ImageUploadInput({
       previewBadge = 'Current Image';
     }
   } else {
-    if (hasImportedImage) {
-      previewSrc = getImageUrl(value, imageType);
-      previewBadge = 'Imported';
+    const activeUrl = urlInput.trim() || value;
+    if (activeUrl) {
+      previewSrc = getImageUrl(activeUrl, imageType);
+      previewBadge = importSuccess ? 'Imported' : 'URL Preview';
     } else if (hasExistingImage) {
       previewSrc = getImageUrl(value, imageType);
       previewBadge = 'Current Image';
@@ -344,8 +349,11 @@ export default function ImageUploadInput({
                     placeholder="Paste image URL (https://...)"
                     value={urlInput}
                     onChange={(e) => {
-                      setUrlInput(e.target.value);
+                      const val = e.target.value;
+                      setUrlInput(val);
                       setUrlError('');
+                      setImportSuccess(false);
+                      onUrlChange?.(val.trim());
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {

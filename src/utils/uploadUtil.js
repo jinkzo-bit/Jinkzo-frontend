@@ -8,7 +8,11 @@ const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
  */
 export const FALLBACK_IMAGES = {
   food: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&h=400&q=80',
+  menu: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&h=400&q=80',
+  dish: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&h=400&q=80',
   restaurant: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&h=400&q=80',
+  grocery: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=600&h=400&q=80',
+  meat: 'https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?auto=format&fit=crop&w=600&h=400&q=80',
   banner: '/assets/hero_delivery_banner.jpg',
   category: '/assets/cat_food.jpg',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&h=200&q=80',
@@ -16,8 +20,8 @@ export const FALLBACK_IMAGES = {
 };
 
 /**
- * Gets the configured backend origin (e.g. http://localhost:5000 or https://api.jinkzo.com)
- * Works consistently in localhost development, production build, and deployed domains.
+ * Gets the configured backend origin (e.g. http://localhost:5000, http://10.169.207.97:5000, or https://api.jinkzo.com)
+ * Works consistently in localhost development, LAN mobile testing, production build, and deployed domains.
  * @returns {string}
  */
 export const getBackendOrigin = () => {
@@ -26,7 +30,7 @@ export const getBackendOrigin = () => {
     return import.meta.env.VITE_BACKEND_URL.replace(/\/+$/, '');
   }
 
-  // 2. Absolute API_BASE (e.g., https://api.jinkzo.com/api or http://localhost:5000/api)
+  // 2. Absolute API_BASE (e.g., https://api.jinkzo.com/api or http://10.169.207.97:5000/api)
   if (API_BASE && (API_BASE.startsWith('http://') || API_BASE.startsWith('https://'))) {
     try {
       const parsed = new URL(API_BASE);
@@ -38,13 +42,14 @@ export const getBackendOrigin = () => {
 
   // 3. Browser environment resolution
   if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    // In local development (Vite on port 5173/5174), point directly to backend on 5000
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:5000';
+    const { protocol, hostname, port, origin } = window.location;
+    // In local development where Vite dev server runs on 5173/5174/3000
+    // and backend Express server runs on port 5000 on the host
+    if (port === '5173' || port === '5174' || port === '3000') {
+      return `${protocol}//${hostname}:5000`;
     }
-    // In production with relative API_BASE, use current window origin
-    return window.location.origin;
+    // In production build or custom reverse proxy, use current window origin
+    return origin;
   }
 
   return 'http://localhost:5000';
@@ -53,11 +58,12 @@ export const getBackendOrigin = () => {
 /**
  * Normalizes any image URL or upload path into a valid, browser-accessible URL.
  * Handles:
- * 1. Empty/null/undefined -> returns default fallback
+ * 1. Empty/null/undefined/file:// -> returns default fallback
  * 2. Blobs & Data URLs (from file picker previews) -> returns unchanged
- * 3. Absolute URLs (http://, https://) -> returns unchanged (cleans accidental duplicate prefixes)
- * 4. Frontend public assets (/assets/...) -> returns unchanged
- * 5. Local uploads (/uploads/..., uploads/..., or bare filenames) -> prepends backend origin
+ * 3. Absolute External URLs (https://..., http://...) -> returns unchanged directly
+ * 4. Localhost upload paths -> converts to device-reachable backend origin
+ * 5. Frontend public assets (/assets/...) -> returns unchanged
+ * 6. Local uploads (/uploads/..., uploads/..., or bare filenames) -> prepends backend origin
  *
  * @param {string} url - The raw image path or URL
  * @param {string} type - 'food' | 'restaurant' | 'banner' | 'category' | 'avatar' | 'default'
@@ -71,7 +77,12 @@ export const getImageUrl = (url, type = 'default') => {
   }
 
   const trimmed = url.trim();
-  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') {
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === 'none') {
+    return fallback;
+  }
+
+  // Reject file:// or Windows/Unix disk paths safely
+  if (trimmed.startsWith('file://') || /^[a-zA-Z]:[\\/]/.test(trimmed)) {
     return fallback;
   }
 
@@ -90,16 +101,21 @@ export const getImageUrl = (url, type = 'default') => {
     return trimmed.substring(httpIdx);
   }
 
-  // 3. Legacy localhost / 127.0.0.1 upload paths (e.g. http://localhost:5000/uploads/... or http://127.0.0.1:5000/uploads/...)
-  // Dynamically normalize to current environment's backend origin so it works across dev and production
+  // 3. Stored localhost / 127.0.0.1 upload paths (e.g. http://localhost:5000/uploads/... or http://127.0.0.1:5000/uploads/...)
+  // Dynamically normalize to current device-accessible backend origin so other mobile phones can load it
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/uploads\//i.test(trimmed)) {
     const backendOrigin = getBackendOrigin();
     const relativePath = trimmed.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, '');
     return `${backendOrigin}${relativePath}`;
   }
 
-  // 4. Absolute External URLs (https://..., http://...)
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+  // 4. Absolute External HTTPS / HTTP URLs (https://images.unsplash.com/..., https://res.cloudinary.com/..., etc.)
+  // Preserve valid external URLs unchanged
+  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
+    // If it's a localhost/127.0.0.1 URL that is NOT an /uploads/ path, return fallback
+    if (trimmed.startsWith('http://localhost') || trimmed.startsWith('http://127.0.0.1')) {
+      return fallback;
+    }
     return trimmed;
   }
 
