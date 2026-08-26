@@ -612,8 +612,10 @@ export default function Checkout() {
                           {group.address && (
                             <span className="truncate max-w-[160px]">📍 {group.address}</span>
                           )}
-                          {displayDistance != null && (
+                          {displayDistance != null ? (
                             <span className="text-blue-600 font-bold flex-shrink-0">📏 {displayDistance} km</span>
+                          ) : (
+                            <span className="text-muted font-medium flex-shrink-0">📏 Location unavailable</span>
                           )}
                         </div>
                       </div>

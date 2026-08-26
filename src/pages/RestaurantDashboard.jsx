@@ -711,16 +711,21 @@ export default function RestaurantDashboard() {
         return alert(err.message || 'Cover image upload failed');
       }
     }
+    if (!finalProfileImageUrl && restaurantProfile?.image) {
+      finalProfileImageUrl = restaurantProfile.image;
+    }
 
     try {
       const payload = {
         name: profileName,
-        image: finalProfileImageUrl,
         address: profileAddress,
         deliveryTime: parseInt(profileTime),
         isPureVeg: profileVeg,
         isClosed: profileClosed,
       };
+      if (finalProfileImageUrl) {
+        payload.image = finalProfileImageUrl;
+      }
       if (profileLat !== null) payload.lat = profileLat;
       if (profileLng !== null) payload.lng = profileLng;
 

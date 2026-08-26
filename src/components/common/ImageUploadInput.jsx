@@ -56,9 +56,9 @@ export default function ImageUploadInput({
   const [importSuccess, setImportSuccess] = useState(false);
   const [importMetadata, setImportMetadata] = useState(null);
 
-  // Sync urlInput when value changes from external source (e.g. edit modal)
+  // Sync urlInput when value changes from external source (e.g. edit modal or imported path)
   useEffect(() => {
-    if (value && typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+    if (value && typeof value === 'string' && value.trim()) {
       setUrlInput(value);
     }
   }, [value]);
@@ -168,6 +168,7 @@ export default function ImageUploadInput({
     try {
       const res = await importImageFromUrl(targetUrl);
       if (res && res.imageUrl) {
+        setUrlInput(res.imageUrl);
         onUrlChange?.(res.imageUrl);
         setImportSuccess(true);
         setImportMetadata({
@@ -208,10 +209,10 @@ export default function ImageUploadInput({
       previewBadge = 'Current Image';
     }
   } else {
-    const activeUrl = urlInput.trim() || value;
+    const activeUrl = (value || urlInput || '').trim();
     if (activeUrl) {
       previewSrc = getImageUrl(activeUrl, imageType);
-      previewBadge = importSuccess ? 'Imported' : 'URL Preview';
+      previewBadge = importSuccess ? 'Imported' : (activeUrl.startsWith('/uploads/') ? 'Stored Image' : 'URL Preview');
     } else if (hasExistingImage) {
       previewSrc = getImageUrl(value, imageType);
       previewBadge = 'Current Image';

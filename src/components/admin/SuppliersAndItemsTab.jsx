@@ -58,10 +58,10 @@ const CATEGORIES_CONFIG = [
 ];
 
 const CATEGORY_UNIT_PRESETS = {
-  grocery: ['250g', '500g', '1kg', '2kg', '5kg', '250ml', '500ml', '1L', '2L', '1 pc', '1 pack', '1 bottle', '1 packet'],
+  grocery: ['250g', '500g', '1kg', '2kg', '5kg', '250ml', '500ml', '1L', '2L', '1 pc', '½ dozen', '1 dozen', '1 pack', '1 bottle', '1 packet'],
   meat: ['250g', '500g', '1kg', '2kg', '5kg', '1 pc'],
-  veg_fruits: ['250g', '500g', '1kg', '2kg', '5kg', '1 pc', '1 dozen'],
-  bakery_beverages: ['250g', '500g', '1kg', '2kg', '250ml', '500ml', '1L', '1 pc', '1 pack', '1 box', '1 bottle']
+  veg_fruits: ['250g', '500g', '1kg', '2kg', '5kg', '1 pc', '½ dozen', '1 dozen'],
+  bakery_beverages: ['250g', '500g', '1kg', '2kg', '250ml', '500ml', '1L', '1 pc', '½ dozen', '1 dozen', '1 pack', '1 box', '1 bottle']
 };
 
 export default function SuppliersAndItemsTab({ token }) {
@@ -91,10 +91,12 @@ export default function SuppliersAndItemsTab({ token }) {
     name: '',
     phone: '',
     address: '',
+    image: '',
     latitude: '',
     longitude: '',
     isActive: true
   });
+  const [addSupplierFile, setAddSupplierFile] = useState(null);
   const [isAddingSupplier, setIsAddingSupplier] = useState(false);
   const [addSupplierError, setAddSupplierError] = useState('');
 
@@ -105,10 +107,12 @@ export default function SuppliersAndItemsTab({ token }) {
     name: '',
     phone: '',
     address: '',
+    image: '',
     latitude: '',
     longitude: '',
     isActive: true
   });
+  const [editSupplierFile, setEditSupplierFile] = useState(null);
   const [isEditingSupplier, setIsEditingSupplier] = useState(false);
   const [editSupplierError, setEditSupplierError] = useState('');
 
@@ -324,37 +328,49 @@ export default function SuppliersAndItemsTab({ token }) {
     e.preventDefault();
     setAddSupplierError('');
 
-    if (
-      addSupplierForm.latitude === '' ||
-      addSupplierForm.longitude === '' ||
-      isNaN(Number(addSupplierForm.latitude)) ||
-      isNaN(Number(addSupplierForm.longitude))
-    ) {
-      setAddSupplierError('Store location is not configured. Please select the supplier location on the map.');
-      return;
+    setIsAddingSupplier(true);
+    let finalImageUrl = (addSupplierForm.image || '').trim();
+    if (addSupplierFile) {
+      try {
+        finalImageUrl = await uploadFileToBackend(addSupplierFile);
+      } catch (err) {
+        setIsAddingSupplier(false);
+        setAddSupplierError(err.message || 'Image upload failed.');
+        return;
+      }
     }
 
-    setIsAddingSupplier(true);
     try {
+      const payload = {
+        name: addSupplierForm.name.trim(),
+        phone: addSupplierForm.phone.trim(),
+        address: addSupplierForm.address.trim(),
+        image: finalImageUrl || null,
+        category: activeCategory,
+        isActive: addSupplierForm.isActive
+      };
+      if (addSupplierForm.latitude !== '' && addSupplierForm.latitude !== null && !isNaN(Number(addSupplierForm.latitude))) {
+        payload.latitude = Number(addSupplierForm.latitude);
+      }
+      if (addSupplierForm.longitude !== '' && addSupplierForm.longitude !== null && !isNaN(Number(addSupplierForm.longitude))) {
+        payload.longitude = Number(addSupplierForm.longitude);
+      }
+
       const res = await fetch(`${API_BASE}/admin/suppliers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          ...addSupplierForm,
-          latitude: Number(addSupplierForm.latitude),
-          longitude: Number(addSupplierForm.longitude),
-          category: activeCategory
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!res.ok) {
         setAddSupplierError(data.message || 'Failed to add supplier');
       } else {
         setShowAddSupplierModal(false);
-        setAddSupplierForm({ name: '', phone: '', address: '', latitude: '', longitude: '', isActive: true });
+        setAddSupplierForm({ name: '', phone: '', address: '', image: '', latitude: '', longitude: '', isActive: true });
+        setAddSupplierFile(null);
         fetchSuppliers(activeCategory);
       }
     } catch (err) {
@@ -368,35 +384,51 @@ export default function SuppliersAndItemsTab({ token }) {
     e.preventDefault();
     setEditSupplierError('');
 
-    if (
-      editSupplierForm.latitude === '' ||
-      editSupplierForm.longitude === '' ||
-      isNaN(Number(editSupplierForm.latitude)) ||
-      isNaN(Number(editSupplierForm.longitude))
-    ) {
-      setEditSupplierError('Store location is not configured. Please select the supplier location on the map.');
-      return;
+    setIsEditingSupplier(true);
+    let finalImageUrl = (editSupplierForm.image || '').trim();
+    if (editSupplierFile) {
+      try {
+        finalImageUrl = await uploadFileToBackend(editSupplierFile);
+      } catch (err) {
+        setIsEditingSupplier(false);
+        setEditSupplierError(err.message || 'Image upload failed.');
+        return;
+      }
     }
 
-    setIsEditingSupplier(true);
     try {
+      const payload = {
+        name: editSupplierForm.name.trim(),
+        phone: editSupplierForm.phone.trim(),
+        address: editSupplierForm.address.trim(),
+        image: finalImageUrl || null,
+        isActive: editSupplierForm.isActive
+      };
+      if (editSupplierForm.latitude !== '' && editSupplierForm.latitude !== null && !isNaN(Number(editSupplierForm.latitude))) {
+        payload.latitude = Number(editSupplierForm.latitude);
+      } else {
+        payload.latitude = null;
+      }
+      if (editSupplierForm.longitude !== '' && editSupplierForm.longitude !== null && !isNaN(Number(editSupplierForm.longitude))) {
+        payload.longitude = Number(editSupplierForm.longitude);
+      } else {
+        payload.longitude = null;
+      }
+
       const res = await fetch(`${API_BASE}/admin/suppliers/${editSupplierForm._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          ...editSupplierForm,
-          latitude: Number(editSupplierForm.latitude),
-          longitude: Number(editSupplierForm.longitude)
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!res.ok) {
         setEditSupplierError(data.message || 'Failed to update supplier');
       } else {
         setShowEditSupplierModal(false);
+        setEditSupplierFile(null);
         fetchSuppliers(activeCategory);
         fetchItems(activeCategory);
       }
@@ -862,8 +894,17 @@ export default function SuppliersAndItemsTab({ token }) {
                     <tr key={sup._id} className="hover:bg-base/40 transition-colors">
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-base border border-line flex items-center justify-center shrink-0 font-bold text-main">
-                            <Building2 className="w-4 h-4 text-primary" />
+                          <div className="w-9 h-9 rounded-xl bg-base border border-line flex items-center justify-center shrink-0 font-bold text-main overflow-hidden">
+                            {sup.image ? (
+                              <img
+                                src={getImageUrl(sup.image, 'restaurant')}
+                                alt={sup.name}
+                                onError={(e) => handleImageError(e, 'restaurant')}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Building2 className="w-4 h-4 text-primary" />
+                            )}
                           </div>
                           <div>
                             <span className="font-extrabold text-main block">{sup.name}</span>
@@ -928,10 +969,12 @@ export default function SuppliersAndItemsTab({ token }) {
                                 name: sup.name,
                                 phone: sup.phone,
                                 address: sup.address,
+                                image: sup.image || '',
                                 latitude: sup.latitude !== null && sup.latitude !== undefined ? sup.latitude : '',
                                 longitude: sup.longitude !== null && sup.longitude !== undefined ? sup.longitude : '',
                                 isActive: sup.isActive
                               });
+                              setEditSupplierFile(null);
                               setShowEditSupplierModal(true);
                             }}
                             className="p-1.5 rounded-lg border border-line hover:bg-base text-muted hover:text-main transition-colors cursor-pointer"
@@ -1287,6 +1330,17 @@ export default function SuppliersAndItemsTab({ token }) {
                 />
               </div>
 
+              {/* ── SUPPLIER PROFILE IMAGE ── */}
+              <ImageUploadInput
+                label="Supplier Profile Image (Optional)"
+                imageType="restaurant"
+                value={addSupplierForm.image}
+                file={addSupplierFile}
+                onFileChange={setAddSupplierFile}
+                onUrlChange={(url) => setAddSupplierForm({ ...addSupplierForm, image: url })}
+                helperText="Upload shop/store front photo or paste external image URL"
+              />
+
               {/* ── STORE LOCATION ON MAP ── */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-main block">
@@ -1467,6 +1521,17 @@ export default function SuppliersAndItemsTab({ token }) {
                   className="w-full px-3 py-2 text-xs rounded-xl bg-base border border-line text-main outline-none focus:border-primary resize-none"
                 />
               </div>
+
+              {/* ── SUPPLIER PROFILE IMAGE ── */}
+              <ImageUploadInput
+                label="Supplier Profile Image (Optional)"
+                imageType="restaurant"
+                value={editSupplierForm.image}
+                file={editSupplierFile}
+                onFileChange={setEditSupplierFile}
+                onUrlChange={(url) => setEditSupplierForm({ ...editSupplierForm, image: url })}
+                helperText="Upload shop/store front photo or paste external image URL"
+              />
 
               {/* ── STORE LOCATION ON MAP (EDIT) ── */}
               <div className="flex flex-col gap-1.5">

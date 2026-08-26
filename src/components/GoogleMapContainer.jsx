@@ -418,16 +418,23 @@ export default function GoogleMapContainer({
       if (restaurantPos) return restaurantPos;
     }
     if (Array.isArray(routeSequence) && routeSequence.length > 0) {
-      const firstStop = routeSequence.find(s => s.type === 'supplier' || s.type === 'restaurant' || s.type === 'store');
-      if (firstStop && typeof firstStop.lat === 'number' && typeof firstStop.lng === 'number') {
-        return { lat: firstStop.lat, lng: firstStop.lng };
+      const firstStop = routeSequence.find(s => {
+        const sLat = s.lat ?? s.latitude;
+        const sLng = s.lng ?? s.longitude;
+        return (s.type === 'supplier' || s.type === 'restaurant' || s.type === 'store') &&
+          typeof sLat === 'number' && typeof sLng === 'number' && Number.isFinite(sLat) && Number.isFinite(sLng);
+      });
+      if (firstStop) {
+        const sLat = firstStop.lat ?? firstStop.latitude;
+        const sLng = firstStop.lng ?? firstStop.longitude;
+        return { lat: Number(sLat), lng: Number(sLng) };
       }
     }
     if (restaurantPos) return restaurantPos;
     if (Array.isArray(supplierDeliveries) && supplierDeliveries.length > 0) {
-      const firstSup = supplierDeliveries[0];
-      if (typeof firstSup.latitude === 'number' && typeof firstSup.longitude === 'number') {
-        return { lat: firstSup.latitude, lng: firstSup.longitude };
+      const firstSup = supplierDeliveries.find(s => typeof s.latitude === 'number' && typeof s.longitude === 'number' && Number.isFinite(s.latitude) && Number.isFinite(s.longitude));
+      if (firstSup) {
+        return { lat: Number(firstSup.latitude), lng: Number(firstSup.longitude) };
       }
     }
     return customerPos;
