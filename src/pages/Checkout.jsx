@@ -61,6 +61,7 @@ export default function Checkout() {
 
   const [storeRoutes, setStoreRoutes] = useState([]);
   const [suppliersMap, setSuppliersMap] = useState({});
+  const [freshRestaurantMap, setFreshRestaurantMap] = useState({});
   const [isRoutingLoading, setIsRoutingLoading] = useState(false);
 
   React.useEffect(() => {
@@ -79,22 +80,53 @@ export default function Checkout() {
           } catch (err) { console.error('Failed to geocode customer address:', err); }
         }
 
-        // Fetch fresh supplier list from backend to guarantee authoritative coordinates and address
-        let freshSuppliersMap = {};
+        // 1. Fetch fresh supplier list from backend to guarantee authoritative coordinates and address
+        let freshSuppliers = {};
         try {
           const supRes = await fetch(`${API_BASE}/catalog-items/suppliers`);
           if (supRes.ok) {
             const supJson = await supRes.json();
             const supList = Array.isArray(supJson) ? supJson : (supJson.suppliers || []);
-            freshSuppliersMap = supList.reduce((acc, s) => {
+            freshSuppliers = supList.reduce((acc, s) => {
               acc[String(s._id || s.id)] = s;
               return acc;
             }, {});
-            setSuppliersMap(freshSuppliersMap);
+            setSuppliersMap(freshSuppliers);
           }
         } catch (e) {
           console.error('Failed to fetch fresh suppliers for route calculation:', e);
         }
+
+        // 2. Fetch fresh restaurant data for all food items to guarantee authoritative coordinates and address
+        let freshRestaurants = {};
+        const foodRestaurantIds = new Set();
+        for (const item of items) {
+          const isCatalog = ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'bakery_beverages', 'cool_hot', 'hot_cool', 'beverages'].includes((item.category || item.service || '').toLowerCase()) || Boolean(item.supplierId) || item.itemModel === 'CatalogItem';
+          if (!isCatalog) {
+            const rId = item.restaurantId ? String(item.restaurantId) : (restaurant?._id ? String(restaurant._id) : null);
+            if (rId && rId !== 'rest_default') {
+              foodRestaurantIds.add(rId);
+            }
+          }
+        }
+
+        await Promise.all(
+          Array.from(foodRestaurantIds).map(async (rId) => {
+            try {
+              const rRes = await fetch(`${API_BASE}/restaurants/${rId}`);
+              if (rRes.ok) {
+                const rData = await rRes.json();
+                const rObj = rData.restaurant || rData;
+                if (rObj) {
+                  freshRestaurants[String(rId)] = rObj;
+                }
+              }
+            } catch (err) {
+              console.error(`Failed to fetch fresh restaurant info for ${rId}:`, err);
+            }
+          })
+        );
+        setFreshRestaurantMap(freshRestaurants);
 
         if (!custPos) {
           setIsRoutingLoading(false);
@@ -112,7 +144,7 @@ export default function Checkout() {
             const sId = item.supplierId ? String(item.supplierId) : 'store_default';
             if (!seenStoreKeys.has(sId)) {
               seenStoreKeys.add(sId);
-              const freshSup = freshSuppliersMap[sId];
+              const freshSup = freshSuppliers[sId];
               uniqueStores.push({
                 id: sId,
                 type: 'supplier',
@@ -127,14 +159,15 @@ export default function Checkout() {
             const rId = item.restaurantId ? String(item.restaurantId) : (restaurant?._id ? String(restaurant._id) : 'rest_default');
             if (!seenStoreKeys.has(rId)) {
               seenStoreKeys.add(rId);
+              const freshRest = freshRestaurants[rId];
               uniqueStores.push({
                 id: rId,
                 type: 'restaurant',
-                name: item.restaurantName || restaurant?.name || 'Restaurant',
+                name: freshRest?.name || item.restaurantName || restaurant?.name || 'Restaurant',
                 category: 'Food',
-                lat: restaurant?.lat ?? null,
-                lng: restaurant?.lng ?? null,
-                address: restaurant?.address || ''
+                lat: freshRest?.lat ?? freshRest?.latitude ?? restaurant?.lat ?? restaurant?.latitude ?? null,
+                lng: freshRest?.lng ?? freshRest?.longitude ?? restaurant?.lng ?? restaurant?.longitude ?? null,
+                address: freshRest?.formattedAddress || freshRest?.address || restaurant?.formattedAddress || restaurant?.address || item.restaurantAddress || ''
               });
             }
           }
@@ -201,10 +234,26 @@ export default function Checkout() {
   const groupedItems = items.reduce((acc, item) => {
     const source = getCartItemSource(item);
     const key = source.sourceKey;
-    const freshSup = source.sourceType === 'supplier' ? suppliersMap[String(source.sourceId)] : null;
-    const finalAddress = freshSup?.address || source.address || (source.sourceType === 'restaurant' ? (restaurant?.address || '') : '');
-    const finalLat = freshSup?.latitude ?? source.latitude ?? (source.sourceType === 'restaurant' ? (restaurant?.lat ?? null) : null);
-    const finalLng = freshSup?.longitude ?? source.longitude ?? (source.sourceType === 'restaurant' ? (restaurant?.lng ?? null) : null);
+    const isSupplier = source.sourceType === 'supplier';
+    
+    let finalAddress = '';
+    let finalLat = null;
+    let finalLng = null;
+    let finalName = source.sourceName;
+
+    if (isSupplier) {
+      const freshSup = suppliersMap[String(source.sourceId)];
+      finalAddress = freshSup?.address || source.address || '';
+      finalLat = freshSup?.latitude ?? source.latitude ?? null;
+      finalLng = freshSup?.longitude ?? source.longitude ?? null;
+      finalName = freshSup?.name || source.sourceName;
+    } else {
+      const freshRest = freshRestaurantMap[String(source.sourceId)] || freshRestaurantMap[String(restaurant?._id)];
+      finalAddress = freshRest?.formattedAddress || freshRest?.address || restaurant?.formattedAddress || restaurant?.address || source.address || item.restaurantAddress || '';
+      finalLat = freshRest?.lat ?? freshRest?.latitude ?? restaurant?.lat ?? restaurant?.latitude ?? source.latitude ?? null;
+      finalLng = freshRest?.lng ?? freshRest?.longitude ?? restaurant?.lng ?? restaurant?.longitude ?? source.longitude ?? null;
+      finalName = freshRest?.name || restaurant?.name || source.sourceName;
+    }
 
     if (!acc[key]) {
       acc[key] = {
@@ -212,7 +261,7 @@ export default function Checkout() {
         sourceKey: key,
         type: source.sourceType,
         sourceId: source.sourceId,
-        sourceName: freshSup?.name || source.sourceName,
+        sourceName: finalName,
         categoryKey: source.categoryKey,
         categoryLabel: source.categoryLabel,
         categoryIcon: source.categoryIcon,

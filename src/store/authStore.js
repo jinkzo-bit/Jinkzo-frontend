@@ -111,7 +111,10 @@ export const useAuthStore = create((set, get) => ({
         throw new Error(data.message || 'Login failed');
       }
 
-      if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
+      if (data.token) {
+        localStorage.setItem(ACCESS_KEY, data.token);
+        localStorage.setItem('token', data.token);
+      }
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
 
@@ -164,7 +167,10 @@ export const useAuthStore = create((set, get) => ({
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || 'Registration failed');
 
-      if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
+      if (data.token) {
+        localStorage.setItem(ACCESS_KEY, data.token);
+        localStorage.setItem('token', data.token);
+      }
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
 
@@ -215,6 +221,7 @@ export const useAuthStore = create((set, get) => ({
     }
 
     localStorage.removeItem(ACCESS_KEY);
+    localStorage.removeItem('token');
     localStorage.removeItem(REFRESH_KEY);
     set({ user: null, token: null, isAuthenticated: false, error: null });
   },
@@ -366,7 +373,10 @@ export const useAuthStore = create((set, get) => ({
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || 'OTP verification failed.');
-      if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
+      if (data.token) {
+        localStorage.setItem(ACCESS_KEY, data.token);
+        localStorage.setItem('token', data.token);
+      }
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
       return { success: true };

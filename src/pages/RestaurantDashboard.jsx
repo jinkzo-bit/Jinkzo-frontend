@@ -680,9 +680,14 @@ export default function RestaurantDashboard() {
         body: JSON.stringify({ status: nextStatus, rejectionReason: reason })
       });
       if (res.ok) {
-        const updated = await res.json();
-        setOrders(prev => prev.map(o => o._id === orderId ? updated : o));
+        // Always re-fetch from the restaurant-isolated endpoint so we never
+        // splice the raw unified Order document (which contains supplier items)
+        // into the restaurant's order list.
+        fetchOrders();
         fetchMetrics();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        console.error('[RESTAURANT] Order status update failed:', errData.message);
       }
     } catch (err) {
       console.error(err);

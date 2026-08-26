@@ -1,18 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_BASE } from '../config/api';
+import { useAuthStore } from '../store/authStore';
 
 const NotificationCenter = ({ role, userId, restaurantId }) => {
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const audioRef = useRef(null);
+  const { token } = useAuthStore();
   
   useEffect(() => {
     fetchNotifications();
 
-    const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-    const socket = io(socketUrl, { withCredentials: true });
+    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
+    const socket = io(socketHost, {
+      auth: { token: token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token') },
+      withCredentials: true,
+      transports: ['websocket', 'polling']
+    });
 
     socket.on('connect', () => {
       console.log('[NotificationCenter] Connected to socket');
@@ -39,12 +46,15 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
     return () => {
       socket.disconnect();
     };
-  }, [userId, restaurantId]);
+  }, [userId, restaurantId, token]);
 
   const fetchNotifications = async () => {
+    const activeToken = token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token');
+    if (!activeToken) return;
+
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/notifications`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      const res = await fetch(`${API_BASE}/notifications`, {
+        headers: { 'Authorization': `Bearer ${activeToken}` }
       });
       if (res.ok) {
         const data = await res.json();
@@ -63,10 +73,13 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
   };
 
   const markAsRead = async (id) => {
+    const activeToken = token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token');
+    if (!activeToken) return;
+
     try {
-      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/notifications/${id}/read`, {
+      await fetch(`${API_BASE}/notifications/${id}/read`, {
         method: 'PUT',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers: { 'Authorization': `Bearer ${activeToken}` }
       });
       setNotifications(prev => prev.map(n => n._id === id ? { ...n, read: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
@@ -76,10 +89,13 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
   };
 
   const markAllAsRead = async () => {
+    const activeToken = token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token');
+    if (!activeToken) return;
+
     try {
-      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/notifications/read-all`, {
+      await fetch(`${API_BASE}/notifications/read-all`, {
         method: 'PUT',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers: { 'Authorization': `Bearer ${activeToken}` }
       });
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);

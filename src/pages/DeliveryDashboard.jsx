@@ -246,19 +246,25 @@ export default function DeliveryDashboard() {
   };
 
   useEffect(() => {
-    if (!token || user?.role !== 'delivery') {
+    if (!token) {
       navigate('/login');
       return;
     }
-    fetchProfile();
-    fetchOrdersData();
-
-    const interval = setInterval(() => {
+    if (user && user.role !== 'delivery') {
+      navigate('/');
+      return;
+    }
+    if (user?.role === 'delivery') {
       fetchProfile();
       fetchOrdersData();
-    }, 60000); // 60 seconds fallback polling to prevent 429 API rate limits
 
-    return () => clearInterval(interval);
+      const interval = setInterval(() => {
+        fetchProfile();
+        fetchOrdersData();
+      }, 60000); // 60 seconds fallback polling to prevent 429 API rate limits
+
+      return () => clearInterval(interval);
+    }
   }, [token, user, navigate]);
 
 
@@ -646,7 +652,7 @@ export default function DeliveryDashboard() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ 
           status: 'Rider_Rejected',

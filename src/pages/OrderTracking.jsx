@@ -21,6 +21,7 @@ export default function OrderTracking() {
   const [isLoading, setIsLoading] = useState(true);
   const [countdown, setCountdown] = useState(30); // minutes
   const [riderLoc, setRiderLoc] = useState(null); // Socket GPS stream
+  const [gpsStatus, setGpsStatus] = useState('locating'); // 'live' | 'locating' | 'unavailable'
 
   // Review states
   const [rating, setRating] = useState(0);
@@ -217,9 +218,14 @@ export default function OrderTracking() {
       }
     });
 
-    socket.on('locationUpdated', ({ lat, lng }) => {
+    socket.on('locationUpdated', ({ lat, lng, status }) => {
       console.log('[TRACKING SOCKET] Live rider location update:', lat, lng);
-      setRiderLoc({ lat, lng });
+      if (typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
+        setRiderLoc({ lat, lng });
+        setGpsStatus('live');
+      } else if (status) {
+        setGpsStatus(status);
+      }
     });
 
     return () => {
