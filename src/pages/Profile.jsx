@@ -1,7 +1,7 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, MapPin, LogOut, Trash2, Pencil, AlertTriangle, Plus, Globe, ChevronRight } from 'lucide-react';
+import { User, MapPin, LogOut, Trash2, Pencil, AlertTriangle, Plus, Globe, ChevronRight, Bell } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 import { useTranslation } from '../store/languageStore';
@@ -337,6 +337,83 @@ export default function Profile() {
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Notification Preferences */}
+          <div className="bg-surface border border-line rounded-3xl p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display font-extrabold text-sm text-main flex items-center gap-2">
+                <Bell className="w-4 h-4 text-orange-500" /> Notifications & Alerts
+              </h3>
+              <Link to="/notifications" className="text-xs font-bold text-orange-500 hover:underline">
+                View History →
+              </Link>
+            </div>
+
+            <div className="flex flex-col divide-y divide-line/40">
+              <div className="py-3 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-main">Order Status Updates</h4>
+                  <p className="text-[11px] text-muted">Get notified on acceptance, packing, dispatch and delivery</p>
+                </div>
+                <input
+                  type="checkbox"
+                  defaultChecked={user?.notificationPreferences?.orderUpdates !== false}
+                  onChange={async (e) => {
+                    try {
+                      await fetch(`${API_BASE}/auth/notification-preferences`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ orderUpdates: e.target.checked })
+                      });
+                    } catch (err) {}
+                  }}
+                  className="w-4 h-4 accent-orange-500 rounded cursor-pointer"
+                />
+              </div>
+
+              <div className="py-3 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-main">Ride & Courier Alerts</h4>
+                  <p className="text-[11px] text-muted">Arrival, ride started, and trip completion updates</p>
+                </div>
+                <input
+                  type="checkbox"
+                  defaultChecked={user?.notificationPreferences?.rideUpdates !== false}
+                  onChange={async (e) => {
+                    try {
+                      await fetch(`${API_BASE}/auth/notification-preferences`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ rideUpdates: e.target.checked })
+                      });
+                    } catch (err) {}
+                  }}
+                  className="w-4 h-4 accent-orange-500 rounded cursor-pointer"
+                />
+              </div>
+
+              <div className="py-3 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-main">Offers, Discounts & Deals</h4>
+                  <p className="text-[11px] text-muted">Exclusive promo codes, festival sales and flash discounts</p>
+                </div>
+                <input
+                  type="checkbox"
+                  defaultChecked={user?.notificationPreferences?.offersPromotions !== false}
+                  onChange={async (e) => {
+                    try {
+                      await fetch(`${API_BASE}/auth/notification-preferences`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ offersPromotions: e.target.checked })
+                      });
+                    } catch (err) {}
+                  }}
+                  className="w-4 h-4 accent-orange-500 rounded cursor-pointer"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Delete Account danger zone */}

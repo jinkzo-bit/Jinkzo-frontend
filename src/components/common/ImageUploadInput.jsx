@@ -3,8 +3,8 @@ import { Upload, Link as LinkIcon, Image as ImageIcon, X, AlertCircle, CheckCirc
 import { getImageUrl, handleImageError, importImageFromUrl } from '../../utils/uploadUtil';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
-const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'];
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
+const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 /**
  * Standard format bytes helper
@@ -45,7 +45,6 @@ export default function ImageUploadInput({
   previewShape = 'square',
   helperText = '',
 }) {
-  const fileInputRef = useRef(null);
   const [sourceType, setSourceType] = useState('file');
   const [urlInput, setUrlInput] = useState('');
   const [fileError, setFileError] = useState('');
@@ -56,12 +55,7 @@ export default function ImageUploadInput({
   const [importSuccess, setImportSuccess] = useState(false);
   const [importMetadata, setImportMetadata] = useState(null);
 
-  // Sync urlInput when value changes from external source (e.g. edit modal or imported path)
-  useEffect(() => {
-    if (value && typeof value === 'string' && value.trim()) {
-      setUrlInput(value);
-    }
-  }, [value]);
+  const fileInputRef = useRef(null);
 
   // Manage blob preview lifecycle
   useEffect(() => {
@@ -168,7 +162,6 @@ export default function ImageUploadInput({
     try {
       const res = await importImageFromUrl(targetUrl);
       if (res && res.imageUrl) {
-        setUrlInput(res.imageUrl);
         onUrlChange?.(res.imageUrl);
         setImportSuccess(true);
         setImportMetadata({
@@ -195,6 +188,7 @@ export default function ImageUploadInput({
 
   // Determine current active preview
   const hasSelectedFile = Boolean(file && blobPreview);
+  const hasImportedImage = Boolean(importSuccess && value);
   const hasExistingImage = Boolean(value && !hasSelectedFile);
 
   let previewSrc = null;
@@ -209,10 +203,9 @@ export default function ImageUploadInput({
       previewBadge = 'Current Image';
     }
   } else {
-    const activeUrl = (value || urlInput || '').trim();
-    if (activeUrl) {
-      previewSrc = getImageUrl(activeUrl, imageType);
-      previewBadge = importSuccess ? 'Imported' : (activeUrl.startsWith('/uploads/') ? 'Stored Image' : 'URL Preview');
+    if (hasImportedImage) {
+      previewSrc = getImageUrl(value, imageType);
+      previewBadge = 'Imported';
     } else if (hasExistingImage) {
       previewSrc = getImageUrl(value, imageType);
       previewBadge = 'Current Image';
@@ -351,11 +344,8 @@ export default function ImageUploadInput({
                     placeholder="Paste image URL (https://...)"
                     value={urlInput}
                     onChange={(e) => {
-                      const val = e.target.value;
-                      setUrlInput(val);
+                      setUrlInput(e.target.value);
                       setUrlError('');
-                      setImportSuccess(false);
-                      onUrlChange?.(val.trim());
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {

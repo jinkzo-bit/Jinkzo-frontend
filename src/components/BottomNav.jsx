@@ -104,10 +104,7 @@ export default function BottomNav() {
     ];
 
     return (
-      <nav
-        style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
-        className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0E121C]/95 backdrop-blur-md border-t border-gray-200/80 dark:border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_25px_rgba(0,0,0,0.5)] px-2 sm:px-6 pt-2 transition-colors duration-300"
-      >
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0E121C]/95 backdrop-blur-md border-t border-gray-200/80 dark:border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_25px_rgba(0,0,0,0.5)] px-2 sm:px-6 py-2 transition-colors duration-300">
         <div className="max-w-md mx-auto flex items-center justify-between relative">
           {partnerTabs.map((tab) => {
             const Icon = tab.icon;
@@ -151,10 +148,7 @@ export default function BottomNav() {
     ];
 
     return (
-      <nav
-        style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
-        className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0E121C]/95 backdrop-blur-md border-t border-gray-200/80 dark:border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_25px_rgba(0,0,0,0.5)] px-1 sm:px-6 pt-2 transition-colors duration-300"
-      >
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0E121C]/95 backdrop-blur-md border-t border-gray-200/80 dark:border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_25px_rgba(0,0,0,0.5)] px-1 sm:px-6 py-2 transition-colors duration-300">
         <div className="max-w-md mx-auto flex items-center justify-between relative">
           {deliveryTabs.map((tab) => {
             const Icon = tab.icon;
@@ -187,8 +181,7 @@ export default function BottomNav() {
       {showCartPopup && !isCartEmpty && (
         <div
           ref={popupRef}
-          style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom, 0px))' }}
-          className="fixed left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm bg-white dark:bg-[#141926] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 p-4 animate-fade-in transition-all duration-200"
+          className="fixed bottom-[74px] left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm bg-white dark:bg-[#141926] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 p-4 animate-fade-in transition-all duration-200"
         >
           {/* Header */}
           <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-gray-100 dark:border-white/10">
@@ -287,10 +280,7 @@ export default function BottomNav() {
       )}
 
       {/* ── BOTTOM NAVIGATION BAR (FIXED AT SCREEN BOTTOM) ── */}
-      <nav
-        style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
-        className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0E121C]/95 backdrop-blur-md border-t border-gray-200/80 dark:border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_25px_rgba(0,0,0,0.5)] px-3 sm:px-6 pt-2 transition-colors duration-300"
-      >
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0E121C]/95 backdrop-blur-md border-t border-gray-200/80 dark:border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_25px_rgba(0,0,0,0.5)] px-3 sm:px-6 py-2 transition-colors duration-300">
         <div className="max-w-md mx-auto flex items-center justify-between relative">
 
           {/* 1. HOME */}

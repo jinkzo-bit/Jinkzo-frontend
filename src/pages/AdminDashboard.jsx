@@ -7,10 +7,9 @@ import {
   XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare,
   AlertCircle, ChevronLeft, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2,
   Pencil, Plus, UserCircle, Activity, FileText, Star, TrendingUp, Search, Menu, Filter, Info, Shield, RefreshCw,
-  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical, Save, Sparkles, Utensils, Boxes, ExternalLink
+  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical, Save, Sparkles, Utensils
 } from 'lucide-react';
 import InteractiveMap from '../components/InteractiveMap';
-import SuppliersAndItemsTab from '../components/admin/SuppliersAndItemsTab';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
@@ -311,18 +310,6 @@ export default function AdminDashboard() {
   const [deleteCategoryModal, setDeleteCategoryModal] = useState({ isOpen: false, category: null, warningMessage: '', hasProducts: false, count: 0 });
   const [isDeletingCategory, setIsDeletingCategory] = useState(false);
 
-  // Category Service Availability (6 Primary Platform Services)
-  const [categoryServices, setCategoryServices] = useState([
-    { id: 'food', name: 'Food', isEnabled: true, image: '/assets/cat_food.jpg' },
-    { id: 'ride', name: 'Ride & Courier', isEnabled: true, image: '/assets/cat_ride.jpg' },
-    { id: 'grocery', name: 'Grocery', isEnabled: true, image: '/assets/cat_grocery.jpg' },
-    { id: 'bakery_beverages', name: 'Bakery & Beverages', isEnabled: true, image: '/assets/cat_hot_cool.jpg' },
-    { id: 'veg_fruits', name: 'Veg & Fruits', isEnabled: true, image: '/assets/cat_veg_fruits.jpg' },
-    { id: 'meat', name: 'Meat', isEnabled: true, image: '/assets/cat_meat.jpg' }
-  ]);
-  const [isCategoryServicesLoading, setIsCategoryServicesLoading] = useState(false);
-  const [categoryServiceToggleLoading, setCategoryServiceToggleLoading] = useState({});
-
   // Platform Settings updating state
   const [isSettingsSaving, setIsSettingsSaving] = useState(false);
 
@@ -340,7 +327,6 @@ export default function AdminDashboard() {
     fetchRestaurants();
     fetchBanners();
     fetchCategories();
-    fetchCategoryServices();
 
     const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
     const socket = io(socketHost, {
@@ -489,57 +475,6 @@ export default function AdminDashboard() {
     } finally {
       setIsBannersLoading(false);
     }
-  };
-
-  const fetchCategoryServices = async () => {
-    try {
-      setIsCategoryServicesLoading(true);
-      const res = await fetch(`${API_BASE}/admin/category-services`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setCategoryServices(data);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching category services:', err);
-    } finally {
-      setIsCategoryServicesLoading(false);
-    }
-  };
-
-  const handleUpdateCategoryService = async (serviceId, updateFields) => {
-    setCategoryServiceToggleLoading(prev => ({ ...prev, [serviceId]: true }));
-    // Optimistic UI update
-    setCategoryServices(prev => prev.map(c => c.id === serviceId ? { ...c, ...updateFields } : c));
-    try {
-      const res = await fetch(`${API_BASE}/admin/category-services/${serviceId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(updateFields)
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.message || 'Failed to update category service');
-        fetchCategoryServices();
-      } else {
-        setCategoryServices(prev => prev.map(c => c.id === serviceId ? data : c));
-      }
-    } catch (err) {
-      console.error('Update category service error:', err);
-      fetchCategoryServices();
-    } finally {
-      setCategoryServiceToggleLoading(prev => ({ ...prev, [serviceId]: false }));
-    }
-  };
-
-  const handleToggleCategoryService = async (serviceId, newStatus) => {
-    return handleUpdateCategoryService(serviceId, { isEnabled: newStatus });
   };
 
   const fetchCategories = async (service = selectedCategoryService) => {
@@ -1521,7 +1456,6 @@ export default function AdminDashboard() {
         <div className="lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex flex-col gap-1">
           {[
             { id: 'analytics', label: 'Ecosystem Analytics', icon: DollarSign },
-            { id: 'suppliers_items', label: 'Suppliers & Items', icon: Boxes },
             { id: 'categories', label: 'Categories', icon: Layers, badge: categoriesList.length },
             { id: 'kyc', label: 'KYC Document Approvals', icon: ShieldCheck, badge: pendingKyc.length },
             { id: 'users', label: 'User Directory Manager', icon: Users, badge: allUsers.length },
@@ -1558,15 +1492,21 @@ export default function AdminDashboard() {
               </button>
             );
           })}
+
+          <button
+            onClick={() => navigate('/store-operations')}
+            className="w-full p-3 rounded-2xl flex items-center justify-between text-left font-black text-xs bg-amber-500/10 text-amber-600 border border-amber-500/30 hover:bg-amber-500 hover:text-white transition-all cursor-pointer mt-2 shadow-xs"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm">⚡</span>
+              <span>Store Operations</span>
+            </div>
+            <span className="text-xs font-bold">Open →</span>
+          </button>
         </div>
 
         {/* Right Side: Tab Contents Body */}
         <div className="lg:col-span-3">
-
-          {/* SUPPLIERS & ITEMS TAB */}
-          {activeSubTab === 'suppliers_items' && (
-            <SuppliersAndItemsTab token={token} />
-          )}
 
           {/* ECOSYSTEM ANALYTICS TAB */}
           {activeSubTab === 'analytics' && (
@@ -1852,150 +1792,62 @@ export default function AdminDashboard() {
                 <div className="h-48 bg-surface border border-line rounded-3xl animate-pulse" />
               ) : pendingKyc.length > 0 ? (
                 <div className="flex flex-col gap-4">
-                  {pendingKyc.map(user => {
-                    const isDriver = user.role === 'delivery';
-                    const drivingLicenceNumber =
-                      user.kycDetails?.documentNumber ||
-                      user.drivingLicense ||
-                      user.drivingLicence ||
-                      user.licenseNumber ||
-                      user.licenceNumber ||
-                      user.deliveryDetails?.licenseNumber ||
-                      user.deliveryDetails?.drivingLicense ||
-                      null;
-
-                    const licenceDoc =
-                      user.kycDetails?.documentImage ||
-                      user.kycDetails?.documentUrl ||
-                      (isDriver ? user.profileImage : (user.restaurantImage || user.restaurant?.image)) ||
-                      null;
-
-                    return (
-                      <div key={user._id} className="bg-surface border border-line p-5 rounded-3xl shadow-2xs flex flex-col gap-4 justify-between">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-line">
-                          <div className="flex items-center gap-2.5">
-                            <div className={`p-2 rounded-xl text-xs font-bold ${
-                              user.role === 'restaurant' ? 'bg-violet-50 text-primary dark:bg-violet-950/40 dark:text-violet-400' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
-                            }`}>
-                              {user.role === 'restaurant' ? 'Restaurant Owner' : 'Delivery Driver'}
-                            </div>
-                            <div>
-                              <h4 className="text-sm font-bold text-main">{user.name}</h4>
-                              <span className="text-[10px] font-bold text-muted uppercase">
-                                {isDriver ? 'Driver KYC Verification' : 'Restaurant KYC Verification'}
-                              </span>
-                            </div>
+                  {pendingKyc.map(user => (
+                    <div key={user._id} className="bg-surface border border-line p-5 rounded-3xl shadow-2xs flex flex-col gap-4 justify-between">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-line">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`p-2 rounded-xl text-xs font-bold ${
+                            user.role === 'restaurant' ? 'bg-violet-50 text-primary' : 'bg-emerald-50 text-emerald-600'
+                          }`}>
+                            {user.role === 'restaurant' ? 'Restaurant Owner' : 'Delivery Driver'}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800">
-                              Pending Verification
-                            </span>
-                            <span className="text-xs text-muted font-mono">Registered on {formatAppDateOnly(user.createdAt)}</span>
-                          </div>
+                          <h4 className="text-sm font-bold text-main">{user.name}</h4>
                         </div>
+                        <span className="text-xs text-muted font-mono">Registered on {formatAppDateOnly(user.createdAt)}</span>
+                      </div>
 
-                        {isDriver ? (
-                          /* DRIVER KYC DETAILS */
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
-                            <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5">
-                              <span className="text-[9px] uppercase font-extrabold text-muted">Rider Name</span>
-                              <span className="font-bold text-main truncate">{user.name}</span>
-                            </div>
-
-                            <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5">
-                              <span className="text-[9px] uppercase font-extrabold text-muted">Phone Number</span>
-                              <span className="font-bold text-main">{user.phone || 'Not Provided'}</span>
-                            </div>
-
-                            <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5">
-                              <span className="text-[9px] uppercase font-extrabold text-muted">Vehicle Type</span>
-                              <span className="font-bold text-main">{user.deliveryDetails?.vehicleType || 'Motorcycle'}</span>
-                            </div>
-
-                            <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5">
-                              <span className="text-[9px] uppercase font-extrabold text-muted">Vehicle Number</span>
-                              <span className="font-bold text-main uppercase font-mono">{user.deliveryDetails?.vehicleNumber || 'Not Provided'}</span>
-                            </div>
-
-                            <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5 border border-primary/20 bg-primary/5">
-                              <span className="text-[9px] uppercase font-extrabold text-primary">Driving Licence Number</span>
-                              <span className="font-extrabold text-primary uppercase font-mono text-xs truncate">
-                                {drivingLicenceNumber || 'Not Provided'}
-                              </span>
-                            </div>
-
-                            <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5">
-                              <span className="text-[9px] uppercase font-extrabold text-muted">Licence Document</span>
-                              {licenceDoc ? (
-                                <a
-                                  href={getImageUrl(licenceDoc, 'default')}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1 text-primary hover:text-primary-hover font-bold text-xs mt-0.5 transition-colors cursor-pointer"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                  <span>View Document</span>
-                                  <ExternalLink className="w-3 h-3 opacity-70" />
-                                </a>
-                              ) : (
-                                <span className="font-semibold text-muted text-xs">Not Provided</span>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          /* RESTAURANT KYC DETAILS */
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                            <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5">
-                              <span className="text-[9px] uppercase font-extrabold text-muted">Restaurant / Owner</span>
-                              <span className="font-bold text-main truncate">{user.restaurant?.name || user.name}</span>
-                            </div>
-                            <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5">
-                              <span className="text-[9px] uppercase font-extrabold text-muted">Email Address</span>
-                              <span className="font-bold text-main truncate">{user.email}</span>
-                            </div>
-                            <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5">
-                              <span className="text-[9px] uppercase font-extrabold text-muted">Mobile Phone</span>
-                              <span className="font-bold text-main">{user.phone || 'Not Provided'}</span>
-                            </div>
-                            <div className="bg-base p-3 rounded-2xl flex flex-col gap-0.5 border border-primary/20 bg-primary/5">
-                              <span className="text-[9px] uppercase font-extrabold text-primary">
-                                {user.kycDetails?.documentType || 'Tax / GSTIN ID'}
-                              </span>
-                              <span className="font-extrabold text-primary uppercase font-mono text-xs truncate">
-                                {user.kycDetails?.documentNumber || 'Not Provided'}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Remarks block and approval buttons */}
-                        <div className="flex flex-col sm:flex-row gap-3 items-center mt-1">
-                          <input
-                            type="text"
-                            placeholder="Provide approval / rejection notes..."
-                            value={kycRemarks[user._id] || ''}
-                            onChange={(e) => setKycRemarks({ ...kycRemarks, [user._id]: e.target.value })}
-                            className="bg-base border border-line-strong rounded-xl px-4 py-2.5 text-xs text-main outline-none flex-grow w-full"
-                          />
-
-                          <div className="flex gap-2 flex-shrink-0 w-full sm:w-auto">
-                            <button
-                              onClick={() => handleKycStatus(user._id, 'Approved')}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-4 py-2.5 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1 flex-grow sm:flex-grow-0 cursor-pointer"
-                            >
-                              <CheckCircle className="w-3.5 h-3.5" /> Approve
-                            </button>
-                            <button
-                              onClick={() => handleKycStatus(user._id, 'Rejected')}
-                              className="bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-bold px-4 py-2.5 rounded-xl border border-red-200 transition-colors flex items-center justify-center gap-1 flex-grow sm:flex-grow-0 cursor-pointer"
-                            >
-                              <XCircle className="w-3.5 h-3.5" /> Reject
-                            </button>
-                          </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                        <div className="bg-base p-3.5 rounded-2xl flex flex-col gap-0.5">
+                          <span className="text-[9px] uppercase font-extrabold text-muted">Email Address</span>
+                          <span className="font-bold text-main truncate">{user.email}</span>
+                        </div>
+                        <div className="bg-base p-3.5 rounded-2xl flex flex-col gap-0.5">
+                          <span className="text-[9px] uppercase font-extrabold text-muted">Mobile Phone</span>
+                          <span className="font-bold text-main">{user.phone}</span>
+                        </div>
+                        <div className="bg-base p-3.5 rounded-2xl flex flex-col gap-0.5">
+                          <span className="text-[9px] uppercase font-extrabold text-muted">Credentials Sent</span>
+                          <span className="font-bold text-primary uppercase font-mono">{user.kycDetails?.documentType || 'N/A'}: {user.kycDetails?.documentNumber || 'N/A'}</span>
                         </div>
                       </div>
-                    );
-                  })}
+
+                      {/* Remarks block and approval buttons */}
+                      <div className="flex flex-col sm:flex-row gap-3 items-center mt-1">
+                        <input
+                          type="text"
+                          placeholder="Provide approval / rejection notes..."
+                          value={kycRemarks[user._id] || ''}
+                          onChange={(e) => setKycRemarks({ ...kycRemarks, [user._id]: e.target.value })}
+                          className="bg-base border border-line-strong rounded-xl px-4 py-2.5 text-xs text-main outline-none flex-grow w-full"
+                        />
+
+                        <div className="flex gap-2 flex-shrink-0 w-full sm:w-auto">
+                          <button
+                            onClick={() => handleKycStatus(user._id, 'Approved')}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-4 py-2.5 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1 flex-grow sm:flex-grow-0 cursor-pointer"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" /> Approve
+                          </button>
+                          <button
+                            onClick={() => handleKycStatus(user._id, 'Rejected')}
+                            className="bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-bold px-4 py-2.5 rounded-xl border border-red-200 transition-colors flex items-center justify-center gap-1 flex-grow sm:flex-grow-0 cursor-pointer"
+                          >
+                            <XCircle className="w-3.5 h-3.5" /> Reject
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="bg-surface rounded-3xl p-16 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
@@ -2091,7 +1943,7 @@ export default function AdminDashboard() {
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex flex-col gap-1 pr-12">
-                            <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-2">
                               <span className={`text-[9px] font-extrabold px-1.8 py-0.5 rounded uppercase ${
                                 u.role === 'admin' ? 'bg-red-50 text-red-600 border border-red-100' :
                                 u.role === 'restaurant' ? 'bg-violet-50 text-primary border border-violet-100' :
@@ -2101,24 +1953,9 @@ export default function AdminDashboard() {
                                 {u.role}
                               </span>
                               <h4 className="text-xs font-bold text-main line-clamp-1">{u.name}</h4>
-                              {isRider && (
-                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
-                                  u.kycStatus === 'Approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400' :
-                                  u.kycStatus === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400' :
-                                  'bg-base text-muted border-line'
-                                }`}>
-                                  KYC: {u.kycStatus || 'Not Submitted'}
-                                </span>
-                              )}
                             </div>
                             <span className="text-[10px] text-muted font-semibold">{u.email}</span>
                             <span className="text-[9px] text-muted font-mono mt-0.5">{u.phone}</span>
-                            {isRider && (
-                              <div className="flex items-center gap-3 text-[10px] text-muted font-medium mt-1 flex-wrap">
-                                <span>Vehicle: <strong className="text-main uppercase font-mono">{u.deliveryDetails?.vehicleNumber || 'N/A'}</strong></span>
-                                <span>DL: <strong className="text-primary uppercase font-mono">{u.kycDetails?.documentNumber || u.drivingLicense || u.licenseNumber || 'N/A'}</strong></span>
-                              </div>
-                            )}
                           </div>
 
                           {/* Block / Edit / Delete Controls */}
@@ -3867,165 +3704,6 @@ export default function AdminDashboard() {
           {/* ── CATEGORY MANAGEMENT TAB ──────────────────────────────────── */}
           {activeSubTab === 'categories' && (
             <div className="flex flex-col gap-6 animate-fade-in">
-              {/* ── 1. 6 CORE CATEGORY SERVICES AVAILABILITY (ON/OFF & HOURS CONTROL) ── */}
-              <div className="bg-surface border border-line rounded-3xl p-5 sm:p-6 flex flex-col gap-4 shadow-2xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line pb-4">
-                  <div className="flex flex-col gap-0.5">
-                    <h4 className="font-display font-extrabold text-sm sm:text-base text-main flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-primary" />
-                      Category Services Availability & Service Hours (ON/OFF Control)
-                    </h4>
-                    <p className="text-xs text-muted font-medium">
-                      Configure live availability and opening/closing hours in IST (<span className="font-semibold text-main">Asia/Kolkata</span>) for all 6 customer categories. When turned OFF or closed, categories remain visible on Home and ordering is safely blocked.
-                    </p>
-                  </div>
-                  {isCategoryServicesLoading && (
-                    <div className="flex items-center gap-2 text-xs font-bold text-primary">
-                      <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      <span>Syncing...</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
-                  {categoryServices.map((service) => {
-                    const isToggling = categoryServiceToggleLoading[service.id];
-                    const isEnabled = service.isEnabled !== false;
-                    const is24Hours = service.is24Hours === true;
-                    const status = service.status || (isEnabled ? 'OPEN' : 'DISABLED');
-                    const isClosed = status === 'CLOSED';
-                    const isDisabled = status === 'DISABLED' || !isEnabled;
-
-                    return (
-                      <div
-                        key={service.id}
-                        className={`border rounded-2xl p-4 flex flex-col justify-between gap-3.5 transition-all duration-200 ${
-                          isDisabled
-                            ? 'bg-base/60 border-line-strong'
-                            : isClosed
-                            ? 'bg-amber-500/5 border-amber-500/30'
-                            : 'bg-surface border-line hover:border-emerald-500/40 hover:shadow-xs'
-                        }`}
-                      >
-                        {/* Top: Thumbnail, Name, Status Badge, and Switch */}
-                        <div className="flex items-start justify-between gap-2.5">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-12 h-12 rounded-xl overflow-hidden bg-base border border-line shrink-0 flex items-center justify-center">
-                              <img
-                                src={getImageUrl(service.image || `/assets/cat_${service.id}.jpg`, 'category')}
-                                alt={service.name}
-                                onError={(e) => handleImageError(e, 'category')}
-                                className="w-full h-full object-contain p-1"
-                              />
-                            </div>
-
-                            <div className="flex flex-col min-w-0">
-                              <span className="font-display font-extrabold text-xs sm:text-sm text-main truncate">
-                                {service.name}
-                              </span>
-                              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                                {isDisabled ? (
-                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:border-red-800 dark:text-red-400">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-                                    SERVICE DISABLED
-                                  </span>
-                                ) : isClosed ? (
-                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-400">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                                    CLOSED NOW ({service.message || 'Outside hours'})
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                    OPEN NOW
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Switch Button */}
-                          <div className="shrink-0 pt-0.5">
-                            <button
-                              type="button"
-                              disabled={isToggling}
-                              onClick={() => handleUpdateCategoryService(service.id, { isEnabled: !isEnabled })}
-                              aria-label={`Toggle ${service.name}`}
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none cursor-pointer ${
-                                isToggling ? 'opacity-50 cursor-wait' : ''
-                              } ${
-                                isEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'
-                              }`}
-                            >
-                              <span
-                                className={`inline-block h-4.5 w-4.5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${
-                                  isEnabled ? 'translate-x-5.5' : 'translate-x-1'
-                                }`}
-                              />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Bottom: Service Hours Config */}
-                        <div className="pt-2.5 border-t border-line flex flex-col gap-2">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Hours:</span>
-                            <div className="inline-flex rounded-lg p-0.5 bg-base border border-line text-[10px] font-bold">
-                              <button
-                                type="button"
-                                disabled={isToggling}
-                                onClick={() => handleUpdateCategoryService(service.id, { is24Hours: false })}
-                                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
-                                  !is24Hours ? 'bg-surface text-main shadow-2xs font-extrabold' : 'text-muted hover:text-main'
-                                }`}
-                              >
-                                Custom Hours
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isToggling}
-                                onClick={() => handleUpdateCategoryService(service.id, { is24Hours: true })}
-                                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
-                                  is24Hours ? 'bg-primary text-white shadow-2xs font-extrabold' : 'text-muted hover:text-main'
-                                }`}
-                              >
-                                24 Hours
-                              </button>
-                            </div>
-                          </div>
-
-                          {!is24Hours && (
-                            <div className="grid grid-cols-2 gap-2 pt-0.5">
-                              <div className="flex flex-col gap-0.5">
-                                <label className="text-[9px] font-extrabold text-muted uppercase">Opens</label>
-                                <input
-                                  type="time"
-                                  disabled={isToggling}
-                                  value={service.openingTime || '06:00'}
-                                  onChange={(e) => handleUpdateCategoryService(service.id, { openingTime: e.target.value })}
-                                  className="bg-base border border-line rounded-lg px-2 py-1 text-[11px] font-bold text-main outline-none focus:border-primary cursor-pointer"
-                                />
-                              </div>
-                              <div className="flex flex-col gap-0.5">
-                                <label className="text-[9px] font-extrabold text-muted uppercase">Closes</label>
-                                <input
-                                  type="time"
-                                  disabled={isToggling}
-                                  value={service.closingTime || '22:00'}
-                                  onChange={(e) => handleUpdateCategoryService(service.id, { closingTime: e.target.value })}
-                                  className="bg-base border border-line rounded-lg px-2 py-1 text-[11px] font-bold text-main outline-none focus:border-primary cursor-pointer"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* ── 2. SUB-CATEGORIES CRUD TABLE ───────────────────────────── */}
               {/* Header with Dashboard Service Selector & Add Category Button */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
                 <div className="flex flex-col gap-1">

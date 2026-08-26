@@ -52,22 +52,12 @@ export const useCartStore = create(
     }, 3000);
   },
 
-  addItem: (item, restaurant = null) => {
+  addItem: (item, restaurant) => {
     const { items, platformSettings } = get();
+    const isStoreItem = item.serviceType && ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'].includes(item.serviceType);
 
-    const isCatalog = (item.service && item.service !== 'food') || 
-      (item.category && ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes(item.category.toLowerCase())) ||
-      Boolean(item.supplierId) ||
-      Boolean(item.supplier) ||
-      item.itemModel === 'CatalogItem';
-
-    if (isCatalog) {
-      if (item.isAvailable === false) {
-        get().showToast('This item is currently out of stock.', 'error');
-        return { success: false, message: 'This item is currently out of stock.' };
-      }
-    } else {
-      // 0. Check food restaurant open status and item custom availability
+    if (!isStoreItem) {
+      // 0. Check restaurant open status and item custom availability for food
       const timingStatus = checkRestaurantOpenStatus(restaurant?.openingHours, restaurant?.isClosed);
       if (!timingStatus.isOpen) {
         get().showToast('This restaurant is currently closed.', 'error');
@@ -90,7 +80,7 @@ export const useCartStore = create(
       }
 
       // 2. Check unique hotel limit
-      const currentHotelIds = new Set(items.filter(i => !i.supplierId && i.restaurantId).map(i => String(i.restaurantId)));
+      const currentHotelIds = new Set(items.map(i => String(i.restaurantId)).filter(Boolean));
       const isNewHotel = restaurant?._id && !currentHotelIds.has(String(restaurant._id));
       if (isNewHotel) {
         const maxHotels = platformSettings?.foodMaxHotels ?? 3;
@@ -102,68 +92,53 @@ export const useCartStore = create(
     }
 
     let updatedItems = [...items];
-    const itemUnit = item.unit ? String(item.unit).trim() : '';
-    const itemKey = itemUnit ? `${item._id || item.id}_${itemUnit}` : String(item._id || item.id);
+    const existingIndex = items.findIndex(i => String(i.menuItemId || i.productId) === String(item._id));
 
-    const existingIndex = items.findIndex(i => {
-      const iUnit = i.unit ? String(i.unit).trim() : '';
-      const iKey = iUnit ? `${i.menuItemId}_${iUnit}` : String(i.menuItemId);
-      return iKey === itemKey;
-    });
+    if (isStoreItem && item.stock !== undefined) {
+      const nextQty = existingIndex > -1 ? updatedItems[existingIndex].quantity + 1 : 1;
+      if (nextQty > item.stock) {
+        get().showToast(`Only ${item.stock} in stock!`, 'error');
+        return { success: false, message: `Only ${item.stock} items available in stock.` };
+      }
+    }
 
     if (existingIndex > -1) {
       updatedItems[existingIndex].quantity += 1;
     } else {
-      const supLat = item.supplierLatitude ?? item.supplier?.latitude ?? null;
-      const supLng = item.supplierLongitude ?? item.supplier?.longitude ?? null;
-      const supAddr = item.supplierAddress ?? item.supplier?.address ?? '';
-      const supPhone = item.supplierPhone ?? item.supplier?.phone ?? '';
-
       updatedItems.push({
-        cartKey: itemKey,
-        menuItemId: item._id || item.id,
+        menuItemId: item._id,
+        productId: item._id,
+        serviceType: item.serviceType || 'FOOD',
         name: item.name,
         price: item.price,
-        image: item.image || '',
+        image: item.image,
         isVeg: item.isVeg,
-        unit: itemUnit,
-        service: isCatalog ? (item.service || item.category || 'catalog') : 'food',
-        category: item.category || '',
-        itemModel: isCatalog ? 'CatalogItem' : 'MenuItem',
-        supplierId: item.supplierId || item.supplier?._id || item.supplier?.id || (isCatalog && item.category ? `sup_${item.category}` : null),
-        supplierName: item.supplierName || item.supplier?.name || (typeof item.supplier === 'string' ? item.supplier : null) || (isCatalog && item.category ? `${item.category.toUpperCase().replace(/_/g, ' ')} STORE` : null),
-        supplierAddress: supAddr,
-        supplierLatitude: supLat,
-        supplierLongitude: supLng,
-        supplierPhone: supPhone,
-        supplier: item.supplier || null,
+        unit: item.unit || '',
+        weight: item.weight || '',
+        packSize: item.packSize || '',
+        stock: item.stock,
         quantity: 1,
-        restaurantId: isCatalog ? null : (restaurant?._id || item.restaurantId || null),
-        restaurantName: isCatalog ? null : (restaurant?.name || item.restaurantName || null),
-        restaurantImage: isCatalog ? null : (restaurant?.image || restaurant?.logo || item.image || ''),
-        restaurantDeliveryTime: isCatalog ? null : (restaurant?.deliveryTime || 30),
-        restaurantOffers: isCatalog ? [] : (restaurant?.offers || []),
-        restaurantIsClosed: isCatalog ? false : (restaurant?.isClosed || false)
+        restaurantId: restaurant?._id || 'store_jinkzo',
+        restaurantName: restaurant?.name || 'Jinkzo Store',
+        restaurantImage: restaurant?.image || restaurant?.logo || '',
+        restaurantDeliveryTime: restaurant?.deliveryTime || 25,
+        restaurantOffers: restaurant?.offers || [],
+        restaurantIsClosed: false
       });
     }
 
     set({ 
       items: updatedItems, 
-      restaurant: restaurant || get().restaurant
+      restaurant: restaurant || { _id: 'store_jinkzo', name: 'Jinkzo Store' }
     });
     
-    get().showToast(`Added "${item.name}${itemUnit ? ` (${itemUnit})` : ''}" to cart!`);
+    get().showToast(`Added "${item.name}" to cart!`);
     return { success: true };
   },
 
-  removeItem: (menuItemId, unit = null) => {
+  removeItem: (menuItemId) => {
     const { items } = get();
-    const existingIndex = items.findIndex(i => {
-      if (unit != null && unit !== '') {
-        return String(i.menuItemId) === String(menuItemId) && (i.unit || '') === String(unit);
-      }
-      return String(i.menuItemId) === String(menuItemId);
-    });
+    const existingIndex = items.findIndex(i => String(i.menuItemId) === String(menuItemId));
     if (existingIndex === -1) return;
 
     let updatedItems = [...items];
@@ -186,15 +161,10 @@ export const useCartStore = create(
     });
   },
 
-  updateQuantity: (menuItemId, quantity, unit = null) => {
+  updateQuantity: (menuItemId, quantity) => {
     const { items, platformSettings } = get();
     let updatedItems = [...items];
-    const index = updatedItems.findIndex(i => {
-      if (unit != null && unit !== '') {
-        return String(i.menuItemId) === String(menuItemId) && (i.unit || '') === String(unit);
-      }
-      return String(i.menuItemId) === String(menuItemId);
-    });
+    const index = updatedItems.findIndex(i => String(i.menuItemId) === String(menuItemId));
     if (index === -1) return;
 
     if (quantity <= 0) {
@@ -345,37 +315,19 @@ export const useCartStore = create(
     
     const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     
-    // Group unique pickup sources (Restaurants + Catalog Suppliers)
-    const uniquePickupSources = {};
+    // Group unique restaurants
+    const uniqueRestaurants = {};
     items.forEach(item => {
-      const isCatalog = item.itemModel === 'CatalogItem' || Boolean(item.supplierId) || (item.service && item.service !== 'food') || ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes((item.category || '').toLowerCase());
-
-      if (isCatalog) {
-        const supId = item.supplierId ? String(item.supplierId) : (item.category ? `sup_${item.category}` : 'store_default');
-        const supKey = `supplier_${supId}`;
-        if (!uniquePickupSources[supKey]) {
-          uniquePickupSources[supKey] = {
-            type: 'supplier',
-            id: supId,
-            name: item.supplierName || (item.category ? `${item.category.toUpperCase().replace(/_/g, ' ')} STORE` : 'Store Pickup')
-          };
-        }
-      } else if (item.restaurantId) {
-        const restKey = `restaurant_${item.restaurantId}`;
-        if (!uniquePickupSources[restKey]) {
-          uniquePickupSources[restKey] = {
-            type: 'restaurant',
-            id: item.restaurantId,
-            name: item.restaurantName || 'Restaurant',
-            deliveryTime: item.restaurantDeliveryTime || 30
-          };
-        }
+      if (item.restaurantId && !uniqueRestaurants[item.restaurantId]) {
+        uniqueRestaurants[item.restaurantId] = {
+          name: item.restaurantName,
+          deliveryTime: item.restaurantDeliveryTime || 30
+        };
       }
     });
 
-    const pickupKeys = Object.keys(uniquePickupSources);
-    const totalPickupPointsCount = Math.max(items.length > 0 ? 1 : 0, pickupKeys.length);
-    const selectedHotelsCount = totalPickupPointsCount;
+    const rIds = Object.keys(uniqueRestaurants);
+    const selectedHotelsCount = rIds.length;
     const totalFoodItemsCount = items.reduce((sum, item) => sum + (parseInt(item.quantity) || 1), 0);
     
     // Base food delivery pricing tiers
@@ -387,9 +339,9 @@ export const useCartStore = create(
       tier5: { maxDistanceKm: 20, fee: 120 }
     };
 
-    // 1. FIRST PICKUP / BASE DELIVERY FEE
+    // 1. FIRST HOTEL / NORMAL BASE FEE
     let baseFoodDeliveryFee = 0;
-    if (totalPickupPointsCount > 0) {
+    if (selectedHotelsCount > 0) {
       let fee = fdp.tier1.fee;
       if (distanceKm !== undefined && distanceKm !== null) {
         if (distanceKm <= fdp.tier1.maxDistanceKm) { fee = fdp.tier1.fee; }
@@ -401,9 +353,9 @@ export const useCartStore = create(
       baseFoodDeliveryFee = fee;
     }
 
-    // 2. ADDITIONAL PICKUP FEE (foodHotelChangeFee per extra hotel/store)
+    // 2. ADDITIONAL HOTEL FEE (foodHotelChangeFee per hotel after the first hotel)
     const foodHotelChangeFeeRate = platformSettings?.foodHotelChangeFee ?? 15;
-    const additionalHotelsCount = Math.max(0, totalPickupPointsCount - 1);
+    const additionalHotelsCount = Math.max(0, selectedHotelsCount - 1);
     const foodHotelChangeFeeTotal = additionalHotelsCount * foodHotelChangeFeeRate;
 
     // 3. EXTRA FOOD ITEM BLOCK FEE (ONE foodExtraItemCharge when totalFoodItems > foodBaseItemLimit)
@@ -412,20 +364,20 @@ export const useCartStore = create(
     const foodExtraItemChargeRate = platformSettings?.foodExtraItemCharge ?? 15;
     const foodExtraItemChargeTotal = totalFoodItemsCount > foodBaseItemLimit ? foodExtraItemChargeRate : 0;
 
-    // AUTHORITATIVE DELIVERY FEE
-    const deliveryFee = totalPickupPointsCount === 0 ? 0 : (baseFoodDeliveryFee + foodHotelChangeFeeTotal + foodExtraItemChargeTotal);
+    // AUTHORITATIVE FOOD DELIVERY FEE
+    const deliveryFee = selectedHotelsCount === 0 ? 0 : (baseFoodDeliveryFee + foodHotelChangeFeeTotal + foodExtraItemChargeTotal);
 
     // Split order / per-restaurant fees mapping
     const restaurantFees = {};
-    if (pickupKeys.length > 0) {
-      restaurantFees[pickupKeys[0]] = baseFoodDeliveryFee + foodExtraItemChargeTotal;
-      for (let i = 1; i < pickupKeys.length; i++) {
-        restaurantFees[pickupKeys[i]] = foodHotelChangeFeeRate;
+    if (selectedHotelsCount > 0) {
+      restaurantFees[rIds[0]] = baseFoodDeliveryFee + foodExtraItemChargeTotal;
+      for (let i = 1; i < rIds.length; i++) {
+        restaurantFees[rIds[i]] = foodHotelChangeFeeRate;
       }
     }
 
     const platformFee = platformSettings ? (platformSettings.platformFee ?? 5) : 5;
-    const taxes = 0;
+    const taxes = 0; // Taxes (5% GST) removed as requested
     
     const activeSurcharges = [];
     let totalSurchargeFee = 0;
@@ -444,7 +396,6 @@ export const useCartStore = create(
       foodExtraItemCharge: foodExtraItemChargeTotal,
       deliveryFee,
       selectedHotelsCount,
-      totalPickupPointsCount,
       totalFoodItemsCount,
       foodBaseItemLimit,
       foodExtraItemLimit,
@@ -452,7 +403,6 @@ export const useCartStore = create(
       platformFee,
       taxes: 0,
       restaurantFees,
-      uniquePickupSources,
       activeSurcharges,
       totalSurchargeFee,
       groupingApplied: false

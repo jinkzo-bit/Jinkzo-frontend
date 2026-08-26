@@ -34,19 +34,13 @@ export default function Favourites() {
   };
 
   const handleAddToCart = (dish) => {
-    const isCatalog =
-      dish.itemModel === 'CatalogItem' ||
-      Boolean(dish.supplierId) ||
-      Boolean(dish.supplier) ||
-      (dish.service && dish.service !== 'food') ||
-      ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes((dish.category || '').toLowerCase());
-    const result = addItem(dish, isCatalog ? null : (dish.restaurant || null));
+    const result = addItem(dish, dish.restaurant || { name: 'Jinkzo Store', _id: 'rest_default' });
     if (result && result.conflict) {
       setConflictModal({
         isOpen: true,
         message: result.message,
         pendingItem: dish,
-        pendingRestaurant: isCatalog ? null : dish.restaurant
+        pendingRestaurant: dish.restaurant
       });
     }
   };
@@ -171,12 +165,10 @@ export default function Favourites() {
                           className="w-full h-full object-cover rounded-2xl bg-base border border-line shadow-2xs"
                           loading="lazy"
                         />
-                        {/* Veg / Non-Veg Badge (Food items only) */}
-                        {(!dish.service || dish.service === 'food') && (
-                          <div className="absolute top-2 left-2 z-10">
-                            <VegBadge isVeg={dish.isVeg} size="xs" className="shadow-xs backdrop-blur-xs bg-white/95 dark:bg-[#141926]/95" />
-                          </div>
-                        )}
+                        {/* Veg / Non-Veg Badge */}
+                        <div className="absolute top-2 left-2 z-10">
+                          <VegBadge isVeg={dish.isVeg} size="xs" className="shadow-xs backdrop-blur-xs bg-white/95 dark:bg-[#141926]/95" />
+                        </div>
 
                         {/* Heart Button */}
                         <button

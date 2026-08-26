@@ -14,9 +14,6 @@ export default function InteractiveMap({
   deliveryMethod = 'Standard',
   orderId = null,
   onRouteInfo = null,
-  supplierDeliveries = [],
-  pickupStops = [],
-  routeSequence = [],
   // Ride-specific props
   isRide = false,
   ridePickupLat = null,
@@ -64,7 +61,7 @@ export default function InteractiveMap({
   }, [status]);
 
   return (
-    <div className="relative w-full h-[380px] min-h-[380px] bg-sky-50 rounded-2xl overflow-hidden border border-sky-100/50 shadow-inner flex flex-col">
+    <div className="relative w-full h-[380px] bg-sky-50 rounded-2xl overflow-hidden border border-sky-100/50 shadow-inner">
       <GoogleMapContainer 
         mode="tracking"
         restaurantName={restaurantName}
@@ -80,9 +77,6 @@ export default function InteractiveMap({
         deliveryMethod={deliveryMethod}
         orderId={orderId}
         onRouteInfo={onRouteInfo}
-        supplierDeliveries={supplierDeliveries}
-        pickupStops={pickupStops}
-        routeSequence={routeSequence}
         isRide={isRide}
         ridePickupLat={ridePickupLat}
         ridePickupLng={ridePickupLng}

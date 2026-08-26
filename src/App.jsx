@@ -25,6 +25,8 @@ import AdminDashboard from './pages/AdminDashboard';
 import RideBooking from './pages/RideBooking';
 import Favourites from './pages/Favourites';
 import OrderHistory from './pages/OrderHistory';
+import StoreOperationsDashboard from './pages/StoreOperationsDashboard';
+import NotificationsPage from './pages/NotificationsPage';
 
 import { useAuthStore } from './store/authStore';
 import { useCartStore } from './store/cartStore';
@@ -64,7 +66,7 @@ export default function App() {
     <ErrorBoundary>
       {showIntro && <AppIntro onComplete={handleIntroComplete} />}
       <BrowserRouter>
-        <div className="flex flex-col min-h-[100dvh] relative overflow-x-hidden">
+        <div className="flex flex-col min-h-screen relative overflow-x-hidden">
           
           {/* Clean ambient background */}
           <div className="fixed inset-0 pointer-events-none z-[-1] bg-[#F8F9FD] dark:bg-[#0B0E17] transition-colors duration-300"></div>
@@ -98,9 +100,14 @@ export default function App() {
                   <Profile />
                 </ProtectedRoute>
               } />
-              <Route path="/order-history" element={
+              <Route path="/orders" element={
                 <ProtectedRoute>
                   <OrderHistory />
+                </ProtectedRoute>
+              } />
+              <Route path="/notifications" element={
+                <ProtectedRoute>
+                  <NotificationsPage />
                 </ProtectedRoute>
               } />
               <Route path="/login" element={<LoginSignup />} />
@@ -119,6 +126,16 @@ export default function App() {
               <Route path="/admin-dashboard" element={
                 <RoleProtectedRoute allowedRoles={['admin']}>
                   <AdminDashboard />
+                </RoleProtectedRoute>
+              } />
+              <Route path="/store-operations" element={
+                <RoleProtectedRoute allowedRoles={['admin', 'store_operator']}>
+                  <StoreOperationsDashboard />
+                </RoleProtectedRoute>
+              } />
+              <Route path="/store-dashboard" element={
+                <RoleProtectedRoute allowedRoles={['admin', 'store_operator']}>
+                  <StoreOperationsDashboard />
                 </RoleProtectedRoute>
               } />
               <Route path="/ride" element={

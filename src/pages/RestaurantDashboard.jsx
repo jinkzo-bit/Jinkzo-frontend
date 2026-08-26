@@ -2,7 +2,7 @@ import { API_BASE } from '../config/api';
 import { io } from 'socket.io-client';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus, Pencil, AlertTriangle, ArrowLeft, FolderTree, FolderPlus } from 'lucide-react';
+import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus, Pencil, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
@@ -144,27 +144,11 @@ export default function RestaurantDashboard() {
   // Menu Management
   const [menuItems, setMenuItems] = useState([]);
   const [isMenuLoading, setIsMenuLoading] = useState(true);
-  const [menuSubTab, setMenuSubTab] = useState('items'); // 'items' or 'categories'
-  const [menuCategories, setMenuCategories] = useState([]);
-  const [isCategoriesLoading, setIsCategoriesLoading] = useState(false);
-
-  // Category Modal State
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [catName, setCatName] = useState('');
-  const [catFoodType, setCatFoodType] = useState('both');
-  const [catDisplayOrder, setCatDisplayOrder] = useState(1);
-  const [catIsActive, setCatIsActive] = useState(true);
-  const [catModalError, setCatModalError] = useState('');
-  const [isCatSaving, setIsCatSaving] = useState(false);
-
-  // Item Modal State
   const [showItemModal, setShowItemModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [itemName, setItemName] = useState('');
   const [itemPrice, setItemPrice] = useState('');
   const [itemCategory, setItemCategory] = useState('Main Course');
-  const [itemCategoryId, setItemCategoryId] = useState('');
   const [itemImage, setItemImage] = useState('');
   const [itemImageFile, setItemImageFile] = useState(null);
   const [itemDesc, setItemDesc] = useState('');
@@ -242,6 +226,11 @@ export default function RestaurantDashboard() {
   const [kycDocNum, setKycDocNum] = useState('');
   const [kycSubmitting, setKycSubmitting] = useState(false);
 
+  // ── Incoming Real-time Order Alert State ─────────────────────────────
+  const [incomingOrderAlert, setIncomingOrderAlert] = useState(null);
+  const [rejectReasonPrompt, setRejectReasonPrompt] = useState(false);
+  const [rejectReasonText, setRejectReasonText] = useState('');
+
   useEffect(() => {
     if (!token || user?.role !== 'restaurant') {
       navigate('/login');
@@ -249,7 +238,6 @@ export default function RestaurantDashboard() {
     }
     fetchMetrics();
     fetchMenu();
-    fetchMenuCategories();
     fetchOrders();
     fetchProfile();
 
@@ -259,8 +247,26 @@ export default function RestaurantDashboard() {
       withCredentials: true,
       transports: ['websocket', 'polling']
     });
+
+    socket.on('connect', () => {
+      if (user?.restaurantId) socket.emit('join', `restaurant_${user.restaurantId}`);
+      if (user?._id) socket.emit('join', `user_${user._id}`);
+    });
+
+    socket.on('notification:new', (notif) => {
+      if (notif.type === 'NEW_ORDER_RESTAURANT') {
+        fetchOrders();
+        fetchMetrics();
+        try { new Audio('/notification.mp3').play().catch(() => {}); } catch(e) {}
+      }
+    });
+
     socket.on('orderStatusChanged', (data) => {
       if (data && data.order) {
+        if (data.status === 'Placed' && String(data.order.restaurantId) === String(user?.restaurantId)) {
+          setIncomingOrderAlert(data.order);
+          try { new Audio('/notification.mp3').play().catch(() => {}); } catch(e) {}
+        }
         setOrders(prev => {
           const exists = prev.find(o => o._id === data.orderId);
           if (exists) {
@@ -274,6 +280,7 @@ export default function RestaurantDashboard() {
       }
       fetchMetrics();
     });
+
     const interval = setInterval(() => {
       fetchOrders();
       fetchMetrics();
@@ -327,23 +334,6 @@ export default function RestaurantDashboard() {
       console.error(err);
     } finally {
       setIsMenuLoading(false);
-    }
-  };
-
-  const fetchMenuCategories = async () => {
-    try {
-      setIsCategoriesLoading(true);
-      const res = await fetch(`${API_BASE}/restaurant-partner/menu-categories`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMenuCategories(data);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsCategoriesLoading(false);
     }
   };
 
@@ -435,122 +425,14 @@ export default function RestaurantDashboard() {
     setOpeningHours(updated);
   };
 
-  // ── Category Actions ─────────────────────────────────────────
-  const handleOpenCategoryModal = (category = null) => {
-    setCatModalError('');
-    if (category) {
-      setEditingCategory(category);
-      setCatName(category.name || '');
-      setCatFoodType(category.foodType || 'both');
-      setCatDisplayOrder(category.displayOrder !== undefined ? category.displayOrder : 1);
-      setCatIsActive(category.isActive !== false);
-    } else {
-      setEditingCategory(null);
-      setCatName('');
-      setCatFoodType('both');
-      setCatDisplayOrder(menuCategories.length + 1);
-      setCatIsActive(true);
-    }
-    setShowCategoryModal(true);
-  };
-
-  const handleSaveCategory = async (e) => {
-    e.preventDefault();
-    setCatModalError('');
-    if (!catName.trim()) {
-      setCatModalError('Please enter a category name.');
-      return;
-    }
-    setIsCatSaving(true);
-    const payload = {
-      name: catName.trim(),
-      foodType: catFoodType,
-      displayOrder: Number(catDisplayOrder) || 0,
-      isActive: catIsActive
-    };
-    try {
-      const url = editingCategory
-        ? `${API_BASE}/restaurant-partner/menu-categories/${editingCategory._id}`
-        : `${API_BASE}/restaurant-partner/menu-categories`;
-      const method = editingCategory ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setCatModalError(data.message || 'Failed to save category.');
-        return;
-      }
-      setShowCategoryModal(false);
-      fetchMenuCategories();
-      fetchMenu();
-    } catch (err) {
-      setCatModalError(err.message || 'Server error saving category.');
-    } finally {
-      setIsCatSaving(false);
-    }
-  };
-
-  const handleDeleteCategory = async (category) => {
-    if ((category.itemsCount || 0) > 0) {
-      alert('This category contains menu items. Move or reassign those items before deleting the category.');
-      return;
-    }
-    if (!window.confirm(`Are you sure you want to delete category "${category.name}"?`)) {
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE}/restaurant-partner/menu-categories/${category._id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.message || 'Failed to delete category');
-        return;
-      }
-      fetchMenuCategories();
-      fetchMenu();
-    } catch (err) {
-      console.error(err);
-      alert('Server error deleting category');
-    }
-  };
-
-  const handleToggleCategoryStatus = async (category) => {
-    const newStatus = category.isActive === false ? true : false;
-    try {
-      const res = await fetch(`${API_BASE}/restaurant-partner/menu-categories/${category._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ isActive: newStatus })
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setMenuCategories(prev => prev.map(c => c._id === category._id ? { ...c, isActive: updated.isActive } : c));
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // ── Add / Edit Menu Item ──────────────────────────────────────
+  // Add / Edit Menu Item
   const handleOpenItemModal = (item = null) => {
     setItemModalError('');
     if (item) {
       setEditingItem(item);
       setItemName(item.name || '');
       setItemPrice(item.price || '');
-      setItemCategory(item.category || (menuCategories[0]?.name || 'Main Course'));
-      setItemCategoryId(item.categoryId || (menuCategories.find(c => c.name === item.category)?._id || ''));
+      setItemCategory(item.category || 'Main Course');
       setItemImage(item.image || '');
       setItemImageFile(null);
       setItemDesc(item.description || '');
@@ -563,9 +445,7 @@ export default function RestaurantDashboard() {
       setEditingItem(null);
       setItemName('');
       setItemPrice('');
-      const defaultCat = menuCategories[0];
-      setItemCategory(defaultCat?.name || 'Main Course');
-      setItemCategoryId(defaultCat?._id || '');
+      setItemCategory('Main Course');
       setItemImage('');
       setItemImageFile(null);
       setItemDesc('');
@@ -606,7 +486,6 @@ export default function RestaurantDashboard() {
       name: itemName.trim(),
       price: parseFloat(itemPrice),
       category: itemCategory,
-      categoryId: itemCategoryId || undefined,
       image: finalImageUrl,
       description: itemDesc.trim(),
       isVeg: itemIsVeg,
@@ -641,7 +520,6 @@ export default function RestaurantDashboard() {
       setShowItemModal(false);
       setItemImageFile(null);
       fetchMenu();
-      fetchMenuCategories();
       fetchMetrics();
     } catch (err) {
       setItemModalError(err.message || 'Server error saving menu item.');
@@ -659,7 +537,6 @@ export default function RestaurantDashboard() {
       });
       if (res.ok) {
         setMenuItems(prev => prev.filter(i => i._id !== itemId));
-        fetchMenuCategories();
         fetchMetrics();
       }
     } catch (err) {
@@ -680,14 +557,9 @@ export default function RestaurantDashboard() {
         body: JSON.stringify({ status: nextStatus, rejectionReason: reason })
       });
       if (res.ok) {
-        // Always re-fetch from the restaurant-isolated endpoint so we never
-        // splice the raw unified Order document (which contains supplier items)
-        // into the restaurant's order list.
-        fetchOrders();
+        const updated = await res.json();
+        setOrders(prev => prev.map(o => o._id === orderId ? updated : o));
         fetchMetrics();
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        console.error('[RESTAURANT] Order status update failed:', errData.message);
       }
     } catch (err) {
       console.error(err);
@@ -716,21 +588,16 @@ export default function RestaurantDashboard() {
         return alert(err.message || 'Cover image upload failed');
       }
     }
-    if (!finalProfileImageUrl && restaurantProfile?.image) {
-      finalProfileImageUrl = restaurantProfile.image;
-    }
 
     try {
       const payload = {
         name: profileName,
+        image: finalProfileImageUrl,
         address: profileAddress,
         deliveryTime: parseInt(profileTime),
         isPureVeg: profileVeg,
         isClosed: profileClosed,
       };
-      if (finalProfileImageUrl) {
-        payload.image = finalProfileImageUrl;
-      }
       if (profileLat !== null) payload.lat = profileLat;
       if (profileLng !== null) payload.lng = profileLng;
 
@@ -1077,6 +944,9 @@ export default function RestaurantDashboard() {
               {user?.kycStatus || 'Not Submitted'}
             </span>
           </div>
+
+          {/* Restaurant Notification Bell */}
+          <NotificationCenter userId={user?._id} role="restaurant" restaurantId={user?.restaurantId} />
         </div>
       </div>
 
@@ -1337,286 +1207,99 @@ export default function RestaurantDashboard() {
 
           {/* MENU MANAGEMENT TAB */}
           {activeSubTab === 'menu' && (
-            <div className="flex flex-col gap-5">
-              {/* Menu Sub-navigation Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line pb-3">
-                <div className="flex items-center gap-1.5 bg-base p-1 rounded-2xl border border-line w-fit">
-                  <button
-                    type="button"
-                    onClick={() => setMenuSubTab('items')}
-                    className={`px-3.5 py-1.8 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-2 ${
-                      menuSubTab === 'items'
-                        ? 'bg-primary text-white shadow-xs'
-                        : 'text-muted hover:text-main hover:bg-surface'
-                    }`}
-                  >
-                    <List className="w-3.5 h-3.5" />
-                    <span>Menu Items</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-black ${
-                      menuSubTab === 'items' ? 'bg-white/20 text-white' : 'bg-surface text-muted border border-line'
-                    }`}>
-                      {menuItems.length}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setMenuSubTab('categories')}
-                    className={`px-3.5 py-1.8 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-2 ${
-                      menuSubTab === 'categories'
-                        ? 'bg-primary text-white shadow-xs'
-                        : 'text-muted hover:text-main hover:bg-surface'
-                    }`}
-                  >
-                    <FolderTree className="w-3.5 h-3.5" />
-                    <span>Categories</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-black ${
-                      menuSubTab === 'categories' ? 'bg-white/20 text-white' : 'bg-surface text-muted border border-line'
-                    }`}>
-                      {menuCategories.length}
-                    </span>
-                  </button>
-                </div>
-
-                {menuSubTab === 'items' ? (
-                  <button
-                    onClick={() => handleOpenItemModal(null)}
-                    className="bg-primary hover:bg-primary-hover text-white text-xs font-extrabold px-3.5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 w-fit"
-                  >
-                    <Plus className="w-4 h-4" /> Add Food Item
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleOpenCategoryModal(null)}
-                    className="bg-primary hover:bg-primary-hover text-white text-xs font-extrabold px-3.5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 w-fit"
-                  >
-                    <FolderPlus className="w-4 h-4" /> Add Category
-                  </button>
-                )}
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between items-center border-b border-line pb-2">
+                <h3 className="font-display font-extrabold text-base text-main">Menu & Food Items</h3>
+                <button
+                  onClick={() => handleOpenItemModal(null)}
+                  className="bg-primary hover:bg-primary-hover text-white text-[10px] font-bold px-3 py-1.8 rounded-xl shadow-xs cursor-pointer flex items-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Food Item
+                </button>
               </div>
 
-              {/* ── SUB-VIEW 1: MENU ITEMS ── */}
-              {menuSubTab === 'items' && (
-                <div className="flex flex-col gap-4">
-                  {isMenuLoading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="h-24 skeleton rounded-3xl" />
-                      <div className="h-24 skeleton rounded-3xl" />
-                    </div>
-                  ) : menuItems.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {menuItems.map(item => (
-                        <div key={item._id} className="bg-surface border border-line p-4 rounded-3xl shadow-2xs flex gap-3 relative group">
-                          <div className="w-16 h-16 rounded-2xl overflow-hidden bg-base flex-shrink-0">
-                            <img src={getImageUrl(item.image, 'food')} alt={item.name} onError={(e) => handleImageError(e, 'food')} className="w-full h-full object-cover" />
-                          </div>
-                          <div className="flex flex-col gap-0.5 flex-grow pr-12">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <VegBadge isVeg={item.isVeg} size="xs" />
-                              <h4 className="text-xs font-bold text-main line-clamp-1">{item.name}</h4>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-primary font-black">₹{item.price}</span>
-                              {item.category && (
-                                <span className="text-[9px] font-bold text-muted bg-base px-2 py-0.5 rounded-md border border-line">
-                                  {item.category}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[9px] text-muted line-clamp-2 mt-0.5 font-medium leading-tight">{item.description || 'No description provided.'}</p>
-                            
-                            {/* Quick Availability Toggler & Timing badge */}
-                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                              <button
-                                onClick={async () => {
-                                  const newAvail = item.isAvailable === false ? true : false;
-                                  try {
-                                    const res = await fetch(`${API_BASE}/restaurant-partner/menu/${item._id}`, {
-                                      method: 'PUT',
-                                      headers: {
-                                        'Content-Type': 'application/json',
-                                        'Authorization': `Bearer ${token}`
-                                      },
-                                      body: JSON.stringify({ isAvailable: newAvail })
-                                    });
-                                    if (res.ok) {
-                                      const updated = await res.json();
-                                      setMenuItems(prev => prev.map(i => i._id === item._id ? updated : i));
-                                    }
-                                  } catch (err) {
-                                    console.error(err);
-                                  }
-                                }}
-                                className={`text-[8px] font-extrabold px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
-                                  item.isAvailable !== false
-                                    ? 'bg-green-50 border-green-150 text-green-700 hover:bg-green-100'
-                                    : 'bg-base border-line-strong text-muted hover:bg-gray-100'
-                                }`}
-                              >
-                                {item.isAvailable !== false ? '🟢 Available' : '🔴 Out of Stock'}
-                              </button>
-
-                              <span className="text-[8px] font-bold px-2 py-0.5 rounded-md bg-base border border-line text-muted">
-                                🕒 {item.availabilityMode === 'custom'
-                                  ? `${formatTime12(item.availableFrom)} – ${formatTime12(item.availableTo)}`
-                                  : 'All Restaurant Hours'}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          {/* CRUD Buttons */}
-                          <div className="absolute right-3 top-3 flex gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => handleOpenItemModal(item)}
-                              className="p-1.5 bg-base hover:bg-primary-light hover:text-primary rounded-lg text-muted cursor-pointer"
-                              title="Edit item"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteItem(item._id)}
-                              className="p-1.5 bg-base hover:bg-red-50 hover:text-red-500 rounded-lg text-muted cursor-pointer"
-                              title="Delete item"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="bg-surface rounded-3xl p-14 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
-                      <List className="w-12 h-12 text-gray-300" />
-                      <h4 className="font-display font-extrabold text-sm text-main">No dishes listed yet</h4>
-                      <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">Click "Add Food Item" above to fill your digital kitchen menu card!</p>
-                    </div>
-                  )}
+              {isMenuLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="h-24 skeleton rounded-3xl" />
+                  <div className="h-24 skeleton rounded-3xl" />
                 </div>
-              )}
+              ) : menuItems.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {menuItems.map(item => (
+                    <div key={item._id} className="bg-surface border border-line p-4 rounded-3xl shadow-2xs flex gap-3 relative group">
+                      <div className="w-16 h-16 rounded-2xl overflow-hidden bg-base flex-shrink-0">
+                        <img src={getImageUrl(item.image, 'food')} alt={item.name} onError={(e) => handleImageError(e, 'food')} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex flex-col gap-0.5 flex-grow pr-12">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <VegBadge isVeg={item.isVeg} size="xs" />
+                          <h4 className="text-xs font-bold text-main line-clamp-1">{item.name}</h4>
+                        </div>
+                        <span className="text-[10px] text-primary font-bold">₹{item.price}</span>
+                        <p className="text-[9px] text-muted line-clamp-2 mt-0.5 font-medium leading-tight">{item.description || 'No description provided.'}</p>
+                        
+                        {/* Quick Availability Toggler & Timing badge */}
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          <button
+                            onClick={async () => {
+                              const newAvail = item.isAvailable === false ? true : false;
+                              try {
+                                const res = await fetch(`${API_BASE}/restaurant-partner/menu/${item._id}`, {
+                                  method: 'PUT',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                  },
+                                  body: JSON.stringify({ isAvailable: newAvail })
+                                });
+                                if (res.ok) {
+                                  const updated = await res.json();
+                                  setMenuItems(prev => prev.map(i => i._id === item._id ? updated : i));
+                                }
+                              } catch (err) {
+                                console.error(err);
+                              }
+                            }}
+                            className={`text-[8px] font-extrabold px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
+                              item.isAvailable !== false
+                                ? 'bg-green-50 border-green-150 text-green-700 hover:bg-green-100'
+                                : 'bg-base border-line-strong text-muted hover:bg-gray-100'
+                            }`}
+                          >
+                            {item.isAvailable !== false ? '🟢 Available' : '🔴 Out of Stock'}
+                          </button>
 
-              {/* ── SUB-VIEW 2: CATEGORIES MANAGEMENT ── */}
-              {menuSubTab === 'categories' && (
-                <div className="flex flex-col gap-4">
-                  {isCategoriesLoading ? (
-                    <div className="flex flex-col gap-3">
-                      <div className="h-16 skeleton rounded-2xl" />
-                      <div className="h-16 skeleton rounded-2xl" />
-                      <div className="h-16 skeleton rounded-2xl" />
-                    </div>
-                  ) : menuCategories.length > 0 ? (
-                    <div className="bg-surface border border-line rounded-3xl overflow-hidden shadow-2xs">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-base border-b border-line text-[10px] uppercase font-extrabold text-muted">
-                              <th className="py-3 px-4 w-12 text-center">#</th>
-                              <th className="py-3 px-4">Category Name</th>
-                              <th className="py-3 px-4">Food Type</th>
-                              <th className="py-3 px-4 text-center">Items Assigned</th>
-                              <th className="py-3 px-4 text-center">Status</th>
-                              <th className="py-3 px-4 text-center">Display Order</th>
-                              <th className="py-3 px-4 text-right">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-line">
-                            {menuCategories.map((cat, idx) => (
-                              <tr key={cat._id} className="hover:bg-base/50 transition-colors">
-                                <td className="py-3.5 px-4 text-center font-black text-muted text-[11px]">
-                                  {idx + 1}
-                                </td>
-                                <td className="py-3.5 px-4 font-extrabold text-main">
-                                  <div className="flex items-center gap-2">
-                                    <span>{cat.name}</span>
-                                    {cat.isActive === false && (
-                                      <span className="text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded-md">
-                                        Hidden from customer
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  {cat.foodType === 'veg' ? (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span> Veg Only
-                                    </span>
-                                  ) : cat.foodType === 'nonVeg' ? (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-red-600"></span> Non-Veg Only
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span> Both (Veg & Non-Veg)
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-3.5 px-4 text-center font-bold text-muted">
-                                  <span className={`px-2.5 py-0.5 rounded-full font-black text-[10px] border ${
-                                    (cat.itemsCount || 0) > 0
-                                      ? 'bg-primary/10 text-primary border-primary/20'
-                                      : 'bg-base text-muted border-line'
-                                  }`}>
-                                    {cat.itemsCount || 0} items
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleCategoryStatus(cat)}
-                                    className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
-                                      cat.isActive !== false
-                                        ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
-                                        : 'bg-gray-100 border-gray-250 text-gray-500 hover:bg-gray-200'
-                                    }`}
-                                  >
-                                    {cat.isActive !== false ? '🟢 Active' : '⚪ Inactive'}
-                                  </button>
-                                </td>
-                                <td className="py-3.5 px-4 text-center font-black text-main">
-                                  {cat.displayOrder ?? idx + 1}
-                                </td>
-                                <td className="py-3.5 px-4 text-right">
-                                  <div className="flex items-center justify-end gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenCategoryModal(cat)}
-                                      className="p-1.5 bg-base hover:bg-primary-light hover:text-primary rounded-lg text-muted transition-colors cursor-pointer"
-                                      title="Edit Category"
-                                    >
-                                      <Edit2 className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteCategory(cat)}
-                                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                        (cat.itemsCount || 0) > 0
-                                          ? 'bg-base text-gray-300 hover:text-gray-400'
-                                          : 'bg-base hover:bg-red-50 hover:text-red-500 text-muted'
-                                      }`}
-                                      title={(cat.itemsCount || 0) > 0 ? "Cannot delete category containing menu items" : "Delete Category"}
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                          <span className="text-[8px] font-bold px-2 py-0.5 rounded-md bg-base border border-line text-muted">
+                            🕒 {item.availabilityMode === 'custom'
+                              ? `${formatTime12(item.availableFrom)} – ${formatTime12(item.availableTo)}`
+                              : 'All Restaurant Hours'}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* CRUD Buttons */}
+                      <div className="absolute right-3 top-3 flex gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleOpenItemModal(item)}
+                          className="p-1.5 bg-base hover:bg-primary-light hover:text-primary rounded-lg text-muted cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteItem(item._id)}
+                          className="p-1.5 bg-base hover:bg-red-50 hover:text-red-500 rounded-lg text-muted cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
-                  ) : (
-                    <div className="bg-surface rounded-3xl p-14 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
-                      <FolderTree className="w-12 h-12 text-gray-300" />
-                      <h4 className="font-display font-extrabold text-sm text-main">No custom categories created</h4>
-                      <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">Organize your dishes with custom categories like Biryanis, Starters, Beverages, or Breads!</p>
-                      <button
-                        onClick={() => handleOpenCategoryModal(null)}
-                        className="mt-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5"
-                      >
-                        <Plus className="w-4 h-4" /> Create First Category
-                      </button>
-                    </div>
-                  )}
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-surface rounded-3xl p-16 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">
+                  <List className="w-12 h-12 text-gray-300" />
+                  <h4 className="font-display font-extrabold text-sm text-main">No dishes listed yet</h4>
+                  <p className="text-xs text-muted max-w-xs leading-relaxed font-semibold">Click "Add Food Item" above to fill your digital kitchen menu card!</p>
                 </div>
               )}
             </div>
@@ -2117,48 +1800,20 @@ export default function RestaurantDashboard() {
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between px-1">
-                    <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted">Category</label>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenCategoryModal(null)}
-                      className="text-[9px] font-bold text-primary hover:underline cursor-pointer"
-                    >
-                      + New Category
-                    </button>
-                  </div>
-                  {menuCategories.length > 0 ? (
-                    <select
-                      value={itemCategoryId || (menuCategories.find(c => c.name.toLowerCase() === itemCategory.toLowerCase())?._id || '')}
-                      onChange={(e) => {
-                        const selectedId = e.target.value;
-                        const found = menuCategories.find(c => c._id === selectedId);
-                        if (found) {
-                          setItemCategoryId(found._id);
-                          setItemCategory(found.name);
-                        } else {
-                          setItemCategoryId('');
-                          setItemCategory(selectedId);
-                        }
-                      }}
-                      className="bg-base border border-gray-250 rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary"
-                    >
-                      {menuCategories.map(cat => (
-                        <option key={cat._id} value={cat._id}>
-                          {cat.name} {cat.isActive === false ? '(Hidden)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Main Course"
-                      value={itemCategory}
-                      onChange={(e) => setItemCategory(e.target.value)}
-                      className="bg-base border border-gray-250 rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none"
-                    />
-                  )}
+                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Category</label>
+                  <select
+                    value={itemCategory}
+                    onChange={(e) => setItemCategory(e.target.value)}
+                    className="bg-base border border-gray-250 rounded-xl px-3.5 py-2.5 text-xs text-main font-semibold outline-none"
+                  >
+                    <option value="Starters">Starters</option>
+                    <option value="Burgers">Burgers</option>
+                    <option value="Pizza">Pizza</option>
+                    <option value="Biryani">Biryani</option>
+                    <option value="Main Course">Main Course</option>
+                    <option value="Desserts">Desserts</option>
+                    <option value="Drinks">Drinks</option>
+                  </select>
                 </div>
               </div>
 
@@ -2269,118 +1924,6 @@ export default function RestaurantDashboard() {
               <button type="submit" disabled={isItemSaving} className="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 rounded-xl mt-2 cursor-pointer shadow-md disabled:opacity-50">
                 {isItemSaving ? 'Saving...' : (editingItem ? 'Update Menu Item' : 'Add Item to Menu')}
               </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MENU CATEGORY ADD/EDIT MODAL */}
-      {showCategoryModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-xs">
-          <div className="bg-surface w-full max-w-md rounded-3xl p-6 shadow-xl border border-line animate-scale-up">
-            <div className="flex justify-between items-center border-b border-line pb-3.5">
-              <h3 className="font-display font-extrabold text-base text-main">
-                {editingCategory ? 'Edit Menu Category' : 'Create New Menu Category'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowCategoryModal(false)}
-                className="p-1 hover:bg-base rounded-lg text-muted hover:text-main cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {catModalError && (
-              <p className="text-[11px] font-bold text-red-500 bg-red-50 border border-red-200 px-3 py-2 rounded-xl mt-3">
-                {catModalError}
-              </p>
-            )}
-
-            <form onSubmit={handleSaveCategory} className="flex flex-col gap-4 mt-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Category Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Biryanis, Starters, Breads, Desserts"
-                  value={catName}
-                  onChange={(e) => setCatName(e.target.value)}
-                  className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Food Type Filter</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: 'both', label: 'Veg & Non-Veg' },
-                    { id: 'veg', label: 'Pure Veg' },
-                    { id: 'nonVeg', label: 'Non-Veg Only' },
-                  ].map(type => (
-                    <button
-                      key={type.id}
-                      type="button"
-                      onClick={() => setCatFoodType(type.id)}
-                      className={`py-2 px-2 rounded-xl text-xs font-extrabold border transition-all cursor-pointer flex items-center justify-center ${
-                        catFoodType === type.id
-                          ? 'bg-primary text-white border-primary shadow-xs'
-                          : 'bg-base border-line text-muted hover:text-main'
-                      }`}
-                    >
-                      <span>{type.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Display Order</label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 1"
-                    value={catDisplayOrder}
-                    onChange={(e) => setCatDisplayOrder(e.target.value)}
-                    className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none focus:border-primary"
-                  />
-                  <span className="text-[9px] text-muted px-1">Lower numbers appear first</span>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Visibility Status</label>
-                  <button
-                    type="button"
-                    onClick={() => setCatIsActive(!catIsActive)}
-                    className={`h-[42px] px-3.5 rounded-xl text-xs font-black border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      catIsActive
-                        ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
-                        : 'bg-gray-100 border-gray-250 text-gray-500 hover:bg-gray-200'
-                    }`}
-                  >
-                    {catIsActive ? '🟢 Active in Menu' : '⚪ Inactive (Hidden)'}
-                  </button>
-                  <span className="text-[9px] text-muted px-1">Inactive categories hide from customers</span>
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2 border-t border-line">
-                <button
-                  type="button"
-                  onClick={() => setShowCategoryModal(false)}
-                  className="flex-1 py-3 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCatSaving}
-                  className="flex-1 py-3 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl cursor-pointer shadow-md disabled:opacity-50"
-                >
-                  {isCatSaving ? 'Saving...' : (editingCategory ? 'Update Category' : 'Create Category')}
-                </button>
-              </div>
             </form>
           </div>
         </div>
@@ -2526,6 +2069,78 @@ export default function RestaurantDashboard() {
         availableYears={historyFilter.availableYears}
         datesWithRecords={historyFilter.datesWithRecords}
       />
+
+      {/* ── REAL-TIME NEW ORDER INCOMING MODAL ─── */}
+      {incomingOrderAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border-2 border-orange-500 rounded-3xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4 animate-scale-up">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-orange-500 text-white animate-bounce shadow-md">🔔</span>
+                <div>
+                  <h3 className="font-display font-black text-lg text-main">NEW FOOD ORDER!</h3>
+                  <p className="text-xs text-orange-600 font-bold font-mono">
+                    #{incomingOrderAlert.displayId || (incomingOrderAlert._id ? String(incomingOrderAlert._id).slice(-6).toUpperCase() : 'NEW')}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setIncomingOrderAlert(null)} className="text-muted hover:text-main text-lg font-bold p-1">✕</button>
+            </div>
+
+            <div className="bg-base/70 rounded-2xl p-3.5 flex flex-col gap-2 border border-line">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted font-bold">Customer:</span>
+                <span className="text-main font-bold">{incomingOrderAlert.userId?.name || 'Customer'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted font-bold">Payment:</span>
+                <span className="text-main font-bold uppercase">{incomingOrderAlert.paymentDetails?.method || 'COD'}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs border-t border-line pt-2">
+                <span className="text-muted font-bold">Total Amount:</span>
+                <span className="text-lg font-black text-orange-600">₹{incomingOrderAlert.total?.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Items summary */}
+            <div className="max-h-36 overflow-y-auto divide-y divide-line/40 px-1">
+              <p className="text-[10px] text-muted font-extrabold uppercase mb-1">Items Ordered:</p>
+              {incomingOrderAlert.items?.map((item, idx) => (
+                <div key={idx} className="py-1.5 flex items-center justify-between text-xs font-semibold text-main">
+                  <span>{item.quantity}x {item.name}</span>
+                  <span className="text-muted">₹{(item.price * item.quantity).toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const orderToReject = incomingOrderAlert;
+                  setIncomingOrderAlert(null);
+                  setRejectingOrderId(orderToReject._id);
+                }}
+                className="flex-1 py-3 border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 text-xs font-black rounded-2xl transition-colors cursor-pointer"
+              >
+                REJECT
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const orderId = incomingOrderAlert._id;
+                  setIncomingOrderAlert(null);
+                  await handleUpdateOrderStatus(orderId, 'Accepted');
+                }}
+                className="flex-2 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 text-xs font-black rounded-2xl shadow-lg shadow-green-600/20 transition-all cursor-pointer"
+              >
+                ACCEPT ORDER ✅
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── CLEAR HISTORY CONFIRMATION MODAL ─── */}
       <ClearHistoryModal

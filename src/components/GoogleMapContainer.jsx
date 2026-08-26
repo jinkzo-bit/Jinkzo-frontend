@@ -10,15 +10,10 @@ import MapRotationControls from './maps/MapRotationControls';
 const DEFAULT_CENTER = { lat: 15.8562, lng: 78.2700 };
 const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
 
-// ── Map container style — Guaranteed full container expansion ────────────────
-const MAP_CONTAINER_STYLE = { 
-  width: '100%', 
-  height: '100%', 
-  minHeight: '380px',
-  position: 'relative'
-};
+// ── Map container style ───────────────────────────────────────────────────────
+const MAP_CONTAINER_STYLE = { width: '100%', height: '100%' };
 
-// ── Map base options (matching the proven working LocationPicker) ──────────────
+// ── Map base options ──────────────────────────────────────────────────────────
 const MAP_OPTIONS = {
   disableDefaultUI: true,
   zoomControl: false,
@@ -32,6 +27,7 @@ const MAP_OPTIONS = {
   tilt: 0,
   isFractionalZoomEnabled: true,
   mapTypeId: 'roadmap',
+  ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
 };
 
 // ── SVG marker builders ───────────────────────────────────────────────────────
@@ -128,71 +124,6 @@ const DROP_SVG = `
   </g>
 </svg>`;
 
-// Store marker — Purple/indigo pin with store icon
-const STORE_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
-  <filter id="sshadow" x="-30%" y="-10%" width="160%" height="140%">
-    <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="rgba(0,0,0,0.28)" />
-  </filter>
-  <g filter="url(#sshadow)">
-    <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 34 16 34s16-22.75 16-34C38 9.163 30.837 2 22 2z" fill="#7C3AED"/>
-    <circle cx="22" cy="18" r="9" fill="white"/>
-    <text x="22" y="23" text-anchor="middle" font-size="12" font-family="Arial">&#127978;</text>
-  </g>
-</svg>`;
-
-// Grocery marker — Purple pin with cart
-const GROCERY_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
-  <filter id="gshadow" x="-30%" y="-10%" width="160%" height="140%">
-    <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="rgba(0,0,0,0.28)" />
-  </filter>
-  <g filter="url(#gshadow)">
-    <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 34 16 34s16-22.75 16-34C38 9.163 30.837 2 22 2z" fill="#7C3AED"/>
-    <circle cx="22" cy="18" r="9" fill="white"/>
-    <text x="22" y="23" text-anchor="middle" font-size="12" font-family="Arial">&#127978;</text>
-  </g>
-</svg>`;
-
-// Meat marker — Rose/Red pin with meat icon
-const MEAT_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
-  <filter id="mshadow" x="-30%" y="-10%" width="160%" height="140%">
-    <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="rgba(0,0,0,0.28)" />
-  </filter>
-  <g filter="url(#mshadow)">
-    <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 34 16 34s16-22.75 16-34C38 9.163 30.837 2 22 2z" fill="#E11D48"/>
-    <circle cx="22" cy="18" r="9" fill="white"/>
-    <text x="22" y="23" text-anchor="middle" font-size="12" font-family="Arial">&#129385;</text>
-  </g>
-</svg>`;
-
-// Bakery marker — Amber pin with croissant
-const BAKERY_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
-  <filter id="bshadow" x="-30%" y="-10%" width="160%" height="140%">
-    <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="rgba(0,0,0,0.28)" />
-  </filter>
-  <g filter="url(#bshadow)">
-    <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 34 16 34s16-22.75 16-34C38 9.163 30.837 2 22 2z" fill="#D97706"/>
-    <circle cx="22" cy="18" r="9" fill="white"/>
-    <text x="22" y="23" text-anchor="middle" font-size="12" font-family="Arial">&#129360;</text>
-  </g>
-</svg>`;
-
-// Veg & Fruits marker — Emerald pin with broccoli
-const VEG_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
-  <filter id="vshadow" x="-30%" y="-10%" width="160%" height="140%">
-    <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="rgba(0,0,0,0.28)" />
-  </filter>
-  <g filter="url(#vshadow)">
-    <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 34 16 34s16-22.75 16-34C38 9.163 30.837 2 22 2z" fill="#059669"/>
-    <circle cx="22" cy="18" r="9" fill="white"/>
-    <text x="22" y="23" text-anchor="middle" font-size="12" font-family="Arial">&#129382;</text>
-  </g>
-</svg>`;
-
 // Convert SVG string to Google Maps icon object
 const svgToIcon = (svgString, width, height, anchorX, anchorY, rotation = 0) => {
   let finalSvg = svgString;
@@ -224,9 +155,6 @@ export default function GoogleMapContainer({
   deliveryMethod = 'Standard',
   orderId = null,
   onRouteInfo = null,
-  supplierDeliveries = [],
-  pickupStops = [],
-  routeSequence = [],
   // Ride-specific props (ride orders only; food orders leave these undefined/null)
   isRide = false,
   ridePickupLat = null,
@@ -256,10 +184,11 @@ export default function GoogleMapContainer({
   const [customerPos, setCustomerPos] = useState(null);
   const [riderPos, setRiderPos] = useState(null);
   
-  // Multi-stop routes state
-  const [routeSegments, setRouteSegments] = useState([]);
-  const [multiRouteTotals, setMultiRouteTotals] = useState({ distanceKm: 0, durationMinutes: 0 });
-  const lastMultiRouteCalcHashRef = useRef('');
+  // Dual routes state
+  const [route1Path, setRoute1Path] = useState([]); // Rider -> Restaurant (Blue)
+  const [route2Path, setRoute2Path] = useState([]); // Restaurant -> Customer (Green)
+  const [route1Info, setRoute1Info] = useState({ distanceKm: null, durationMinutes: null });
+  const [route2Info, setRoute2Info] = useState({ distanceKm: null, durationMinutes: null });
 
   const [activePopup, setActivePopup] = useState(null);
   const [error, setError] = useState(null);
@@ -277,31 +206,9 @@ export default function GoogleMapContainer({
     ? (isRideOrder ? svgToIcon(DROP_SVG, 44, 56, 22, 52) : svgToIcon(HOME_SVG, 44, 56, 22, 52))
     : undefined;
 
-  const storeIcon   = isLoaded ? svgToIcon(STORE_SVG, 44, 56, 22, 52) : undefined;
-  const groceryIcon = isLoaded ? svgToIcon(GROCERY_SVG, 44, 56, 22, 52) : undefined;
-  const meatIcon    = isLoaded ? svgToIcon(MEAT_SVG, 44, 56, 22, 52) : undefined;
-  const bakeryIcon  = isLoaded ? svgToIcon(BAKERY_SVG, 44, 56, 22, 52) : undefined;
-  const vegIcon     = isLoaded ? svgToIcon(VEG_SVG, 44, 56, 22, 52) : undefined;
-  const riderIcon   = isLoaded ? svgToIcon(RIDER_SVG, 52, 52, 26, 26, riderBearing)  : undefined;
-  const rideIcon    = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26, riderBearing)   : undefined;
-  const pickerIcon  = isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50) : undefined;
-
-  const getStopIcon = useCallback((category = '', sourceType = 'supplier') => {
-    const cat = (category || '').toLowerCase();
-    if (sourceType === 'restaurant' || cat === 'food') return restaurantIcon;
-    if (cat.includes('meat') || cat.includes('chicken') || cat.includes('mutton') || cat.includes('fish') || cat.includes('egg') || cat.includes('seafood')) return meatIcon || storeIcon;
-    if (cat.includes('bakery') || cat.includes('cake') || cat.includes('sweet') || cat.includes('beverage') || cat.includes('cool')) return bakeryIcon || storeIcon;
-    if (cat.includes('veg') || cat.includes('fruit') || cat.includes('vegetable')) return vegIcon || storeIcon;
-    if (cat.includes('grocery') || cat.includes('kiranam') || cat.includes('supermarket') || cat.includes('atta') || cat.includes('oil')) return groceryIcon || storeIcon;
-    return storeIcon;
-  }, [restaurantIcon, meatIcon, bakeryIcon, vegIcon, groceryIcon, storeIcon]);
-
-  // ── Helper: Trigger Map Resize on lifecycle & dimension events ───────────────
-  const triggerMapResize = useCallback(() => {
-    if (mapRef.current && window.google?.maps?.event) {
-      window.google.maps.event.trigger(mapRef.current, 'resize');
-    }
-  }, []);
+  const riderIcon  = isLoaded ? svgToIcon(RIDER_SVG, 52, 52, 26, 26, riderBearing)  : undefined;
+  const rideIcon   = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26, riderBearing)   : undefined;
+  const pickerIcon = isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50) : undefined;
 
   // ── Map load callback ──────────────────────────────────────────────────────
   const onMapLoad = useCallback((map) => {
@@ -310,11 +217,6 @@ export default function GoogleMapContainer({
     if (window.google) {
       trafficLayerRef.current = new window.google.maps.TrafficLayer();
     }
-    setTimeout(() => {
-      if (window.google?.maps?.event) {
-        window.google.maps.event.trigger(map, 'resize');
-      }
-    }, 100);
   }, []);
 
   const onMapUnmount = useCallback(() => {
@@ -326,38 +228,6 @@ export default function GoogleMapContainer({
     setMapInstance(null);
   }, []);
 
-  // ── ResizeObserver on container ───────────────────────────────────────────
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          triggerMapResize();
-        }
-      }
-    });
-
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, [triggerMapResize]);
-
-  // ── Multi-stage resize trigger ─────────────────────────────────────────────
-  useEffect(() => {
-    if (!mapInstance) return;
-
-    triggerMapResize();
-    const t1 = setTimeout(triggerMapResize, 60);
-    const t2 = setTimeout(triggerMapResize, 180);
-    const t3 = setTimeout(triggerMapResize, 400);
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-  }, [mapInstance, orderId, triggerMapResize]);
-
   // ── Picker mode ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isLoaded || mode !== 'picker') return;
@@ -365,7 +235,8 @@ export default function GoogleMapContainer({
     setRestaurantPos(null);
     setCustomerPos(null);
     setRiderPos(null);
-    setRouteSegments([]);
+    setRoute1Path([]);
+    setRoute2Path([]);
 
     const placeOrMovePicker = (lat, lng) => {
       setPickerPos({ lat, lng });
@@ -430,11 +301,11 @@ export default function GoogleMapContainer({
     }
   }, [trafficOn]);
 
-  // ── Update Physical Markers (Independent Authoritative Coordinates) ─────────
+  // ── Update Physical Markers (Independent Coordinates) ──────────────────────
   useEffect(() => {
     if (!isLoaded || mode !== 'tracking') return;
 
-    // Primary restaurant / pickup point
+    // Restaurant / Pickup point
     const rLat = isRideOrder ? (ridePickupLat ?? customerLat) : restaurantLat;
     const rLng = isRideOrder ? (ridePickupLng ?? customerLng) : restaurantLng;
     if (rLat != null && rLng != null && Number.isFinite(Number(rLat)) && Number(rLat) !== 0) {
@@ -452,7 +323,7 @@ export default function GoogleMapContainer({
       setCustomerPos(null);
     }
 
-    // Real Rider GPS
+    // Real Rider GPS (NO fallback to restaurant or customer)
     if (riderLat != null && riderLng != null && Number.isFinite(Number(riderLat)) && Number(riderLat) !== 0) {
       const newPos = { lat: Number(riderLat), lng: Number(riderLng) };
       setRiderPos(newPos);
@@ -476,196 +347,7 @@ export default function GoogleMapContainer({
     }
   }, [isLoaded, mode, restaurantLat, restaurantLng, customerLat, customerLng, ridePickupLat, ridePickupLng, rideDropLat, rideDropLng, riderLat, riderLng, isRideOrder]);
 
-  // ── Normalize Multi-Source Pickup Stops ─────────────────────────────────────
-  const { orderedStopsWithCoords, addressOnlyStops } = React.useMemo(() => {
-    const valid = [];
-    const noCoords = [];
-    const seenIds = new Set();
-
-    // 1. From pickupStops (most authoritative)
-    if (Array.isArray(pickupStops) && pickupStops.length > 0) {
-      pickupStops.forEach((stop, idx) => {
-        const id = String(stop._id || stop.stopId || stop.sourceId || `stop_${idx}`);
-        if (seenIds.has(id)) return;
-        seenIds.add(id);
-
-        const lat = Number(stop.latitude ?? stop.lat);
-        const lng = Number(stop.longitude ?? stop.lng);
-        const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0);
-
-        const normalized = {
-          id,
-          sourceId: stop.sourceId || id,
-          sourceType: stop.sourceType || 'supplier',
-          type: stop.sourceType || 'supplier',
-          name: stop.sourceName || stop.name || (stop.sourceType === 'restaurant' ? 'Restaurant' : 'Store'),
-          category: (stop.category || (stop.sourceType === 'restaurant' ? 'food' : 'catalog')).toLowerCase(),
-          address: stop.address || '',
-          status: stop.status || 'Pending',
-          distanceKm: stop.distanceKm ?? null,
-          durationMinutes: stop.durationMinutes ?? null,
-          lat: hasCoords ? lat : null,
-          lng: hasCoords ? lng : null,
-        };
-
-        if (hasCoords) {
-          valid.push(normalized);
-        } else if (stop.address && stop.address.trim()) {
-          noCoords.push(normalized);
-        }
-      });
-    } else if (Array.isArray(routeSequence) && routeSequence.length > 0) {
-      // 2. Fallback to routeSequence
-      routeSequence.filter(s => s.type !== 'customer').forEach((stop, idx) => {
-        const id = String(stop.supplierId || stop.restaurantId || `rs_${idx}`);
-        if (seenIds.has(id)) return;
-        seenIds.add(id);
-
-        const lat = Number(stop.latitude ?? stop.lat);
-        const lng = Number(stop.longitude ?? stop.lng);
-        const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0);
-
-        const normalized = {
-          id,
-          sourceId: id,
-          sourceType: stop.type || 'supplier',
-          type: stop.type || 'supplier',
-          name: stop.name || 'Store',
-          category: (stop.category || (stop.type === 'restaurant' ? 'food' : 'catalog')).toLowerCase(),
-          address: stop.address || '',
-          status: stop.status || 'Pending',
-          lat: hasCoords ? lat : null,
-          lng: hasCoords ? lng : null,
-        };
-
-        if (hasCoords) valid.push(normalized);
-        else if (stop.address) noCoords.push(normalized);
-      });
-    } else {
-      // 3. Fallback: restaurantPos + supplierDeliveries
-      if (restaurantPos) {
-        valid.push({
-          id: 'restaurant_primary',
-          sourceId: 'restaurant_primary',
-          sourceType: 'restaurant',
-          type: 'restaurant',
-          name: restaurantName || 'Restaurant',
-          category: 'food',
-          address: restaurantAddress || '',
-          status: status || 'Pending',
-          lat: restaurantPos.lat,
-          lng: restaurantPos.lng,
-        });
-      }
-      if (Array.isArray(supplierDeliveries) && supplierDeliveries.length > 0) {
-        supplierDeliveries.forEach((sup, idx) => {
-          const lat = Number(sup.latitude ?? sup.lat);
-          const lng = Number(sup.longitude ?? sup.lng);
-          const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0);
-          const normalized = {
-            id: String(sup._id || sup.supplierId || `sup_${idx}`),
-            sourceId: String(sup.supplierId || `sup_${idx}`),
-            sourceType: 'supplier',
-            type: 'supplier',
-            name: sup.supplierName || 'Store',
-            category: (sup.category || 'catalog').toLowerCase(),
-            address: sup.address || '',
-            status: 'Ready',
-            distanceKm: sup.distanceKm ?? null,
-            durationMinutes: sup.durationMinutes ?? null,
-            lat: hasCoords ? lat : null,
-            lng: hasCoords ? lng : null,
-          };
-          if (hasCoords) valid.push(normalized);
-          else if (sup.address) noCoords.push(normalized);
-        });
-      }
-    }
-
-    return { orderedStopsWithCoords: valid, addressOnlyStops: noCoords };
-  }, [pickupStops, routeSequence, restaurantPos, restaurantName, restaurantAddress, status, supplierDeliveries]);
-
-  // ── Multi-Stop Road Routing Calculation ───────────────────────────────────────
-  useEffect(() => {
-    if (!isLoaded || mode !== 'tracking') return;
-
-    // Construct ordered waypoints:
-    // [ Rider (if live GPS), ...orderedStopsWithCoords, Customer (if customerPos) ]
-    const waypoints = [];
-    if (riderPos) {
-      waypoints.push({
-        lat: riderPos.lat,
-        lng: riderPos.lng,
-        name: 'Rider',
-        type: 'rider',
-        sourceType: 'rider'
-      });
-    }
-
-    orderedStopsWithCoords.forEach(st => {
-      waypoints.push({
-        lat: st.lat,
-        lng: st.lng,
-        name: st.name,
-        type: st.type,
-        sourceType: st.sourceType,
-        category: st.category
-      });
-    });
-
-    if (customerPos) {
-      waypoints.push({
-        lat: customerPos.lat,
-        lng: customerPos.lng,
-        name: customerName || 'Customer',
-        type: 'customer',
-        sourceType: 'customer'
-      });
-    }
-
-    if (waypoints.length < 2) {
-      setRouteSegments([]);
-      setMultiRouteTotals({ distanceKm: 0, durationMinutes: 0 });
-      return;
-    }
-
-    const calcHash = `${orderId}_${waypoints.map(w => `${w.lat.toFixed(4)},${w.lng.toFixed(4)}`).join('|')}`;
-    if (lastMultiRouteCalcHashRef.current === calcHash) {
-      return;
-    }
-    lastMultiRouteCalcHashRef.current = calcHash;
-
-    const fetchMultiRoutes = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/maps/multi-stop-routes`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ waypoints, travelMode: 'DRIVE' })
-        });
-        const data = await res.json();
-        if (data.success && data.data && Array.isArray(data.data.segments)) {
-          setRouteSegments(data.data.segments);
-          setMultiRouteTotals({
-            distanceKm: data.data.totalDistanceKm,
-            durationMinutes: data.data.totalDurationMinutes
-          });
-          if (onRouteInfo) {
-            onRouteInfo({
-              segments: data.data.segments,
-              totalDistanceKm: data.data.totalDistanceKm,
-              totalDurationMinutes: data.data.totalDurationMinutes
-            });
-          }
-        }
-      } catch (err) {
-        console.error('[GoogleMapContainer] Multi-stop routes fetch failed:', err);
-      }
-    };
-
-    fetchMultiRoutes();
-  }, [isLoaded, mode, riderPos, orderedStopsWithCoords, customerPos, customerName, orderId, onRouteInfo]);
-
-  // ── Auto-fit Camera Bounds around all coordinate-valid points ───────────────
+  // ── Auto-fit Camera on Mount or Order Change ───────────────────────────────
   useEffect(() => {
     if (!isLoaded || mode !== 'tracking' || !mapRef.current || !window.google) return;
     if (hasFitBoundsInitialRef.current && isUserInteractingRef.current) return;
@@ -673,13 +355,10 @@ export default function GoogleMapContainer({
     const bounds = new window.google.maps.LatLngBounds();
     let count = 0;
 
-    orderedStopsWithCoords.forEach(stop => {
-      if (stop.lat && stop.lng) {
-        bounds.extend({ lat: stop.lat, lng: stop.lng });
-        count++;
-      }
-    });
-
+    if (restaurantPos) {
+      bounds.extend(restaurantPos);
+      count++;
+    }
     if (customerPos) {
       bounds.extend(customerPos);
       count++;
@@ -698,9 +377,107 @@ export default function GoogleMapContainer({
       });
       hasFitBoundsInitialRef.current = true;
     }
-  }, [isLoaded, mode, orderId, orderedStopsWithCoords, customerPos, riderPos]);
+  }, [isLoaded, mode, orderId, restaurantPos, customerPos]);
 
-  // ── Socket.IO Live location subscriber (for secondary GPS sync) ─────────────
+  // ── Route 1: Dynamic Road Route (Rider GPS -> Restaurant/Pickup) ─────────────
+  const lastRoute1CalcRef = useRef({ lat: null, lng: null, orderId: null });
+
+  useEffect(() => {
+    if (!isLoaded || mode !== 'tracking') return;
+    if (!riderPos || !restaurantPos) {
+      setRoute1Path([]);
+      setRoute1Info({ distanceKm: null, durationMinutes: null });
+      return;
+    }
+
+    const distFromLastCalc = lastRoute1CalcRef.current.lat 
+      ? Math.hypot(riderPos.lat - lastRoute1CalcRef.current.lat, riderPos.lng - lastRoute1CalcRef.current.lng) * 111000
+      : 999999;
+
+    const orderChanged = lastRoute1CalcRef.current.orderId !== orderId;
+
+    // Throttle: only recalculate Route 1 if rider moved > 100 meters or on order change
+    if (!orderChanged && distFromLastCalc < 100) {
+      return;
+    }
+
+    lastRoute1CalcRef.current = { lat: riderPos.lat, lng: riderPos.lng, orderId };
+
+    const fetchRoute1 = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/maps/routes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ origin: riderPos, destination: restaurantPos, travelMode: 'DRIVE' }),
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          setRoute1Path(data.data.polyline || [riderPos, restaurantPos]);
+          setRoute1Info({ distanceKm: data.data.distanceKm, durationMinutes: data.data.durationMinutes });
+          if (onRouteInfo) onRouteInfo({ route1: data.data });
+        } else {
+          setRoute1Path([riderPos, restaurantPos]);
+        }
+      } catch (err) {
+        console.error('[GoogleMapContainer] Route 1 fetch failed:', err);
+        setRoute1Path([riderPos, restaurantPos]);
+      }
+    };
+
+    fetchRoute1();
+  }, [isLoaded, mode, riderPos, restaurantPos, orderId, onRouteInfo]);
+
+  // ── Route 2: Static Road Route (Restaurant/Pickup -> Customer/Drop) ─────────
+  const lastRoute2CalcRef = useRef({ restLat: null, custLat: null, orderId: null });
+
+  useEffect(() => {
+    if (!isLoaded || mode !== 'tracking') return;
+    if (!restaurantPos || !customerPos) {
+      setRoute2Path([]);
+      setRoute2Info({ distanceKm: null, durationMinutes: null });
+      return;
+    }
+
+    const isSameCoords = 
+      lastRoute2CalcRef.current.restLat === restaurantPos.lat &&
+      lastRoute2CalcRef.current.custLat === customerPos.lat &&
+      lastRoute2CalcRef.current.orderId === orderId;
+
+    if (isSameCoords) return;
+
+    lastRoute2CalcRef.current = {
+      restLat: restaurantPos.lat,
+      restLng: restaurantPos.lng,
+      custLat: customerPos.lat,
+      custLng: customerPos.lng,
+      orderId
+    };
+
+    const fetchRoute2 = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/maps/routes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ origin: restaurantPos, destination: customerPos, travelMode: 'DRIVE' }),
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          setRoute2Path(data.data.polyline || [restaurantPos, customerPos]);
+          setRoute2Info({ distanceKm: data.data.distanceKm, durationMinutes: data.data.durationMinutes });
+          if (onRouteInfo) onRouteInfo({ route2: data.data });
+        } else {
+          setRoute2Path([restaurantPos, customerPos]);
+        }
+      } catch (err) {
+        console.error('[GoogleMapContainer] Route 2 fetch failed:', err);
+        setRoute2Path([restaurantPos, customerPos]);
+      }
+    };
+
+    fetchRoute2();
+  }, [isLoaded, mode, restaurantPos, customerPos, orderId, onRouteInfo]);
+
+  // ── Socket.IO Live location subscriber (for secondary sync) ────────────────
   useEffect(() => {
     if (!isLoaded || !orderId || mode !== 'tracking') return;
 
@@ -729,19 +506,56 @@ export default function GoogleMapContainer({
     };
   }, [isLoaded, orderId, mode]);
 
+  // ── Polyline Options ───────────────────────────────────────────────────────
+  // Route 1 (Rider -> Restaurant) — Blue (#1A73E8)
+  const route1GlowOptions = {
+    strokeColor: '#1A73E8',
+    strokeOpacity: 0.25,
+    strokeWeight: 12,
+    geodesic: true,
+    zIndex: 2,
+  };
+  const route1MainOptions = {
+    strokeColor: '#1A73E8',
+    strokeOpacity: 1,
+    strokeWeight: 5,
+    geodesic: true,
+    zIndex: 3,
+  };
+
+  // Route 2 (Restaurant -> Customer) — Green (#16A34A)
+  const route2GlowOptions = {
+    strokeColor: '#16A34A',
+    strokeOpacity: 0.25,
+    strokeWeight: 12,
+    geodesic: true,
+    zIndex: 1,
+  };
+  const route2MainOptions = {
+    strokeColor: '#16A34A',
+    strokeOpacity: 1,
+    strokeWeight: 5,
+    geodesic: true,
+    zIndex: 2,
+  };
+
+  // Compute Total Distance & ETA
+  const totalDistanceKm = (route1Info.distanceKm || 0) + (route2Info.distanceKm || 0);
+  const totalDurationMinutes = (route1Info.durationMinutes || 0) + (route2Info.durationMinutes || 0);
+
   // ── Render: Error / Loading ────────────────────────────────────────────────
   if (loadError || error) {
     return (
-      <div className="w-full h-full min-h-[380px] bg-red-50 flex items-center justify-center flex-col gap-2 rounded-2xl border border-red-100 text-red-500 p-4">
+      <div className="w-full h-full min-h-[280px] bg-red-50 flex items-center justify-center flex-col gap-2 rounded-2xl border border-red-100 text-red-500 p-4">
         <MapPin className="w-6 h-6" />
-        <span className="text-xs font-bold text-center">{error || 'Failed to load Google Maps. Please check your network connection.'}</span>
+        <span className="text-xs font-bold text-center">{error || 'Failed to load Google Maps.'}</span>
       </div>
     );
   }
 
   if (!isLoaded) {
     return (
-      <div className="w-full h-full min-h-[380px] bg-base flex items-center justify-center flex-col gap-2 rounded-2xl border border-line">
+      <div className="w-full h-full min-h-[280px] bg-base flex items-center justify-center flex-col gap-2 rounded-2xl border border-line">
         <Loader className="w-8 h-8 text-primary animate-spin" />
         <span className="text-xs text-muted font-bold">Loading Map & Routes...</span>
       </div>
@@ -749,8 +563,8 @@ export default function GoogleMapContainer({
   }
 
   return (
-    <div className="w-full h-full min-h-[380px] relative rounded-2xl overflow-hidden border border-line shadow-inner flex flex-col justify-between">
-      <div ref={containerRef} className="w-full h-full min-h-[320px] relative flex-1">
+    <div className="w-full h-full relative rounded-2xl overflow-hidden border border-line shadow-inner flex flex-col justify-between">
+      <div ref={containerRef} className="w-full h-full relative flex-1">
         <GoogleMap
           mapContainerStyle={MAP_CONTAINER_STYLE}
           center={mapCenter}
@@ -782,90 +596,62 @@ export default function GoogleMapContainer({
             />
           )}
 
-          {/* ── TRACKING MODE: Multi-Stop Road Route Segments ── */}
-          {mode === 'tracking' && routeSegments.map((seg, sIdx) => {
-            if (!seg.polyline || seg.polyline.length < 2) return null;
-            const isRiderLeg = seg.fromType === 'rider' || seg.fromName === 'Rider';
-            const strokeColor = isRiderLeg ? '#1A73E8' : '#16A34A';
+          {/* ── TRACKING MODE: Route 1 (Rider -> Restaurant in Blue) ── */}
+          {mode === 'tracking' && route1Path.length > 1 && (
+            <>
+              <Polyline path={route1Path} options={route1GlowOptions} />
+              <Polyline path={route1Path} options={route1MainOptions} />
+            </>
+          )}
 
-            return (
-              <React.Fragment key={`seg_${sIdx}`}>
-                <Polyline
-                  path={seg.polyline}
-                  options={{
-                    strokeColor,
-                    strokeOpacity: 0.25,
-                    strokeWeight: 12,
-                    geodesic: true,
-                    zIndex: isRiderLeg ? 2 : 1
-                  }}
-                />
-                <Polyline
-                  path={seg.polyline}
-                  options={{
-                    strokeColor,
-                    strokeOpacity: 1,
-                    strokeWeight: 5,
-                    geodesic: true,
-                    zIndex: isRiderLeg ? 3 : 2
-                  }}
-                />
-              </React.Fragment>
-            );
-          })}
+          {/* ── TRACKING MODE: Route 2 (Restaurant -> Customer in Green) ── */}
+          {mode === 'tracking' && route2Path.length > 1 && (
+            <>
+              <Polyline path={route2Path} options={route2GlowOptions} />
+              <Polyline path={route2Path} options={route2MainOptions} />
+            </>
+          )}
 
-          {/* ── TRACKING MODE: Pickup Stops (Restaurant + Suppliers) ── */}
-          {mode === 'tracking' && orderedStopsWithCoords.map((stop, sIdx) => {
-            const stopPos = { lat: stop.lat, lng: stop.lng };
-            const popupKey = `stop_${stop.id || sIdx}`;
-            const icon = getStopIcon(stop.category, stop.sourceType);
-            const isRest = stop.sourceType === 'restaurant';
-
-            return (
-              <Marker
-                key={stop.id || sIdx}
-                position={stopPos}
-                icon={icon}
-                title={stop.name}
-                zIndex={12 + sIdx}
-                onClick={() => setActivePopup(activePopup === popupKey ? null : popupKey)}
-              >
-                {activePopup === popupKey && (
-                  <InfoWindow onCloseClick={() => setActivePopup(null)}>
-                    <div style={{
-                      fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
-                      fontSize: '12px',
-                      color: '#1a1a1a',
-                      padding: '2px 4px',
-                      maxWidth: '220px'
-                    }}>
-                      <div style={{ fontWeight: '800', color: isRest ? '#EA580C' : '#7C3AED' }}>
-                        {isRest ? '🍽️ Restaurant' : `🏪 ${stop.category.toUpperCase()} STORE`}
-                      </div>
-                      <div style={{ fontWeight: '700', marginTop: '2px' }}>
-                        {stop.name}
-                      </div>
-                      {stop.address && (
-                        <div style={{ fontSize: '11px', color: '#4B5563', marginTop: '2px' }}>
-                          📍 {stop.address}
-                        </div>
-                      )}
-                      <div style={{ fontSize: '10px', fontWeight: '700', marginTop: '3px', color: stop.status === 'Ready' || stop.status === 'Collected' ? '#16A34A' : '#D97706' }}>
-                        Status: {stop.status}
-                      </div>
+          {/* ── TRACKING MODE: Restaurant Marker ── */}
+          {mode === 'tracking' && restaurantPos && (
+            <Marker
+              position={restaurantPos}
+              icon={restaurantIcon}
+              title={isRideOrder ? 'Pickup Point' : 'Restaurant Location'}
+              zIndex={10}
+              onClick={() => setActivePopup(activePopup === 'restaurant' ? null : 'restaurant')}
+            >
+              {activePopup === 'restaurant' && (
+                <InfoWindow onCloseClick={() => setActivePopup(null)}>
+                  <div style={{
+                    fontFamily: "'Inter', 'Segoe UI', Arial, sans-serif",
+                    fontSize: '12px',
+                    color: '#1a1a1a',
+                    padding: '2px 4px',
+                  }}>
+                    <div style={{ fontWeight: '800', color: '#EA580C' }}>
+                      {isRideOrder ? '📍 Pickup Point' : '🍽️ Restaurant Location'}
                     </div>
-                  </InfoWindow>
-                )}
-              </Marker>
-            );
-          })}
+                    <div style={{ fontWeight: '600', marginTop: '2px' }}>
+                      {restaurantName || (isRideOrder ? 'Pickup Location' : 'Restaurant')}
+                    </div>
+                    {route1Info.durationMinutes != null && (
+                      <div style={{ fontSize: '11px', color: '#1A73E8', fontWeight: '700', marginTop: '2px' }}>
+                        ETA: {route1Info.durationMinutes} min ({route1Info.distanceKm} km)
+                      </div>
+                    )}
+                  </div>
+                </InfoWindow>
+              )}
+            </Marker>
+          )}
 
           {/* ── TRACKING MODE: Customer Marker ── */}
           {mode === 'tracking' && customerPos && (
             <Marker
               position={customerPos}
               icon={homeIcon}
-              title={isRideOrder ? 'Drop Location' : (customerName || 'Customer Location')}
+              title={isRideOrder ? 'Drop Location' : 'Customer Location'}
               zIndex={10}
               onClick={() => setActivePopup(activePopup === 'customer' ? null : 'customer')}
             >
@@ -883,6 +669,11 @@ export default function GoogleMapContainer({
                     <div style={{ fontWeight: '600', marginTop: '2px', maxWidth: '200px' }}>
                       {customerAddress || customerName || 'Delivery Address'}
                     </div>
+                    {route2Info.durationMinutes != null && (
+                      <div style={{ fontSize: '11px', color: '#16A34A', fontWeight: '700', marginTop: '2px' }}>
+                        ETA: {route2Info.durationMinutes} min ({route2Info.distanceKm} km)
+                      </div>
+                    )}
                   </div>
                 </InfoWindow>
               )}
@@ -1091,45 +882,40 @@ export default function GoogleMapContainer({
 
       {/* ── Bottom Route Info Summary Bar ── */}
       {mode === 'tracking' && (
-        <div className="bg-surface/95 backdrop-blur-md border-t border-line px-4 py-2.5 z-20 flex flex-col gap-2 shadow-sm text-xs font-semibold">
-          {/* Segments Carousel / List */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth py-0.5">
-            {routeSegments.length > 0 ? (
-              routeSegments.map((seg, idx) => {
-                const isRiderLeg = seg.fromType === 'rider' || seg.fromName === 'Rider';
-                return (
-                  <div key={idx} className="flex items-center gap-1.5 flex-shrink-0 bg-base/80 px-2.5 py-1.5 rounded-xl border border-line">
-                    <span className={`w-2 h-2 rounded-full inline-block flex-shrink-0 ${isRiderLeg ? 'bg-[#1A73E8]' : 'bg-[#16A34A]'}`} />
-                    <div className="flex flex-col">
-                      <span className="text-[9px] uppercase tracking-wider text-muted font-extrabold truncate max-w-[140px]">
-                        {seg.fromName} → {seg.toName}
-                      </span>
-                      <span className="text-[10px] font-black text-main leading-tight">
-                        {seg.distanceKm} km • {seg.durationMinutes} min
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="text-[10px] text-muted font-bold py-1">
-                Calculating road route segments...
+        <div className="bg-surface/95 backdrop-blur-md border-t border-line px-4 py-2.5 z-20 flex items-center justify-between shadow-sm text-xs font-semibold">
+          {/* Leg 1: Rider -> Restaurant */}
+          <div className="flex items-center gap-2">
+            <span className="w-3.5 h-1.5 bg-[#1A73E8] rounded-full inline-block flex-shrink-0" />
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-muted font-bold">
+                {isRideOrder ? 'Rider → Pickup' : 'Rider → Restaurant'}
               </div>
-            )}
+              <div className="text-[11px] font-black text-main leading-tight">
+                {route1Info.distanceKm != null ? `${route1Info.distanceKm} km • ${route1Info.durationMinutes} min` : (riderPos ? 'Calculating...' : 'GPS Pending')}
+              </div>
+            </div>
           </div>
 
-          {/* Route Totals & Address-only indicator */}
-          <div className="flex items-center justify-between border-t border-line/60 pt-1 text-[11px]">
-            <div className="flex items-center gap-2 text-muted font-bold flex-wrap">
-              <span>{orderedStopsWithCoords.length} Pickup Stop{orderedStopsWithCoords.length !== 1 ? 's' : ''}</span>
-              {addressOnlyStops.length > 0 && (
-                <span className="text-amber-700 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md text-[10px] font-extrabold">
-                  📍 {addressOnlyStops.length} Address-only ({addressOnlyStops.map(s => s.name).join(', ')})
-                </span>
-              )}
+          {/* Leg 2: Restaurant -> Customer */}
+          <div className="flex items-center gap-2">
+            <span className="w-3.5 h-1.5 bg-[#16A34A] rounded-full inline-block flex-shrink-0" />
+            <div>
+              <div className="text-[9px] uppercase tracking-wider text-muted font-bold">
+                {isRideOrder ? 'Pickup → Drop' : 'Restaurant → Customer'}
+              </div>
+              <div className="text-[11px] font-black text-main leading-tight">
+                {route2Info.distanceKm != null ? `${route2Info.distanceKm} km • ${route2Info.durationMinutes} min` : 'Calculating...'}
+              </div>
             </div>
-            <div className="font-black text-main flex-shrink-0">
-              Total: {multiRouteTotals.distanceKm > 0 ? `${multiRouteTotals.distanceKm.toFixed(1)} km • ${multiRouteTotals.durationMinutes} min` : '--'}
+          </div>
+
+          {/* Total Distance & Total ETA */}
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-muted font-bold text-right">
+              Total Distance
+            </div>
+            <div className="text-[11px] font-black text-main leading-tight text-right">
+              {totalDistanceKm > 0 ? `${totalDistanceKm.toFixed(1)} km • ${totalDurationMinutes} min` : '--'}
             </div>
           </div>
         </div>

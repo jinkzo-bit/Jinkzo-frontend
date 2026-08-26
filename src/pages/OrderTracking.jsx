@@ -21,7 +21,6 @@ export default function OrderTracking() {
   const [isLoading, setIsLoading] = useState(true);
   const [countdown, setCountdown] = useState(30); // minutes
   const [riderLoc, setRiderLoc] = useState(null); // Socket GPS stream
-  const [gpsStatus, setGpsStatus] = useState('locating'); // 'live' | 'locating' | 'unavailable'
 
   // Review states
   const [rating, setRating] = useState(0);
@@ -218,14 +217,9 @@ export default function OrderTracking() {
       }
     });
 
-    socket.on('locationUpdated', ({ lat, lng, status }) => {
+    socket.on('locationUpdated', ({ lat, lng }) => {
       console.log('[TRACKING SOCKET] Live rider location update:', lat, lng);
-      if (typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
-        setRiderLoc({ lat, lng });
-        setGpsStatus('live');
-      } else if (status) {
-        setGpsStatus(status);
-      }
+      setRiderLoc({ lat, lng });
     });
 
     return () => {
@@ -263,9 +257,7 @@ export default function OrderTracking() {
     );
   }
 
-  const isCatalogOrder = !order.restaurantId && Array.isArray(order.supplierDeliveries) && order.supplierDeliveries.length > 0;
-  const isMixedOrder = order.restaurantId && Array.isArray(order.supplierDeliveries) && order.supplierDeliveries.length > 0;
-
+  // Active status timeline markers
   const timelineSteps = order.orderType === 'ride' ? [
     { label: 'Booking Placed', mappedState: 0, desc: 'Finding nearest Ride Captain' },
     { label: 'Captain Assigned', mappedState: 1, desc: 'Captain accepted your ride request' },
@@ -273,25 +265,11 @@ export default function OrderTracking() {
     { label: 'Ride in Progress', mappedState: 3, desc: 'Captain is en route to destination' },
     { label: 'Completed', mappedState: 4, desc: 'Reached destination successfully!' }
   ] : [
-    {
-      label: 'Order Placed',
-      mappedState: 0,
-      desc: isCatalogOrder
-        ? 'Finding a delivery partner for your order'
-        : isMixedOrder
-          ? 'Finding a delivery partner — restaurant is preparing'
-          : 'Awaiting restaurant approval'
-    },
-    {
-      label: isCatalogOrder ? 'Partner Assigned' : 'Preparing',
-      mappedState: 1,
-      desc: isCatalogOrder
-        ? 'Delivery partner is heading to the store'
-        : 'Accepted & being prepared'
-    },
-    { label: 'Collecting Items', mappedState: 2, desc: 'Rider is collecting your order from pickup locations' },
+    { label: 'Order Placed', mappedState: 0, desc: 'Awaiting restaurant approval' },
+    { label: 'Preparing', mappedState: 1, desc: 'Accepted & being cooked' },
+    { label: 'Awaiting Pickup', mappedState: 2, desc: 'Rider is assigned and on the way' },
     { label: 'Out for Delivery', mappedState: 3, desc: 'Rider is driving to you' },
-    { label: 'Delivered', mappedState: 4, desc: isCatalogOrder ? 'Enjoy your items!' : 'Enjoy your meal!' }
+    { label: 'Delivered', mappedState: 4, desc: 'Enjoy your meal!' }
   ];
 
   const getStepIndex = (currentStatus, type) => {
@@ -303,10 +281,10 @@ export default function OrderTracking() {
       if (['Delivered', 'Completed'].includes(currentStatus)) return 4;
       return 0;
     } else {
-      // Food / Catalog / Mixed — UNIFIED
+      // Food / Parcel — UNCHANGED
       if (currentStatus === 'Placed') return 0;
       if (currentStatus === 'Confirmed' || currentStatus === 'Accepted' || currentStatus === 'Preparing') return 1;
-      if (['Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up'].includes(currentStatus)) return 2;
+      if (['Ready_for_Pickup', 'Rider_Assigned', 'Rider_At_Restaurant', 'Picked_Up'].includes(currentStatus)) return 2;
       if (['Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(currentStatus)) return 3;
       if (currentStatus === 'Delivered' || currentStatus === 'Completed') return 4;
       return 0;
@@ -418,12 +396,8 @@ export default function OrderTracking() {
       {!['Delivered', 'Completed'].includes(order.status) && (
         <InteractiveMap 
           status={order.status} 
-          restaurantName={order.orderType === 'ride' ? 'Pickup Point' : (order.restaurant?.name || order.restaurantLocation?.formattedAddress || 'Restaurant')}
-          restaurantAddress={order.orderType === 'ride' ? (order.pickupLocation?.formattedAddress || order.pickupAddress?.street || '') : (order.restaurantLocation?.formattedAddress || '')}
           restaurantLat={order.orderType !== 'ride' ? order.restaurantLocation?.lat : undefined}
           restaurantLng={order.orderType !== 'ride' ? order.restaurantLocation?.lng : undefined}
-          customerName={order.customerName || order.user?.name || 'Customer Location'}
-          customerAddress={order.orderType === 'ride' ? (order.dropLocation?.formattedAddress || order.address?.street || '') : (order.customerLocation?.formattedAddress || order.address?.street || '')}
           customerLat={order.orderType !== 'ride' ? order.customerLocation?.lat : undefined}
           customerLng={order.orderType !== 'ride' ? order.customerLocation?.lng : undefined}
           deliveryMethod={order.orderType === 'ride' ? 'Ride' : 'Standard'}
@@ -435,10 +409,6 @@ export default function OrderTracking() {
           rideDropLng={order.orderType === 'ride' ? (order.dropLocation?.lng ?? order.restaurantLocation?.lng) : undefined}
           riderLat={riderLoc?.lat}
           riderLng={riderLoc?.lng}
-          gpsStatus={gpsStatus}
-          supplierDeliveries={order.supplierDeliveries || []}
-          pickupStops={order.pickupStops || []}
-          routeSequence={order.routeSequence || []}
         />
       )}
 
@@ -566,72 +536,16 @@ export default function OrderTracking() {
                     {isCompleted ? <Check className="w-3.5 h-3.5" /> : idx + 1}
                   </div>
                   
-                  <h4 className={`text-sm font-bold transition-colors flex items-center gap-2 flex-wrap ${
+                  <h4 className={`text-sm font-bold transition-colors ${
                     isActive 
                       ? order.orderType === 'ride' ? 'text-yellow-600' : 'text-primary' 
                       : isCompleted ? 'text-green-700' : 'text-muted'
                   }`}>
-                    <span>{step.label}</span>
-                    {step.mappedState === 2 && Array.isArray(order.pickupStops) && order.pickupStops.length > 0 && (
-                      <span className="text-[10px] font-extrabold text-primary bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
-                        {order.pickupStops.filter(s => s.status === 'Collected').length}/{order.pickupStops.length} Collected
-                      </span>
-                    )}
+                    {step.label}
                   </h4>
                   <p className="text-xs text-muted leading-relaxed font-semibold">
                     {step.desc}
                   </p>
-
-                  {/* Multi-stop pickup sources progress breakdown */}
-                  {step.mappedState === 2 && Array.isArray(order.pickupStops) && order.pickupStops.length > 0 && (
-                    <div className="mt-2 flex flex-col gap-1.5 bg-base/80 border border-line rounded-2xl p-3">
-                      <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">
-                        Pickup Sources ({order.pickupStops.filter(s => s.status === 'Collected').length} of {order.pickupStops.length} Completed)
-                      </span>
-                      <div className="flex flex-col gap-1.5 mt-0.5">
-                        {order.pickupStops.map((stop, sIdx) => {
-                          const isCollected = stop.status === 'Collected';
-                          const isArrived = stop.status === 'Rider_Arrived';
-                          const isReady = stop.status === 'Ready';
-                          return (
-                            <div
-                              key={stop._id || stop.stopId || sIdx}
-                              className={`flex items-center justify-between p-2 rounded-xl border text-xs ${
-                                isCollected
-                                  ? 'bg-green-50/70 border-green-200 text-green-900'
-                                  : isArrived || isReady
-                                  ? 'bg-violet-50/70 border-violet-200 text-violet-950'
-                                  : 'bg-surface border-line text-main'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-sm flex-shrink-0">
-                                  {isCollected ? '✅' : stop.sourceType === 'restaurant' ? '🍽️' : '🏪'}
-                                </span>
-                                <div className="flex flex-col min-w-0">
-                                  <span className={`font-bold truncate ${isCollected ? 'line-through text-green-800' : 'text-main'}`}>
-                                    {stop.sourceName}
-                                  </span>
-                                  {stop.address && (
-                                    <span className="text-[10px] text-muted truncate">{stop.address}</span>
-                                  )}
-                                </div>
-                              </div>
-                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md capitalize flex-shrink-0 ${
-                                isCollected ? 'bg-green-100 text-green-800' :
-                                isArrived ? 'bg-violet-100 text-violet-800' :
-                                isReady ? 'bg-emerald-100 text-emerald-800' :
-                                stop.status === 'Preparing' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-gray-100 text-gray-600'
-                              }`}>
-                                {stop.status}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}

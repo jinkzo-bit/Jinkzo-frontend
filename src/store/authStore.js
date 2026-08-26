@@ -6,23 +6,6 @@ import { API_BASE } from '../config/api';
 const ACCESS_KEY  = 'qb-auth-token';
 const REFRESH_KEY = 'qb-refresh-token';
 
-// ── Safe JSON Response Parser ────────────────────────────────────────────────
-const safeJson = async (res) => {
-  const contentType = res.headers?.get ? (res.headers.get('content-type') || '') : '';
-  if (contentType.includes('application/json')) {
-    try {
-      return await res.json();
-    } catch (e) {
-      console.warn('[AuthStore] JSON parse exception:', e);
-    }
-  }
-  const text = await res.text().catch(() => '');
-  return {
-    success: false,
-    message: text || `Server returned HTTP ${res.status || 'Error'} (${res.statusText || 'No status text'})`
-  };
-};
-
 export const useAuthStore = create((set, get) => ({
   user: null,
   isAuthenticated: localStorage.getItem(ACCESS_KEY) !== null,
@@ -41,7 +24,7 @@ export const useAuthStore = create((set, get) => ({
         body: JSON.stringify({ refreshToken }),
       });
       if (!res.ok) return null;
-      const data = await safeJson(res);
+      const data = await res.json();
       if (data.token) {
         localStorage.setItem(ACCESS_KEY, data.token);
         set({ token: data.token });
@@ -80,7 +63,7 @@ export const useAuthStore = create((set, get) => ({
       }
 
       if (res.ok) {
-        const data = await safeJson(res);
+        const data = await res.json();
         const currentToken = get().token || sessionToken;
         set({ user: data, token: currentToken, isAuthenticated: true, error: null });
       } else if (res.status === 401 || res.status === 403) {
@@ -106,15 +89,10 @@ export const useAuthStore = create((set, get) => ({
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await safeJson(res);
-      if (!res.ok || (data.success === false && data.message)) {
-        throw new Error(data.message || 'Login failed');
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Login failed');
 
-      if (data.token) {
-        localStorage.setItem(ACCESS_KEY, data.token);
-        localStorage.setItem('token', data.token);
-      }
+      if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
 
@@ -143,7 +121,7 @@ export const useAuthStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, name }),
       });
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to send OTP');
       return { success: true, message: data.message };
     } catch (err) {
@@ -164,13 +142,10 @@ export const useAuthStore = create((set, get) => ({
         body: JSON.stringify({ name, email, password, phone, role, ...partnerDetails }),
       });
 
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Registration failed');
 
-      if (data.token) {
-        localStorage.setItem(ACCESS_KEY, data.token);
-        localStorage.setItem('token', data.token);
-      }
+      if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
 
@@ -221,7 +196,6 @@ export const useAuthStore = create((set, get) => ({
     }
 
     localStorage.removeItem(ACCESS_KEY);
-    localStorage.removeItem('token');
     localStorage.removeItem(REFRESH_KEY);
     set({ user: null, token: null, isAuthenticated: false, error: null });
   },
@@ -240,7 +214,7 @@ export const useAuthStore = create((set, get) => ({
         body: JSON.stringify({ documentType, documentNumber }),
       });
 
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'KYC submission failed');
 
       set({ user: data, error: null });
@@ -274,7 +248,7 @@ export const useAuthStore = create((set, get) => ({
         body: JSON.stringify({ addresses: updatedAddresses }),
       });
 
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to add address');
 
       set({ user: data, error: null });
@@ -309,7 +283,7 @@ export const useAuthStore = create((set, get) => ({
       });
 
       if (res.ok) {
-        const data = await safeJson(res);
+        const data = await res.json();
         set({ user: data });
       }
     } catch (err) {
@@ -336,7 +310,7 @@ export const useAuthStore = create((set, get) => ({
         body: JSON.stringify({ addresses: updatedAddresses }),
       });
 
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to update address');
       set({ user: data });
       return { success: true };
@@ -354,7 +328,7 @@ export const useAuthStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone }),
       });
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) return { success: false, message: data.message || 'Failed to send OTP.' };
       return { success: true };
     } catch {
@@ -371,12 +345,9 @@ export const useAuthStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, otp }),
       });
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'OTP verification failed.');
-      if (data.token) {
-        localStorage.setItem(ACCESS_KEY, data.token);
-        localStorage.setItem('token', data.token);
-      }
+      if (data.token) localStorage.setItem(ACCESS_KEY, data.token);
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
       return { success: true };
@@ -396,7 +367,7 @@ export const useAuthStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier }),
       });
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) return { success: false, message: data.message || 'Failed to send OTP.' };
       // Returns { success, channel: 'email'|'sms', maskedTo }
       return { success: true, channel: data.channel, maskedTo: data.maskedTo };
@@ -413,7 +384,7 @@ export const useAuthStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier, otp, channel }),
       });
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) return { success: false, message: data.message || 'OTP verification failed.' };
       return { success: true, resetToken: data.resetToken };
     } catch {
@@ -429,7 +400,7 @@ export const useAuthStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) return { success: false, message: data.message || 'Failed to send OTP.' };
       return { success: true, message: data.message };
     } catch (err) {
@@ -445,7 +416,7 @@ export const useAuthStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone }),
       });
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) return { success: false, message: data.message || 'Failed to send OTP.' };
       return { success: true, message: data.message };
     } catch (err) {
@@ -461,7 +432,7 @@ export const useAuthStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, otp }),
       });
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) return { success: false, message: data.message || 'OTP verification failed.' };
       return { success: true, resetToken: data.resetToken };
     } catch (err) {
@@ -477,7 +448,7 @@ export const useAuthStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, otp }),
       });
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) return { success: false, message: data.message || 'OTP verification failed.' };
       return { success: true, resetToken: data.resetToken };
     } catch (err) {
@@ -493,7 +464,7 @@ export const useAuthStore = create((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resetToken, password }),
       });
-      const data = await safeJson(res);
+      const data = await res.json();
       if (!res.ok) return { success: false, message: data.message || 'Password reset failed.' };
       return { success: true, message: data.message };
     } catch (err) {

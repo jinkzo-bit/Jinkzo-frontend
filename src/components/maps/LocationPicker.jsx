@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MapPin, Navigation, Compass, Loader, Check, Copy } from 'lucide-react';
+import { MapPin, Navigation, Loader, Check, Copy } from 'lucide-react';
 import { useJsApiLoader, GoogleMap } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMapsLoader';
 import { parseAddressComponents } from '../../utils/parseAddressComponents';
 import { isValidCoordinates } from '../../utils/coordinates';
 import { API_BASE } from '../../config/api';
 import PlacesAutocomplete from './PlacesAutocomplete';
+import MapRotationControls from './MapRotationControls';
 
 const INDIA_CENTER_LAT = 20.5937;
 const INDIA_CENTER_LNG = 78.9629;
@@ -26,6 +27,7 @@ const MAP_OPTIONS = {
   tilt: 0,
   isFractionalZoomEnabled: true,
   mapTypeId: 'roadmap',
+  ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
 };
 
 export default function LocationPicker({ 
@@ -41,13 +43,6 @@ export default function LocationPicker({
   const skipNextGeocodeRef = useRef(false);
 
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
-
-  // Compass / Phone Direction State (Indicator Overlay ONLY - Map stays 2D North-Up)
-  const [isDirectionActive, setIsDirectionActive] = useState(false);
-  const [displayedHeading, setDisplayedHeading] = useState(0);
-  const targetHeadingRef = useRef(0);
-  const currentHeadingRef = useRef(0);
-  const animFrameRef = useRef(null);
 
   // Form fields
   const [placeName, setPlaceName]             = useState('');
@@ -205,135 +200,6 @@ export default function LocationPicker({
     };
   }, []);
 
-  // Helper for shortest angle difference (-180 to +180)
-  const getAngleDiff = (target, current) => {
-    let diff = (target - current) % 360;
-    if (diff > 180) diff -= 360;
-    if (diff < -180) diff += 360;
-    return diff;
-  };
-
-  // Compass animation loop using requestAnimationFrame for smooth movement
-  useEffect(() => {
-    if (!isDirectionActive) return;
-
-    let isRunning = true;
-    const animate = () => {
-      if (!isRunning) return;
-      const diff = getAngleDiff(targetHeadingRef.current, currentHeadingRef.current);
-      if (Math.abs(diff) > 0.05) {
-        currentHeadingRef.current = (currentHeadingRef.current + diff * 0.18 + 360) % 360;
-        setDisplayedHeading(Math.round(currentHeadingRef.current * 10) / 10);
-      }
-      animFrameRef.current = requestAnimationFrame(animate);
-    };
-
-    animFrameRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      isRunning = false;
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
-      }
-    };
-  }, [isDirectionActive]);
-
-  // Device orientation event listener (Android absolute + fallback, iOS webkitCompassHeading, screen orientation)
-  useEffect(() => {
-    if (!isDirectionActive) return;
-
-    const handleOrientation = (event) => {
-      let heading = null;
-
-      // 1. iOS Safari webkitCompassHeading (0 = North, 90 = East, 180 = South, 270 = West)
-      if (typeof event.webkitCompassHeading === 'number') {
-        heading = event.webkitCompassHeading;
-      }
-      // 2. Android / Standard W3C Device Orientation
-      else if (event.alpha !== null && event.alpha !== undefined) {
-        if (event.beta !== null && event.gamma !== null) {
-          const degToRad = Math.PI / 180;
-          const alphaRad = (event.alpha || 0) * degToRad;
-          const betaRad = (event.beta || 0) * degToRad;
-          const gammaRad = (event.gamma || 0) * degToRad;
-
-          const cA = Math.cos(alphaRad);
-          const sA = Math.sin(alphaRad);
-          const cB = Math.cos(betaRad);
-          const sB = Math.sin(betaRad);
-          const cG = Math.cos(gammaRad);
-          const sG = Math.sin(gammaRad);
-
-          const rA = -cA * sG - sA * sB * cG;
-          const rB = -sA * sG + cA * sB * cG;
-
-          let compassHeading = Math.atan2(rA, rB) * (180 / Math.PI);
-          if (compassHeading < 0) compassHeading += 360;
-          heading = compassHeading;
-        } else {
-          heading = (360 - event.alpha) % 360;
-        }
-      }
-
-      if (heading !== null && !isNaN(heading)) {
-        // Adjust for device screen orientation angle
-        const screenAngle = (window.screen?.orientation?.angle !== undefined)
-          ? window.screen.orientation.angle
-          : (typeof window.orientation === 'number' ? window.orientation : 0);
-
-        let finalHeading = (heading + screenAngle) % 360;
-        if (finalHeading < 0) finalHeading += 360;
-
-        // Small deadzone (0.5°) to suppress sensor jitter
-        const diff = Math.abs(getAngleDiff(finalHeading, targetHeadingRef.current));
-        if (diff > 0.5) {
-          targetHeadingRef.current = finalHeading;
-        }
-      }
-    };
-
-    if ('ondeviceorientationabsolute' in window) {
-      window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-    } else if ('ondeviceorientation' in window) {
-      window.addEventListener('deviceorientation', handleOrientation, true);
-    }
-
-    return () => {
-      if ('ondeviceorientationabsolute' in window) {
-        window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
-      }
-      if ('ondeviceorientation' in window) {
-        window.removeEventListener('deviceorientation', handleOrientation, true);
-      }
-    };
-  }, [isDirectionActive]);
-
-  // Toggle Direction with permission request on iOS
-  const toggleDirection = async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-
-    if (isDirectionActive) {
-      setIsDirectionActive(false);
-      return;
-    }
-
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      try {
-        const response = await DeviceOrientationEvent.requestPermission();
-        if (response === 'granted') {
-          setIsDirectionActive(true);
-        } else {
-          alert('Compass permission is required to follow your direction.');
-        }
-      } catch (err) {
-        console.warn('Orientation permission error:', err);
-        alert('Compass permission is required to follow your direction.');
-      }
-    } else {
-      setIsDirectionActive(true);
-    }
-  };
-
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
@@ -413,19 +279,19 @@ export default function LocationPicker({
     }, 'SEARCH', { lat, lng });
 
     setHasValidLocation(true);
-    setMapCenter({ lat, lng });
-    setMapZoom(HIGH_ZOOM);
     skipNextGeocodeRef.current = true;
 
     if (mapRef.current) {
-      mapRef.current.setCenter({ lat, lng });
       mapRef.current.panTo({ lat, lng });
       mapRef.current.setZoom(HIGH_ZOOM);
+    } else {
+      setMapCenter({ lat, lng });
+      setMapZoom(HIGH_ZOOM);
     }
   }, [fillForm]);
 
   const handleGps = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
+    e.preventDefault();
     if (!navigator.geolocation) {
       alert('Geolocation is not supported by your browser.');
       return;
@@ -446,14 +312,14 @@ export default function LocationPicker({
         }));
         setHasValidLocation(true);
         setLocationSource('GPS');
-        setMapCenter({ lat, lng });
-        setMapZoom(HIGH_ZOOM);
         skipNextGeocodeRef.current = true;
 
         if (mapRef.current) {
-          mapRef.current.setCenter({ lat, lng });
           mapRef.current.panTo({ lat, lng });
           mapRef.current.setZoom(HIGH_ZOOM);
+        } else {
+          setMapCenter({ lat, lng });
+          setMapZoom(HIGH_ZOOM);
         }
         setIsLocating(false);
         
@@ -553,7 +419,7 @@ export default function LocationPicker({
 
   return (
     <div className="flex flex-col h-full w-full">
-      {/* Search Bar & Controls */}
+      {/* Search Bar & GPS */}
       <div className="px-4 pb-3 pt-2 flex-shrink-0">
         <div className="flex gap-2">
           <PlacesAutocomplete
@@ -562,21 +428,6 @@ export default function LocationPicker({
             darkMode={true}
             className="flex-1"
           />
-          {/* Follow Direction Button (Top Bar) */}
-          <button
-            type="button"
-            onClick={toggleDirection}
-            title={isDirectionActive ? 'Disable compass direction' : 'Follow phone direction'}
-            className={`flex-shrink-0 flex items-center gap-1.5 text-[12px] font-bold py-2.5 px-3 rounded-xl cursor-pointer transition-all shadow-md ${
-              isDirectionActive
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white ring-2 ring-emerald-400/40'
-                : 'bg-white/10 hover:bg-white/15 text-white/80 border border-white/10'
-            }`}
-          >
-            <Compass className={`w-4 h-4 ${isDirectionActive ? 'animate-pulse' : ''}`} />
-            <span>{isDirectionActive ? 'Dir ON' : 'Dir'}</span>
-          </button>
-          {/* GPS Button */}
           <button
             type="button"
             onClick={handleGps}
@@ -620,46 +471,22 @@ export default function LocationPicker({
               onLoad={onMapLoad}
               onUnmount={onMapUnmount}
             />
+            {/* Map Rotation, Compass & 3D Tilt Controls */}
+            <MapRotationControls
+              map={mapInstance}
+              mapRef={mapRef}
+              containerRef={mapContainerRef}
+              position="top-right"
+              showStepButtons={false}
+              show3DTilt={true}
+            />
           </>
-        )}
-
-        {/* Phone Direction / Compass Cone Overlay (Rotates ONLY this overlay; Map stays North-Up) */}
-        {isDirectionActive && (
-          <div
-            className="absolute pointer-events-none z-10"
-            style={{
-              top: '50%',
-              left: '50%',
-              transform: `translate(-50%, -50%) rotate(${displayedHeading}deg)`,
-              transformOrigin: '50% 50%',
-            }}
-          >
-            <div className="relative flex flex-col items-center justify-center pointer-events-none" style={{ width: '160px', height: '160px' }}>
-              <svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <radialGradient id="directionConeGrad" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-                    <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.4" />
-                    <stop offset="70%" stopColor="#8b5cf6" stopOpacity="0.15" />
-                    <stop offset="100%" stopColor="#a78bfa" stopOpacity="0" />
-                  </radialGradient>
-                </defs>
-                {/* 50-degree FOV flashlight beam extending forward (upward = 0 deg) */}
-                <path d="M80 80 L52 14 A74 74 0 0 1 108 14 Z" fill="url(#directionConeGrad)" />
-                {/* Direction arrow / chevron */}
-                <path d="M80 16 L73 32 L80 27 L87 32 Z" fill="#8b5cf6" opacity="0.9" />
-              </svg>
-            </div>
-          </div>
         )}
 
         {/* Fixed Center Pin */}
         <div
-          className="absolute pointer-events-none z-10"
-          style={{
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -100%)',
-          }}
+          className="absolute inset-0 flex items-end justify-center pointer-events-none z-10"
+          style={{ paddingBottom: '24px' }}
         >
           <div className="flex flex-col items-center" style={{ filter: 'drop-shadow(0 4px 14px rgba(252,128,25,0.65))' }}>
             <svg width="36" height="46" viewBox="0 0 36 46" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -669,7 +496,7 @@ export default function LocationPicker({
             </svg>
             <div style={{
               width: '14px', height: '5px', background: 'rgba(252,128,25,0.3)',
-              borderRadius: '50%', marginTop: '-2px', filter: 'blur(3px)',
+              borderRadius: '50%', marginTop: '2px', filter: 'blur(3px)',
             }} />
           </div>
         </div>
@@ -700,25 +527,6 @@ export default function LocationPicker({
           </div>
         )}
 
-        {/* Compass Heading Badge (When active) */}
-        {isDirectionActive && (
-          <div className="absolute top-3 right-3 z-20">
-            <div className="bg-black/75 backdrop-blur-sm text-violet-300 text-[10px] font-bold font-mono px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-md border border-violet-500/30">
-              <Compass className="w-3.5 h-3.5 text-violet-400 animate-spin" style={{ animationDuration: '8s' }} />
-              <span>{Math.round(displayedHeading)}°</span>
-              <span className="text-white/60 text-[9px]">
-                {displayedHeading >= 337.5 || displayedHeading < 22.5 ? 'N' :
-                 displayedHeading >= 22.5 && displayedHeading < 67.5 ? 'NE' :
-                 displayedHeading >= 67.5 && displayedHeading < 112.5 ? 'E' :
-                 displayedHeading >= 112.5 && displayedHeading < 157.5 ? 'SE' :
-                 displayedHeading >= 157.5 && displayedHeading < 202.5 ? 'S' :
-                 displayedHeading >= 202.5 && displayedHeading < 247.5 ? 'SW' :
-                 displayedHeading >= 247.5 && displayedHeading < 292.5 ? 'W' : 'NW'}
-              </span>
-            </div>
-          </div>
-        )}
-
         {/* Accuracy Circle */}
         {selectedLocation.accuracy && selectedLocation.lat && selectedLocation.lng && (
           <>
@@ -736,83 +544,54 @@ export default function LocationPicker({
                 }}
               />
             </div>
-            {!isDirectionActive && (
-              <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-1">
-                <div className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg ${
-                  selectedLocation.accuracy <= 20
-                    ? 'bg-emerald-600'
-                    : selectedLocation.accuracy <= 50
-                      ? 'bg-violet-600'
-                      : selectedLocation.accuracy <= 100
-                        ? 'bg-amber-600'
-                        : 'bg-red-600'
-                }`}>
-                  <MapPin className="w-3 h-3" />
-                  ±{Math.round(selectedLocation.accuracy)}m ({
-                    selectedLocation.accuracy <= 20
-                      ? 'Excellent'
-                      : selectedLocation.accuracy <= 50
-                        ? 'Good'
-                        : selectedLocation.accuracy <= 100
-                          ? 'Moderate'
-                          : 'Low accuracy'
-                  })
-                </div>
-                {selectedLocation.accuracy > 100 && (
-                  <div className="bg-black/80 backdrop-blur-sm text-amber-300 text-[9px] font-medium px-2 py-0.5 rounded-md shadow-md max-w-[200px] text-right">
-                    Move pin manually to exact location
-                  </div>
-                )}
+            <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-1">
+              <div className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg ${
+                selectedLocation.accuracy <= 20 
+                  ? 'bg-emerald-600' 
+                  : selectedLocation.accuracy <= 50 
+                    ? 'bg-violet-600' 
+                    : selectedLocation.accuracy <= 100 
+                      ? 'bg-amber-600' 
+                      : 'bg-red-600'
+              }`}>
+                <MapPin className="w-3 h-3" />
+                ±{Math.round(selectedLocation.accuracy)}m ({
+                  selectedLocation.accuracy <= 20 
+                    ? 'Excellent' 
+                    : selectedLocation.accuracy <= 50 
+                      ? 'Good' 
+                      : selectedLocation.accuracy <= 100 
+                        ? 'Moderate' 
+                        : 'Low accuracy'
+                })
               </div>
-            )}
+              {selectedLocation.accuracy > 100 && (
+                <div className="bg-black/80 backdrop-blur-sm text-amber-300 text-[9px] font-medium px-2 py-0.5 rounded-md shadow-md max-w-[200px] text-right">
+                  Move pin manually to exact location
+                </div>
+              )}
+            </div>
           </>
         )}
 
-        {/* Map Floating Controls (Bottom-Right) */}
-        <div style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
-          {/* Follow Direction Floating Button */}
+        {/* Zoom Controls */}
+        <div style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <button
             type="button"
-            onClick={toggleDirection}
-            title={isDirectionActive ? 'Disable compass direction' : 'Follow phone direction'}
+            onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || HIGH_ZOOM) + 1)}
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
-              transition: 'all 0.2s',
-              background: isDirectionActive ? '#7c3aed' : 'rgba(20, 20, 20, 0.85)',
-              color: isDirectionActive ? '#ffffff' : 'rgba(255, 255, 255, 0.75)',
-              border: isDirectionActive ? '1.5px solid #a78bfa' : '1px solid rgba(255, 255, 255, 0.15)',
-              backdropFilter: 'blur(4px)',
+              width: 30, height: 30, background: 'white', border: '1px solid #e5e7eb', borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 17, color: '#374151', fontWeight: 700
             }}
-          >
-            <Compass className={`w-4 h-4 ${isDirectionActive ? 'text-white' : ''}`} />
-          </button>
-
-          {/* Zoom In & Out */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <button
-              type="button"
-              onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || HIGH_ZOOM) + 1)}
-              style={{
-                width: 32, height: 32, background: 'white', border: '1px solid #e5e7eb', borderRadius: 8,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 17, color: '#374151', fontWeight: 700
-              }}
-            >+</button>
-            <button
-              type="button"
-              onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || HIGH_ZOOM) - 1)}
-              style={{
-                width: 32, height: 32, background: 'white', border: '1px solid #e5e7eb', borderRadius: 8,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 17, color: '#374151', fontWeight: 700
-              }}
-            >−</button>
-          </div>
+          >+</button>
+          <button
+            type="button"
+            onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || HIGH_ZOOM) - 1)}
+            style={{
+              width: 30, height: 30, background: 'white', border: '1px solid #e5e7eb', borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 17, color: '#374151', fontWeight: 700
+            }}
+          >−</button>
         </div>
 
         {/* Hint */}

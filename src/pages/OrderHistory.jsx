@@ -7,6 +7,7 @@ import { useCartStore } from '../store/cartStore';
 import { useTranslation } from '../store/languageStore';
 import RiderFeedbackModal from '../components/RiderFeedbackModal';
 import { formatAppDate } from '../utils/dateUtils';
+import { io } from 'socket.io-client';
 import {
   useHistoryFilter,
   HistoryFilterToolbar,
@@ -87,6 +88,32 @@ export default function OrderHistory() {
     fetchOrderHistory();
   }, [token, navigate]);
 
+  // Real-time synchronization for status updates
+  useEffect(() => {
+    if (!token || !user?._id) return;
+
+    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
+    const socket = io(socketHost, {
+      auth: { token },
+      withCredentials: true,
+      transports: ['websocket', 'polling']
+    });
+
+    socket.on('connect', () => {
+      socket.emit('join', `user_${user._id}`);
+    });
+
+    socket.on('orderStatusChanged', (data) => {
+      if (data && data.orderId) {
+        setOrders(prev => prev.map(o => o._id === data.orderId ? { ...o, status: data.status, ...(data.order || {}) } : o));
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [token, user?._id]);
+
   // Safeguard: Wait for redirect
   if (!user) {
     if (token) {
@@ -129,25 +156,15 @@ export default function OrderHistory() {
     }
 
     order.items.forEach(item => {
-      const isCatalog = item.itemModel === 'CatalogItem' || Boolean(item.supplierId) || (item.service && item.service !== 'food') || ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes((item.category || '').toLowerCase());
-
       const reorderItem = {
-        _id: item.menuItemId || item._id,
+        _id: item.menuItemId,
         name: item.name,
         price: item.price,
         image: item.image,
-        isVeg: item.isVeg,
-        unit: item.unit || '',
-        category: item.category || '',
-        itemModel: isCatalog ? 'CatalogItem' : 'MenuItem',
-        supplierId: item.supplierId || null,
-        supplierName: item.supplierName || null,
-        supplierAddress: item.supplierAddress || '',
-        supplierLatitude: item.supplierLatitude || null,
-        supplierLongitude: item.supplierLongitude || null,
+        isVeg: item.isVeg
       };
-      for (let q = 0; q < (item.quantity || 1); q++) {
-        addItem(reorderItem, isCatalog ? null : actualRestaurant);
+      for (let q = 0; q < item.quantity; q++) {
+        addItem(reorderItem, actualRestaurant);
       }
     });
 

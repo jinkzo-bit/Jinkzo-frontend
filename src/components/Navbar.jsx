@@ -13,7 +13,8 @@ import {
   ShieldAlert,
   Moon,
   Sun,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Zap
 } from 'lucide-react';
 import jinkzoLogo from '../assets/branding/jinkzo-logo.png';
 import { useAuthStore } from '../store/authStore';
@@ -22,6 +23,7 @@ import { useThemeStore } from '../store/themeStore';
 import { useLocationStore } from '../store/locationStore';
 import { useTranslation } from '../store/languageStore';
 import LocationPickerModal from './LocationPickerModal';
+import NotificationCenter from './NotificationCenter';
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
@@ -149,18 +151,7 @@ export default function Navbar() {
                   </button>
 
                   {/* Notifications */}
-                  <button
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    className="notif-toggle-btn w-7 h-7 rounded-full flex items-center justify-center text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 active:scale-95 transition-all relative cursor-pointer"
-                    title={t('nav.notifications', 'Notifications')}
-                  >
-                    <Bell className="w-3.5 h-3.5 text-gray-700 dark:text-slate-200" />
-                    {unreadNotifications.length > 0 && (
-                      <span className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500 text-white text-[7px] font-black rounded-full flex items-center justify-center ring-1 ring-white dark:ring-[#141926] animate-pulse">
-                        {unreadNotifications.length}
-                      </span>
-                    )}
-                  </button>
+                  <NotificationCenter userId={user?._id} role={user?.role} restaurantId={user?.restaurantId} />
 
                   {/* Profile */}
                   <button
@@ -280,18 +271,7 @@ export default function Navbar() {
               </button>
 
               {/* Notifications */}
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="notif-toggle-btn w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 active:scale-95 transition-all relative cursor-pointer"
-                title={t('nav.notifications', 'Notifications')}
-              >
-                <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-gray-700 dark:text-slate-200" />
-                {unreadNotifications.length > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center ring-2 ring-white dark:ring-[#141926] animate-pulse">
-                    {unreadNotifications.length}
-                  </span>
-                )}
-              </button>
+              <NotificationCenter userId={user?._id} role={user?.role} restaurantId={user?.restaurantId} />
 
               {/* Profile Avatar */}
               <button
@@ -305,41 +285,6 @@ export default function Navbar() {
             </div>
 
           </div>
-
-          {/* ═══════════════════════════════════════════════════════════
-              3. SHARED DROPDOWN MENUS (Notifications & Profile)
-             ═══════════════════════════════════════════════════════════ */}
-
-          {/* Notifications Dropdown */}
-          {showNotifications && (
-            <div
-              ref={notifMenuRef}
-              className="absolute right-2 sm:right-6 top-full mt-2 w-80 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-[#141926] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden z-50 animate-fade-in"
-            >
-              <div className="p-4 bg-gray-50/80 dark:bg-[#1C2233] border-b border-gray-100 dark:border-white/10 flex items-center justify-between">
-                <span className="font-bold text-sm text-gray-900 dark:text-white">{t('nav.notifications', 'Notifications')} ({unreadNotifications.length})</span>
-                <button
-                  onClick={() => setUnreadNotifications([])}
-                  className="text-xs text-[#7C3AED] dark:text-[#A78BFA] font-semibold hover:underline cursor-pointer"
-                >
-                  Clear all
-                </button>
-              </div>
-              <div className="max-h-80 overflow-y-auto divide-y divide-gray-50 dark:divide-white/5">
-                {unreadNotifications.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-gray-400 dark:text-slate-400 font-medium">{t('nav.noNotifications', 'No new notifications')}</div>
-                ) : (
-                  unreadNotifications.map(n => (
-                    <div key={n.id} className="p-3.5 hover:bg-purple-50/40 dark:hover:bg-white/5 transition-colors">
-                      <h4 className="text-xs font-bold text-gray-900 dark:text-white">{n.title}</h4>
-                      <p className="text-[11px] text-gray-600 dark:text-slate-300 mt-0.5">{n.desc}</p>
-                      <span className="text-[9px] text-gray-400 dark:text-slate-500 font-semibold mt-1 block">{n.time}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Profile Dropdown Menu */}
           {showProfileMenu && (
@@ -427,6 +372,17 @@ export default function Navbar() {
                     >
                       <ShieldAlert className="w-3.5 h-3.5" />
                       {t('nav.adminPortal', 'Admin Portal')}
+                    </Link>
+                  )}
+
+                  {(user.role === 'admin' || user.role === 'store_operator') && (
+                    <Link
+                      to="/store-operations"
+                      onClick={() => setShowProfileMenu(false)}
+                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      Store Operations
                     </Link>
                   )}
 

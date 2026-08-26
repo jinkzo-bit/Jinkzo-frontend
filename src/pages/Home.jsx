@@ -1,17 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ArrowRight,
   ChevronRight,
-  ChevronLeft,
-  Lock,
-  Clock
+  ChevronLeft
 } from 'lucide-react';
 import { API_BASE } from '../config/api';
 import { useTranslation } from '../store/languageStore';
-import { useCartStore } from '../store/cartStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
-import io from 'socket.io-client';
 
 const DEFAULT_BANNER_SLIDES = [
   {
@@ -49,19 +44,8 @@ const DEFAULT_BANNER_SLIDES = [
 export default function Home() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { showToast } = useCartStore();
   const [foodAvailable, setFoodAvailable] = useState(true);
   const [rideAvailable, setRideAvailable] = useState(true);
-
-  // Category Services Availability Status
-  const [categoryStatus, setCategoryStatus] = useState({
-    food: { status: 'OPEN', isEnabled: true, message: null },
-    ride: { status: 'OPEN', isEnabled: true, message: null },
-    grocery: { status: 'OPEN', isEnabled: true, message: null },
-    bakery_beverages: { status: 'OPEN', isEnabled: true, message: null },
-    veg_fruits: { status: 'OPEN', isEnabled: true, message: null },
-    meat: { status: 'OPEN', isEnabled: true, message: null }
-  });
 
   // Dynamic Banners from Backend
   const [bannerSlides, setBannerSlides] = useState(DEFAULT_BANNER_SLIDES);
@@ -75,33 +59,15 @@ export default function Home() {
   useEffect(() => {
     const fetchAvailabilityAndBanners = async () => {
       try {
-        const [availRes, bannersRes, catServicesRes] = await Promise.allSettled([
+        const [availRes, bannersRes] = await Promise.allSettled([
           fetch(`${API_BASE}/auth/driver-availability`),
-          fetch(`${API_BASE}/restaurants/banners`),
-          fetch(`${API_BASE}/restaurants/category-services`)
+          fetch(`${API_BASE}/restaurants/banners`)
         ]);
 
         if (availRes.status === 'fulfilled' && availRes.value.ok) {
           const data = await availRes.value.json();
           setFoodAvailable(data.foodAvailable ?? true);
           setRideAvailable(data.rideAvailable ?? true);
-        }
-
-        if (catServicesRes.status === 'fulfilled' && catServicesRes.value.ok) {
-          const catList = await catServicesRes.value.json();
-          if (Array.isArray(catList)) {
-            const statusMap = {};
-            catList.forEach(c => {
-              if (c.id) {
-                statusMap[c.id] = c;
-                // Support aliases
-                if (c.id === 'bakery_beverages') statusMap['cool_hot'] = c;
-                if (c.id === 'ride') statusMap['ride_courier'] = c;
-                if (c.id === 'veg_fruits') statusMap['fruits-vegetables'] = c;
-              }
-            });
-            setCategoryStatus(prev => ({ ...prev, ...statusMap }));
-          }
         }
 
         if (bannersRes.status === 'fulfilled' && bannersRes.value.ok) {
@@ -133,38 +99,10 @@ export default function Home() {
           }
         }
       } catch (err) {
-        console.error('Error fetching driver availability, categories, or banners:', err);
+        console.error('Error fetching driver availability or banners:', err);
       }
     };
     fetchAvailabilityAndBanners();
-
-    // Listen to real-time socket category updates
-    let socket;
-    try {
-      const socketUrl = API_BASE.replace('/api', '');
-      socket = io(socketUrl);
-      socket.on('categoryStatusChanged', (data) => {
-        if (data) {
-          const catId = data.categoryId || (data.category && data.category.id);
-          const catData = data.category || data;
-          if (catId) {
-            setCategoryStatus(prev => {
-              const updated = { ...prev, [catId]: catData };
-              if (catId === 'bakery_beverages') updated['cool_hot'] = catData;
-              if (catId === 'ride') updated['ride_courier'] = catData;
-              if (catId === 'veg_fruits') updated['fruits-vegetables'] = catData;
-              return updated;
-            });
-          }
-        }
-      });
-    } catch (e) {
-      // socket fallback
-    }
-
-    return () => {
-      if (socket) socket.disconnect();
-    };
   }, []);
 
   // 10-Second Auto-Slide Loop with reset on interaction & pause on hover/touch
@@ -217,92 +155,68 @@ export default function Home() {
   const categories = [
     {
       id: 'food',
-      name: 'Food',
       title: t('home.categoryFood', 'Food'),
-      subtitle: t('home.foodSubtitle', 'Tasty meals from top...'),
-      background: '/assets/home/categories/backgrounds/food-bg.png',
-      image: '/assets/home/categories/png/food.png',
-      titleColor: 'text-[#FF5722]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#FF5722] hover:bg-[#E64A19]',
-      imgOffset: '-mb-0.5 sm:-mb-14 md:-mb-20 lg:-mb-24',
-      imgScale: 'scale-[2.25] sm:scale-110 md:scale-115',
-      imgShift: 'translate-x-1.5 sm:translate-x-0',
+      subtitle: t('home.foodSubtitle', 'Tasty meals from top restaurants'),
+      textColor: 'text-[#D9381E]',
+      btnBg: 'bg-[#D9381E] hover:bg-[#C62828]',
+      bgGradient: 'bg-gradient-to-b from-[#FFF5D6] via-[#FFEBB0] to-[#FFE08A]',
+      borderColor: 'border-amber-200/90',
+      image: '/assets/cat_food.jpg',
       link: '/restaurants'
     },
     {
       id: 'ride',
-      name: 'Ride & Courier',
       title: t('home.categoryRide', 'Ride & Courier'),
       subtitle: t('home.rideSubtitle', 'Quick rides & courier service'),
-      background: '/assets/home/categories/backgrounds/ride-bg.png',
-      image: '/assets/home/categories/png/ride.png',
-      titleColor: 'text-[#0D47FF]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#0D47FF] hover:bg-[#0038E0]',
-      imgOffset: '-mb-0.5 sm:-mb-14 md:-mb-20 lg:-mb-24',
-      imgScale: 'scale-[2.45] sm:scale-110 md:scale-115',
-      imgShift: '-translate-x-1.5 sm:translate-x-0',
+      textColor: 'text-[#1565C0]',
+      btnBg: 'bg-[#1565C0] hover:bg-[#0D47A1]',
+      bgGradient: 'bg-gradient-to-b from-[#E1F5FE] via-[#B3E5FC] to-[#81D4FA]',
+      borderColor: 'border-sky-200/90',
+      image: '/assets/cat_ride.jpg',
       link: '/ride'
     },
     {
       id: 'grocery',
-      name: 'Grocery',
       title: t('home.categoryGrocery', 'Grocery'),
-      subtitle: t('home.grocerySubtitle', 'Daily essentials delivered...'),
-      background: '/assets/home/categories/backgrounds/grocery-bg.png',
-      image: '/assets/home/categories/png/grocery.png',
-      titleColor: 'text-[#00C853]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#00C853] hover:bg-[#00B248]',
-      imgOffset: 'mb-0 sm:-mb-12 md:-mb-16 lg:-mb-20',
-      imgScale: 'scale-[2.05] sm:scale-105 md:scale-110',
-      imgShift: 'translate-x-0 sm:translate-x-0',
+      subtitle: t('home.grocerySubtitle', 'Daily essentials delivered fast'),
+      textColor: 'text-[#2E7D32]',
+      btnBg: 'bg-[#2E7D32] hover:bg-[#1B5E20]',
+      bgGradient: 'bg-gradient-to-b from-[#E8F8E8] via-[#C8E6C9] to-[#A5D6A7]',
+      borderColor: 'border-green-200/90',
+      image: '/assets/cat_grocery.jpg',
       link: '/restaurants?category=grocery'
     },
     {
       id: 'bakery_beverages',
-      name: 'Bakery & Beverages',
       title: t('home.categoryBakery', 'Bakery & Beverages'),
-      subtitle: t('home.bakerySubtitle', 'Fresh cakes, puffs, snacks...'),
-      background: '/assets/home/categories/backgrounds/bakery-bg.png',
-      image: '/assets/home/categories/png/bakery.png',
-      titleColor: 'text-[#E91E63]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#E91E63] hover:bg-[#D81B60]',
-      imgOffset: 'mb-0 sm:-mb-10 md:-mb-14 lg:-mb-16',
-      imgScale: 'scale-[1.70] sm:scale-100 md:scale-105',
-      imgShift: 'translate-x-2 sm:translate-x-0',
+      subtitle: t('home.bakerySubtitle', 'Fresh cakes, puffs, snacks & cool drinks'),
+      textColor: 'text-[#C2185B]',
+      btnBg: 'bg-[#C2185B] hover:bg-[#AD1457]',
+      bgGradient: 'bg-gradient-to-b from-[#FCE4EC] via-[#F8BBD0] to-[#F48FB1]',
+      borderColor: 'border-pink-200/90',
+      image: '/assets/cat_hot_cool.jpg',
       link: '/restaurants?category=beverages'
     },
     {
       id: 'veg_fruits',
-      name: 'Veg & Fruits',
       title: t('home.categoryVegFruits', 'Veg & Fruits'),
       subtitle: t('home.vegFruitsSubtitle', 'Fresh vegetables & fruits'),
-      background: '/assets/home/categories/backgrounds/veg-fruits-bg.png',
-      image: '/assets/home/categories/png/veg-fruits.png',
-      titleColor: 'text-[#009688]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#009688] hover:bg-[#00796B]',
-      imgOffset: '-mb-0.5 sm:-mb-14 md:-mb-20 lg:-mb-24',
-      imgScale: 'scale-[2.30] sm:scale-110 md:scale-115',
-      imgShift: '-translate-x-1.5 sm:translate-x-0',
+      textColor: 'text-[#00796B]',
+      btnBg: 'bg-[#00796B] hover:bg-[#004D40]',
+      bgGradient: 'bg-gradient-to-b from-[#E0F2F1] via-[#B2DFDB] to-[#80CBC4]',
+      borderColor: 'border-teal-200/90',
+      image: '/assets/cat_veg_fruits.jpg',
       link: '/restaurants?category=fruits-vegetables'
     },
     {
       id: 'meat',
-      name: 'Meat',
       title: t('home.categoryMeat', 'Meat'),
       subtitle: t('home.meatSubtitle', 'Fresh meat, chicken & fish'),
-      background: '/assets/home/categories/backgrounds/meat-bg.png',
-      image: '/assets/home/categories/png/meat.png',
-      titleColor: 'text-[#FF3D00]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#FF3D00] hover:bg-[#DD2C00]',
-      imgOffset: '-mb-0.5 sm:-mb-16 md:-mb-24 lg:-mb-28',
-      imgScale: 'scale-[1.90] sm:scale-110 md:scale-115',
-      imgShift: 'translate-x-1 sm:translate-x-0',
+      textColor: 'text-[#D84315]',
+      btnBg: 'bg-[#D84315] hover:bg-[#BF360C]',
+      bgGradient: 'bg-gradient-to-b from-[#FFF3E0] via-[#FFE0B2] to-[#FFCC80]',
+      borderColor: 'border-orange-200/90',
+      image: '/assets/cat_meat.jpg',
       link: '/restaurants?category=meat'
     }
   ];
@@ -310,10 +224,7 @@ export default function Home() {
   const activeBanner = bannerSlides[currentSlide] || bannerSlides[0];
 
   return (
-    <div
-      style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
-      className="flex flex-col gap-3.5 sm:gap-5 md:gap-8 max-w-7xl mx-auto px-3 sm:px-4 md:px-8 w-full box-border animate-fade-in transition-colors duration-300"
-    >
+    <div className="flex flex-col gap-3.5 sm:gap-5 md:gap-8 pb-24 md:pb-20 max-w-7xl mx-auto px-3 sm:px-4 md:px-8 w-full animate-fade-in transition-colors duration-300">
 
       {/* 1. HERO ADVERTISEMENT CAROUSEL (PURPLE -> PINK -> ORANGE VIBRANT GRADIENT) */}
       <section
@@ -322,7 +233,7 @@ export default function Home() {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`relative rounded-3xl sm:rounded-[32px] overflow-hidden ${activeBanner.bgGradient} text-white p-4 sm:p-6 md:p-10 lg:p-12 shadow-[0_8px_30px_rgba(123,31,162,0.25)] flex flex-row items-center justify-between min-h-[160px] sm:min-h-[220px] md:min-h-[300px] transition-all duration-700 group select-none w-full box-border`}
+        className={`relative rounded-3xl sm:rounded-[32px] overflow-hidden ${activeBanner.bgGradient} text-white p-4 sm:p-6 md:p-10 lg:p-12 shadow-[0_8px_30px_rgba(123,31,162,0.25)] flex flex-row items-center justify-between min-h-[160px] sm:min-h-[220px] md:min-h-[300px] transition-all duration-700 group select-none`}
       >
 
         {/* Decorative Floating Shapes & Watermark Accents */}
@@ -442,124 +353,46 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 3. CATEGORY CARDS (2-COLUMN RESPONSIVE GRID ON MOBILE, 3-COLUMN ON DESKTOP) */}
-      <section className="grid grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-5 md:gap-6 lg:gap-7 w-full box-border">
-        {categories.map((cat) => {
-          const currentCat = categoryStatus[cat.id] || { status: 'OPEN', isEnabled: true, message: null };
-          const isEnabled = typeof currentCat === 'boolean' ? currentCat : currentCat.isEnabled !== false;
-          const status = currentCat.status || (isEnabled ? 'OPEN' : 'DISABLED');
-          const isOpen = status === 'OPEN';
-          const isClosed = status === 'CLOSED';
-          const isDisabled = status === 'DISABLED' || !isEnabled;
-          const closedMsg = currentCat.message || t('home.serviceClosed', 'Service Closed');
-
-          const cardContent = (
-            <>
-              {/* Category Foreground Product Artwork (Enlarged and centered on mobile, preserved on desktop) */}
-              <div className={`w-full flex-1 flex flex-col items-center justify-end min-h-0 sm:min-h-[220px] md:min-h-[280px] lg:min-h-[320px] pt-1 md:pt-4 ${cat.imgOffset} group-hover:scale-105 transition-transform duration-300 pointer-events-none z-0 overflow-visible`}>
-                <img
-                  src={cat.image}
-                  alt={cat.title}
-                  className={`w-full sm:w-[96%] md:w-[98%] max-w-full sm:max-w-[400px] md:max-w-[460px] lg:max-w-[500px] h-[80px] sm:h-auto max-h-[88px] sm:max-h-[250px] md:max-h-[310px] lg:max-h-[350px] ${cat.imgScale} ${cat.imgShift} object-contain mx-auto block drop-shadow-md`}
-                />
-              </div>
-
-              {/* Centered Content: Large Title, Large Black Subtitle, Large Circular Arrow Button */}
-              <div className="w-full flex flex-col items-center justify-end z-10 pt-0.5 pb-0.5 sm:pb-2">
-                <h3 className={`font-display font-black text-sm sm:text-3xl md:text-4xl lg:text-[42px] xl:text-[44px] ${cat.titleColor} tracking-tight leading-tight line-clamp-1 sm:line-clamp-none`}>
-                  {cat.title}
-                </h3>
-                <p style={{ color: '#000000' }} className="mt-0.5 sm:mt-2 text-[10px] sm:text-base md:text-lg lg:text-xl xl:text-2xl text-black dark:text-black font-semibold leading-tight line-clamp-1 sm:line-clamp-none max-w-[140px] sm:max-w-[260px] md:max-w-[300px] lg:max-w-[340px]">
-                  {cat.subtitle}
-                </p>
-
-                {/* Centered Large Circular Arrow Button */}
-                <div className={`mt-1.5 sm:mt-3.5 md:mt-4 lg:mt-5 w-6 h-6 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-13 lg:h-13 rounded-full ${cat.btnBg} text-white flex items-center justify-center shadow-xs sm:shadow-md group-hover:scale-110 active:scale-95 transition-all duration-200`}>
-                  <ArrowRight className="w-3.5 h-3.5 sm:w-5 sm:h-5 md:w-6 md:h-6 stroke-[2.5] sm:stroke-[3]" />
-                </div>
-              </div>
-
-              {/* Closed Service Hours Overlay */}
-              {isClosed && (
-                <div className="absolute inset-0 bg-black/55 backdrop-blur-[2.5px] rounded-3xl sm:rounded-[36px] md:rounded-[40px] flex flex-col items-center justify-center p-3 sm:p-4 text-center z-20 select-none animate-fade-in transition-all">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-amber-500/20 backdrop-blur-md flex items-center justify-center mb-1.5 shadow-sm border border-amber-400/40">
-                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-amber-300 stroke-[2.5]" />
-                  </div>
-                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-amber-300 mb-0.5 drop-shadow-xs">
-                    {t('home.closedNow', 'CLOSED NOW')}
-                  </span>
-                  <p className="text-white font-bold text-xs sm:text-sm leading-tight drop-shadow-sm px-2">
-                    {closedMsg}
-                  </p>
-                </div>
-              )}
-
-              {/* Disabled / Service Unavailable Overlay */}
-              {isDisabled && (
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-[2.5px] rounded-3xl sm:rounded-[36px] md:rounded-[40px] flex flex-col items-center justify-center p-3 sm:p-4 text-center z-20 select-none animate-fade-in transition-all">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-1.5 shadow-sm border border-white/30">
-                    <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-white stroke-[2.5]" />
-                  </div>
-                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-red-300 mb-0.5 drop-shadow-xs">
-                    {t('home.serviceDisabled', 'SERVICE DISABLED')}
-                  </span>
-                  <p className="text-white font-bold text-xs sm:text-sm leading-tight drop-shadow-sm px-2">
-                    {t('home.serviceUnavailable', 'We are not providing this service currently.')}
-                  </p>
-                </div>
-              )}
-            </>
-          );
-
-          if (isOpen) {
-            return (
-              <Link
-                key={cat.id}
-                to={cat.link}
-                style={{
-                  backgroundImage: `url(${cat.background})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundRepeat: 'no-repeat'
-                }}
-                className="relative rounded-3xl sm:rounded-[36px] md:rounded-[40px] p-2.5 sm:p-5 md:p-6 lg:p-7 pt-2.5 sm:pt-6 md:pt-8 pb-3 sm:pb-6 md:pb-8 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group flex flex-col items-center justify-between text-center cursor-pointer overflow-hidden shadow-xs select-none aspect-square sm:aspect-auto sm:min-h-[370px] md:min-h-[450px] lg:min-h-[490px] w-full"
-              >
-                {cardContent}
-              </Link>
-            );
-          }
-
-          const clickMessage = isClosed
-            ? `${cat.title}: ${closedMsg}`
-            : t('home.serviceUnavailable', 'We are not providing this service currently.');
-
-          return (
-            <div
-              key={cat.id}
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                e.preventDefault();
-                showToast(clickMessage, 'error');
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  showToast(clickMessage, 'error');
-                }
-              }}
-              style={{
-                backgroundImage: `url(${cat.background})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat'
-              }}
-              className="relative rounded-3xl sm:rounded-[36px] md:rounded-[40px] p-2.5 sm:p-5 md:p-6 lg:p-7 pt-2.5 sm:pt-6 md:pt-8 pb-3 sm:pb-6 md:pb-8 transition-all duration-300 group flex flex-col items-center justify-between text-center cursor-not-allowed overflow-hidden shadow-xs select-none opacity-95 aspect-square sm:aspect-auto sm:min-h-[370px] md:min-h-[450px] lg:min-h-[490px] w-full"
-            >
-              {cardContent}
+      {/* 3. CATEGORY CARDS (EXACT 2-COLUMN GRID, 3 ROWS, CENTER ALIGNED) */}
+      <section className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+        {categories.map((cat) => (
+          <Link
+            key={cat.id}
+            to={cat.link}
+            className={`${cat.bgGradient} ${cat.borderColor} border rounded-3xl sm:rounded-[32px] p-3.5 sm:p-5 md:p-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group flex flex-col items-center justify-between text-center cursor-pointer relative overflow-hidden shadow-2xs`}
+          >
+            {/* Background Decorative Pattern / Watermark Details */}
+            <div className="absolute inset-0 pointer-events-none opacity-25 overflow-hidden">
+              <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full border border-black/10"></div>
+              <div className="absolute -bottom-8 -left-8 w-24 h-24 rounded-full border border-black/10"></div>
             </div>
-          );
-        })}
+
+            {/* Large Category Product Image (Top ~60% Dominant Visual) */}
+            <div className="w-full h-28 sm:h-36 md:h-44 flex items-center justify-center relative z-10 group-hover:scale-105 transition-transform duration-300">
+              <img
+                src={getImageUrl(cat.image, 'category')}
+                alt={cat.title}
+                onError={(e) => handleImageError(e, 'category')}
+                className="max-h-full max-w-full object-contain rounded-2xl drop-shadow-xs"
+              />
+            </div>
+
+            {/* Centered Content: Title, Tagline, Circular Arrow Button */}
+            <div className="flex flex-col items-center justify-center gap-0.5 z-10 w-full mt-2">
+              <h3 className={`font-display font-black text-sm sm:text-base md:text-xl ${cat.textColor} tracking-tight leading-tight`}>
+                {cat.title}
+              </h3>
+              <p className="text-[10px] sm:text-xs text-gray-800 dark:text-gray-900 font-semibold leading-snug line-clamp-2 max-w-[150px] sm:max-w-none">
+                {cat.subtitle}
+              </p>
+
+              {/* Centered Circular Arrow Button */}
+              <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full ${cat.btnBg} text-white flex items-center justify-center shadow-md shadow-black/10 mt-2 group-hover:scale-110 active:scale-95 transition-all duration-200`}>
+                <ChevronRight className="w-4 h-4 stroke-[3]" />
+              </div>
+            </div>
+          </Link>
+        ))}
       </section>
 
     </div>

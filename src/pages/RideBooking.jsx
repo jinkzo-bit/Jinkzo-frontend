@@ -65,25 +65,6 @@ export default function RideBooking() {
   useEffect(() => {
     const checkRiderAvailability = async () => {
       try {
-        // Check Ride Category Service Availability
-        const catRes = await fetch(`${API_BASE}/restaurants/category-services`);
-        if (catRes.ok) {
-          const catList = await catRes.json();
-          const rideCat = catList.find(c => c.id === 'ride');
-          if (rideCat) {
-            if (rideCat.status === 'DISABLED' || rideCat.isEnabled === false) {
-              setIsRiderAvailable(false);
-              setErrorMsg("We are not providing this service currently.");
-              return;
-            }
-            if (rideCat.status === 'CLOSED') {
-              setIsRiderAvailable(false);
-              setErrorMsg(`Ride & Courier service is closed. ${rideCat.message || ''}`.trim());
-              return;
-            }
-          }
-        }
-
         const res = await fetch(`${API_BASE}/orders/riders/check?type=ride`);
         if (res.ok) {
           const data = await res.json();
@@ -281,14 +262,6 @@ export default function RideBooking() {
         instruction: rideInstructions
       };
 
-      console.log('[RIDE DEBUG] POST /api/orders request:', {
-        requestUrl: `${API_BASE}/orders`,
-        category: 'ride',
-        pickup: payload.pickupAddress,
-        drop: payload.address,
-        payload
-      });
-
       const res = await fetch(`${API_BASE}/orders`, {
         method: 'POST',
         headers: {
@@ -298,25 +271,16 @@ export default function RideBooking() {
         body: JSON.stringify(payload)
       });
 
-      const data = await res.json().catch(() => ({}));
-
-      console.log('[RIDE DEBUG] POST /api/orders response:', {
-        httpStatus: res.status,
-        responseBody: data,
-        ok: res.ok
-      });
-
+      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || `Booking failed (HTTP ${res.status})`);
+        throw new Error(data.message || 'Failed to place booking');
       }
 
       showToast(`${serviceType === 'ride' ? 'Ride booked' : 'Parcel dispatched'} successfully!`, 'success');
       navigate(`/order-tracking/${data._id}`);
 
     } catch (err) {
-      console.error('[RIDE ERROR]', err);
       setErrorMsg(err.message || 'Server error occurred during booking');
-      showToast(err.message || 'Server error occurred during booking', 'error');
     } finally {
       setIsSubmitting(false);
     }
