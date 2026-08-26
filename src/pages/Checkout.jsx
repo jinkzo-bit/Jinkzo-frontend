@@ -60,12 +60,15 @@ export default function Checkout() {
   }, [token]);
 
   const [storeRoutes, setStoreRoutes] = useState([]);
+  const [suppliersMap, setSuppliersMap] = useState({});
+  const [isRoutingLoading, setIsRoutingLoading] = useState(false);
 
   React.useEffect(() => {
     const activeAddress = user?.addresses?.[selectedAddressIndex];
     
     if (activeAddress) {
       const fetchRouteInfo = async () => {
+        setIsRoutingLoading(true);
         let custPos = (activeAddress?.lat != null && activeAddress?.lng != null) ? { lat: Number(activeAddress.lat), lng: Number(activeAddress.lng) } : null;
         if (!custPos) {
           const fullCustAddress = `${activeAddress.street}, ${activeAddress.city}, ${activeAddress.state} ${activeAddress.zip}`;
@@ -76,9 +79,7 @@ export default function Checkout() {
           } catch (err) { console.error('Failed to geocode customer address:', err); }
         }
 
-        if (!custPos) return;
-
-        // Fetch fresh supplier list from backend to guarantee authoritative coordinates
+        // Fetch fresh supplier list from backend to guarantee authoritative coordinates and address
         let freshSuppliersMap = {};
         try {
           const supRes = await fetch(`${API_BASE}/catalog-items/suppliers`);
@@ -89,9 +90,15 @@ export default function Checkout() {
               acc[String(s._id || s.id)] = s;
               return acc;
             }, {});
+            setSuppliersMap(freshSuppliersMap);
           }
         } catch (e) {
           console.error('Failed to fetch fresh suppliers for route calculation:', e);
+        }
+
+        if (!custPos) {
+          setIsRoutingLoading(false);
+          return;
         }
 
         // Collect all distinct pickup sources (Suppliers + Restaurants)
@@ -169,6 +176,7 @@ export default function Checkout() {
         if (maxDist > 0) {
           setRouteInfo({ distanceKm: maxDist, durationMinutes: maxDuration });
         }
+        setIsRoutingLoading(false);
       };
       fetchRouteInfo();
     }
@@ -193,19 +201,24 @@ export default function Checkout() {
   const groupedItems = items.reduce((acc, item) => {
     const source = getCartItemSource(item);
     const key = source.sourceKey;
+    const freshSup = source.sourceType === 'supplier' ? suppliersMap[String(source.sourceId)] : null;
+    const finalAddress = freshSup?.address || source.address || (source.sourceType === 'restaurant' ? (restaurant?.address || '') : '');
+    const finalLat = freshSup?.latitude ?? source.latitude ?? (source.sourceType === 'restaurant' ? (restaurant?.lat ?? null) : null);
+    const finalLng = freshSup?.longitude ?? source.longitude ?? (source.sourceType === 'restaurant' ? (restaurant?.lng ?? null) : null);
+
     if (!acc[key]) {
       acc[key] = {
         key,
         sourceKey: key,
         type: source.sourceType,
         sourceId: source.sourceId,
-        sourceName: source.sourceName,
+        sourceName: freshSup?.name || source.sourceName,
         categoryKey: source.categoryKey,
         categoryLabel: source.categoryLabel,
         categoryIcon: source.categoryIcon,
-        address: source.address,
-        latitude: source.latitude,
-        longitude: source.longitude,
+        address: finalAddress,
+        latitude: finalLat,
+        longitude: finalLng,
         items: []
       };
     }
@@ -608,14 +621,29 @@ export default function Checkout() {
                           {group.sourceName}
                         </h4>
                         {/* 3. LOCATION & DISTANCE */}
-                        <div className="flex items-center gap-2 text-[10px] text-muted font-medium mt-0.5">
-                          {group.address && (
-                            <span className="truncate max-w-[160px]">📍 {group.address}</span>
-                          )}
-                          {displayDistance != null ? (
-                            <span className="text-blue-600 font-bold flex-shrink-0">📏 {displayDistance} km</span>
+                        <div className="flex items-center gap-2 text-[10px] text-muted font-medium mt-0.5 flex-wrap">
+                          {group.address && group.address.trim() ? (
+                            <>
+                              <span className="truncate max-w-[170px]" title={group.address}>📍 {group.address}</span>
+                              {displayDistance != null ? (
+                                <span className="text-blue-600 font-bold flex-shrink-0">📏 {displayDistance} km</span>
+                              ) : isRoutingLoading ? (
+                                <span className="text-blue-500 font-medium flex-shrink-0">📏 Distance calculating...</span>
+                              ) : (
+                                <span className="text-muted font-medium flex-shrink-0">📏 Distance unavailable</span>
+                              )}
+                            </>
+                          ) : (group.latitude != null && group.longitude != null) ? (
+                            <>
+                              <span className="truncate max-w-[170px]">📍 GPS Location</span>
+                              {displayDistance != null ? (
+                                <span className="text-blue-600 font-bold flex-shrink-0">📏 {displayDistance} km</span>
+                              ) : (
+                                <span className="text-muted font-medium flex-shrink-0">📏 Distance unavailable</span>
+                              )}
+                            </>
                           ) : (
-                            <span className="text-muted font-medium flex-shrink-0">📏 Location unavailable</span>
+                            <span className="text-muted font-medium flex-shrink-0">📍 Location unavailable</span>
                           )}
                         </div>
                       </div>

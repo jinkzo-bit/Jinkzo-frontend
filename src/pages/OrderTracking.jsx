@@ -431,6 +431,7 @@ export default function OrderTracking() {
           riderLng={riderLoc?.lng}
           gpsStatus={gpsStatus}
           supplierDeliveries={order.supplierDeliveries || []}
+          pickupStops={order.pickupStops || []}
           routeSequence={order.routeSequence || []}
         />
       )}
