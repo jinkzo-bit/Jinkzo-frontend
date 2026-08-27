@@ -6,7 +6,6 @@ import { parseAddressComponents } from '../../utils/parseAddressComponents';
 import { isValidCoordinates } from '../../utils/coordinates';
 import { API_BASE } from '../../config/api';
 import PlacesAutocomplete from './PlacesAutocomplete';
-import MapRotationControls from './MapRotationControls';
 
 const INDIA_CENTER_LAT = 20.5937;
 const INDIA_CENTER_LNG = 78.9629;
@@ -23,6 +22,9 @@ const MAP_OPTIONS = {
   clickableIcons: false,
   gestureHandling: 'greedy',
   rotateControl: false,
+  cameraControl: false,
+  tiltInteractionEnabled: false,
+  headingInteractionEnabled: false,
   heading: 0,
   tilt: 0,
   isFractionalZoomEnabled: true,
@@ -203,6 +205,10 @@ export default function LocationPicker({
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
+    try {
+      if (typeof map.setTilt === 'function') map.setTilt(0);
+      if (typeof map.setHeading === 'function') map.setHeading(0);
+    } catch (_) {}
 
     const listener = map.addListener('idle', async () => {
       const center = map.getCenter();
@@ -470,15 +476,6 @@ export default function LocationPicker({
               options={MAP_OPTIONS}
               onLoad={onMapLoad}
               onUnmount={onMapUnmount}
-            />
-            {/* Map Rotation, Compass & 3D Tilt Controls */}
-            <MapRotationControls
-              map={mapInstance}
-              mapRef={mapRef}
-              containerRef={mapContainerRef}
-              position="top-right"
-              showStepButtons={false}
-              show3DTilt={true}
             />
           </>
         )}

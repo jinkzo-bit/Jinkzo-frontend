@@ -38,8 +38,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { API_BASE } from '../config/api';
-import { useAuthStore } from '../store/authStore';
-import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
+import { useAuthStore, authFetch } from '../store/authStore';
+import { uploadFileToBackend, getImageUrl, handleImageError, FALLBACK_IMAGES } from '../utils/uploadUtil';
 import { formatAppDate, formatAppTimeOnly } from '../utils/dateUtils';
 import { io } from 'socket.io-client';
 import NotificationCenter from '../components/NotificationCenter';
@@ -50,6 +50,34 @@ const SERVICE_CONFIG = {
   VEG_FRUITS: { label: 'Veg & Fruits', badgeBg: 'bg-teal-500/10 text-teal-600 border-teal-500/20', color: '#0d9488', icon: '🥦' },
   MEAT: { label: 'Meat', badgeBg: 'bg-rose-500/10 text-rose-600 border-rose-500/20', color: '#e11d48', icon: '🍗' }
 };
+
+const normalizeStoreCategory = (cat) => {
+  if (!cat) return 'GROCERY';
+  const c = String(cat).trim().toUpperCase();
+  if (['GROCERY', 'GROCERIES'].includes(c)) return 'GROCERY';
+  if (['BAKERY', 'BAKERY & BEVERAGES', 'BEVERAGES', 'COOL_HOT', 'HOT_COOL', 'HOT & COOL', 'COOL & HOT'].includes(c)) return 'BAKERY';
+  if (['VEG_FRUITS', 'FRUITS-VEGETABLES', 'FRUITS_VEGETABLES', 'VEGETABLES', 'FRUITS & VEGETABLES', 'VEG & FRUITS', 'FRUITS', 'VEG'].includes(c)) return 'VEG_FRUITS';
+  if (['MEAT', 'NON-VEG', 'MEAT & SEAFOOD', 'CHICKEN', 'MUTTON', 'FISH'].includes(c)) return 'MEAT';
+  return 'GROCERY';
+};
+
+const groupOrderItemsByCategory = (items = []) => {
+  const groups = {
+    GROCERY: [],
+    VEG_FRUITS: [],
+    BAKERY: [],
+    MEAT: []
+  };
+
+  items.forEach(it => {
+    const norm = normalizeStoreCategory(it.serviceType);
+    if (!groups[norm]) groups[norm] = [];
+    groups[norm].push(it);
+  });
+
+  return groups;
+};
+
 
 export default function StoreOperationsDashboard() {
   const navigate = useNavigate();
@@ -165,9 +193,7 @@ export default function StoreOperationsDashboard() {
   const fetchAnalytics = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch(`${API_BASE}/store/analytics`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await authFetch(`${API_BASE}/store/analytics`);
       if (res.ok) {
         const data = await res.json();
         setAnalytics(data);
@@ -187,9 +213,7 @@ export default function StoreOperationsDashboard() {
       if (selectedOrderStatus !== 'all') params.set('status', selectedOrderStatus);
       if (searchQuery) params.set('search', searchQuery);
 
-      const res = await fetch(`${API_BASE}/store/orders?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await authFetch(`${API_BASE}/store/orders?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setOrders(data);
@@ -208,9 +232,7 @@ export default function StoreOperationsDashboard() {
       if (selectedService !== 'ALL') params.set('serviceType', selectedService);
       if (searchQuery) params.set('search', searchQuery);
 
-      const res = await fetch(`${API_BASE}/store/products?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await authFetch(`${API_BASE}/store/products?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setProducts(data);
@@ -228,9 +250,7 @@ export default function StoreOperationsDashboard() {
       const params = new URLSearchParams();
       if (selectedService !== 'ALL') params.set('serviceType', selectedService);
 
-      const res = await fetch(`${API_BASE}/store/categories?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await authFetch(`${API_BASE}/store/categories?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setCategories(data);
@@ -248,9 +268,7 @@ export default function StoreOperationsDashboard() {
       const params = new URLSearchParams();
       if (selectedService !== 'ALL') params.set('serviceType', selectedService);
 
-      const res = await fetch(`${API_BASE}/store/inventory?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await authFetch(`${API_BASE}/store/inventory?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setInventory(data);
@@ -265,9 +283,7 @@ export default function StoreOperationsDashboard() {
   const fetchAdvertisements = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch(`${API_BASE}/store/advertisements`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await authFetch(`${API_BASE}/store/advertisements`);
       if (res.ok) {
         const data = await res.json();
         setAdvertisements(data);
@@ -281,9 +297,7 @@ export default function StoreOperationsDashboard() {
 
   const fetchRiders = async () => {
     try {
-      const res = await fetch(`${API_BASE}/store/riders/available`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await authFetch(`${API_BASE}/store/riders/available`);
       if (res.ok) {
         const data = await res.json();
         setAvailableRiders(data);
@@ -299,9 +313,7 @@ export default function StoreOperationsDashboard() {
       const params = new URLSearchParams();
       if (selectedService !== 'ALL') params.set('service', selectedService);
 
-      const res = await fetch(`${API_BASE}/store/reports?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await authFetch(`${API_BASE}/store/reports?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setReports(data);
@@ -316,11 +328,10 @@ export default function StoreOperationsDashboard() {
   // Order Actions
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     try {
-      const res = await fetch(`${API_BASE}/store/orders/${orderId}/status`, {
+      const res = await authFetch(`${API_BASE}/store/orders/${orderId}/status`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ status: newStatus })
       });
@@ -341,11 +352,10 @@ export default function StoreOperationsDashboard() {
   const handleAssignRider = async (riderId) => {
     if (!targetOrderForRider) return;
     try {
-      const res = await fetch(`${API_BASE}/store/orders/${targetOrderForRider._id}/assign-rider`, {
+      const res = await authFetch(`${API_BASE}/store/orders/${targetOrderForRider._id}/assign-rider`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ riderId })
       });
@@ -367,11 +377,10 @@ export default function StoreOperationsDashboard() {
   // Quick Stock Updater
   const handleUpdateStock = async (productId, newStock) => {
     try {
-      const res = await fetch(`${API_BASE}/store/products/${productId}/stock`, {
+      const res = await authFetch(`${API_BASE}/store/products/${productId}/stock`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ stock: parseInt(newStock, 10), isAvailable: parseInt(newStock, 10) > 0 })
       });
@@ -742,8 +751,11 @@ export default function StoreOperationsDashboard() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {orders.map((order) => {
-                    const srvConf = SERVICE_CONFIG[order.serviceType] || SERVICE_CONFIG.GROCERY;
                     const items = order.items || [];
+                    const grouped = groupOrderItemsByCategory(items);
+                    const activeCategories = Object.entries(grouped).filter(([_, list]) => list.length > 0);
+                    const isRiderAssigned = !!(order.deliveryAgent?.name || order.deliveryAgent?.phone);
+
                     return (
                       <div
                         key={order._id}
@@ -752,22 +764,20 @@ export default function StoreOperationsDashboard() {
                         {/* Card Header: Service Badge + Status */}
                         <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-3">
                           <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-black px-2.5 py-1 rounded-xl border uppercase tracking-wider ${srvConf.badgeBg}`}>
-                              {srvConf.icon} {srvConf.label}
+                            <span className="text-[10px] font-black px-2.5 py-1 rounded-xl border uppercase tracking-wider bg-amber-500/10 text-amber-600 border-amber-500/20">
+                              🏬 JINKZO STORE
                             </span>
                             <span className="font-mono font-black text-xs text-slate-900 dark:text-white">
                               {order.displayId || `#${order._id.substr(-6).toUpperCase()}`}
                             </span>
                           </div>
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
-                            order.status === 'Placed' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' :
-                            order.status === 'Accepted' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' :
-                            order.status === 'Packing' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300' :
-                            order.status === 'Ready_for_Pickup' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
-                            order.status === 'Delivered' ? 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300' :
-                            'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                          <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase ${
+                            order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                            ['Picked_Up', 'Out_for_Delivery'].includes(order.status) ? 'bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300' :
+                            isRiderAssigned ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' :
+                            'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
                           }`}>
-                            {order.status?.replace(/_/g, ' ')}
+                            {isRiderAssigned && order.status === 'Rider_Assigned' ? 'AUTO ASSIGNED' : order.status?.replace(/_/g, ' ')}
                           </span>
                         </div>
 
@@ -775,94 +785,95 @@ export default function StoreOperationsDashboard() {
                         <div className="flex flex-col gap-1 text-xs">
                           <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
                             <span className="font-bold">{order.customerName || order.customer?.name || 'Customer'}</span>
-                            <span className="text-slate-500">{order.customerPhone || order.customer?.phone || ''}</span>
+                            <span className="text-slate-500 font-mono">{order.customerPhone || order.customer?.phone || ''}</span>
                           </div>
                           <p className="text-[11px] text-slate-500 line-clamp-1">
                             📍 {order.address?.street || order.customerLocation?.formattedAddress || 'Customer Address'}
                           </p>
                         </div>
 
-                        {/* Items summary */}
-                        <div className="bg-slate-50 dark:bg-slate-850 p-2.5 rounded-2xl flex flex-col gap-1 text-xs">
-                          {items.slice(0, 3).map((it, idx) => (
-                            <div key={idx} className="flex items-center justify-between text-[11px]">
-                              <span className="line-clamp-1 text-slate-700 dark:text-slate-300">{it.quantity}x {it.name}</span>
-                              <span className="font-semibold text-slate-600 dark:text-slate-400">₹{(it.price || 0) * (it.quantity || 1)}</span>
-                            </div>
-                          ))}
-                          {items.length > 3 && (
-                            <span className="text-[10px] text-slate-400 font-bold">+{items.length - 3} more items...</span>
-                          )}
+                        {/* Grouped Store Items by Section */}
+                        <div className="bg-slate-50 dark:bg-slate-850 p-3 rounded-2xl flex flex-col gap-2.5 text-xs">
+                          {activeCategories.map(([catKey, catItems]) => {
+                            const conf = SERVICE_CONFIG[catKey] || SERVICE_CONFIG.GROCERY;
+                            return (
+                              <div key={catKey} className="flex flex-col gap-1 border-b border-slate-200/60 dark:border-slate-800/60 last:border-0 pb-2 last:pb-0">
+                                <div className="flex items-center gap-1.5 font-black text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                  <span>{conf.icon}</span>
+                                  <span>{conf.label}</span>
+                                </div>
+                                <div className="flex flex-col gap-1 pl-4">
+                                  {catItems.map((it, idx) => (
+                                    <div key={idx} className="flex items-center justify-between text-[11px]">
+                                      <span className="text-slate-800 dark:text-slate-200">
+                                        • {it.name} <span className="text-slate-400">×{it.quantity}</span>
+                                      </span>
+                                      <span className="font-semibold text-slate-600 dark:text-slate-400">
+                                        ₹{(it.price || 0) * (it.quantity || 1)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {/* Financials & Delivery Agent */}
-                        <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-slate-800/80">
-                          <div>
-                            <span className="text-[10px] text-slate-400">Total Amount:</span>
-                            <p className="font-display font-black text-sm text-slate-900 dark:text-white">₹{order.total} <span className="text-[10px] text-slate-400 font-medium">({order.paymentDetails?.method || 'COD'})</span></p>
+                        <div className="flex flex-col gap-1.5 text-xs pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                          <div className="flex items-center justify-between text-[11px] text-slate-500">
+                            <span>Store Subtotal: ₹{order.subtotal || 0}</span>
+                            <span>Delivery Fee: ₹{order.deliveryFee || 0}</span>
                           </div>
-                          {order.deliveryAgent?.name && (
-                            <div className="text-right">
-                              <span className="text-[10px] text-slate-400">Assigned Rider:</span>
-                              <p className="font-bold text-xs text-emerald-600">{order.deliveryAgent.name}</p>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-[10px] text-slate-400">Total Amount:</span>
+                              <p className="font-display font-black text-sm text-slate-900 dark:text-white">
+                                ₹{order.total} <span className="text-[10px] text-slate-400 font-medium">({order.paymentDetails?.method || 'COD'})</span>
+                              </p>
                             </div>
-                          )}
+                            <div className="text-right">
+                              <span className="text-[10px] text-slate-400">Rider Status:</span>
+                              {isRiderAssigned ? (
+                                <p className="font-bold text-xs text-emerald-600">
+                                  {order.deliveryAgent.name} {order.deliveryAgent.phone ? `(${order.deliveryAgent.phone})` : ''}
+                                </p>
+                              ) : (
+                                <p className="font-bold text-xs text-amber-600 animate-pulse">
+                                  Waiting for Active Rider
+                                </p>
+                              )}
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Action Buttons based on order lifecycle */}
-                        <div className="flex items-center gap-2 pt-2">
-                          {order.status === 'Placed' && (
-                            <button
-                              onClick={() => handleUpdateOrderStatus(order._id, 'Accepted')}
-                              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
-                            >
-                              Accept Order
-                            </button>
-                          )}
-
-                          {order.status === 'Accepted' && (
-                            <button
-                              onClick={() => handleUpdateOrderStatus(order._id, 'Packing')}
-                              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
-                            >
-                              Start Packing
-                            </button>
-                          )}
-
-                          {order.status === 'Packing' && (
-                            <button
-                              onClick={() => handleUpdateOrderStatus(order._id, 'Ready_for_Pickup')}
-                              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
-                            >
-                              Mark Ready for Pickup
-                            </button>
-                          )}
-
-                          {['Placed', 'Accepted', 'Packing', 'Ready_for_Pickup'].includes(order.status) && (
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            onClick={() => setSelectedOrderDetails(order)}
+                            className="flex-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer text-center"
+                          >
+                            View Order Details
+                          </button>
+                          {!isRiderAssigned && (
                             <button
                               onClick={() => {
                                 setTargetOrderForRider(order);
                                 fetchRiders();
                                 setShowAssignRiderModal(true);
                               }}
-                              className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"
-                              title="Assign Rider Now"
+                              className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+                              title="Assign Rider Manually"
                             >
                               Assign Rider
                             </button>
                           )}
-
-                          <button
-                            onClick={() => setSelectedOrderDetails(order)}
-                            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"
-                          >
-                            Details
-                          </button>
                         </div>
                       </div>
                     );
                   })}
                 </div>
+
               )}
 
             </div>
@@ -984,9 +995,8 @@ export default function StoreOperationsDashboard() {
                           onClick={async () => {
                             if (window.confirm(`Delete product "${p.name}"?`)) {
                               try {
-                                const res = await fetch(`${API_BASE}/store/products/${p._id}`, {
-                                  method: 'DELETE',
-                                  headers: { Authorization: `Bearer ${token}` }
+                                const res = await authFetch(`${API_BASE}/store/products/${p._id}`, {
+                                  method: 'DELETE'
                                 });
                                 if (res.ok) {
                                   showToast('Product deleted');
@@ -1260,9 +1270,8 @@ export default function StoreOperationsDashboard() {
                                 type="button"
                                 onClick={async () => {
                                   try {
-                                    await fetch(`${API_BASE}/store/advertisements/${ad._id}/toggle`, {
-                                      method: 'PUT',
-                                      headers: { Authorization: `Bearer ${token}` }
+                                    await authFetch(`${API_BASE}/store/advertisements/${ad._id}/toggle`, {
+                                      method: 'PUT'
                                     });
                                     showToast(isAct ? 'Banner deactivated' : 'Banner activated');
                                     fetchAdvertisements();
@@ -1285,9 +1294,8 @@ export default function StoreOperationsDashboard() {
                               onClick={async () => {
                                 if (window.confirm(`Are you sure you want to delete promotional banner "${ad.title}"?`)) {
                                   try {
-                                    const res = await fetch(`${API_BASE}/store/advertisements/${ad._id}`, {
-                                      method: 'DELETE',
-                                      headers: { Authorization: `Bearer ${token}` }
+                                    const res = await authFetch(`${API_BASE}/store/advertisements/${ad._id}`, {
+                                      method: 'DELETE'
                                     });
                                     if (res.ok) {
                                       showToast('Promotional banner deleted');
@@ -1323,49 +1331,101 @@ export default function StoreOperationsDashboard() {
           {/* ══════════════════════════════════════════════
               TAB 7: RIDER DISPATCH
              ══════════════════════════════════════════════ */}
+          {/* ══════════════════════════════════════════════
+              TAB 7: RIDER DISPATCH
+             ══════════════════════════════════════════════ */}
           {activeTab === 'dispatch' && (
             <div className="flex flex-col gap-4 animate-fade-in">
-              <h3 className="font-display font-black text-sm uppercase">Active Orders Awaiting Pickup Dispatch</h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {orders.filter(o => o.status === 'Ready_for_Pickup').map((order) => (
-                  <div
-                    key={order._id}
-                    className="bg-white dark:bg-[#141926] border border-emerald-500/30 rounded-3xl p-5 shadow-xs flex flex-col justify-between gap-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono font-black text-xs text-emerald-600">{order.displayId || order._id}</span>
-                      <span className="text-[10px] font-black bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full">
-                        READY FOR PICKUP
-                      </span>
-                    </div>
-                    <div className="text-xs flex flex-col gap-1">
-                      <p className="font-bold text-slate-800 dark:text-white">Customer: {order.customerName}</p>
-                      <p className="text-slate-400">Destination: {order.address?.street || 'Customer Address'}</p>
-                      <p className="font-black text-sm text-slate-900 dark:text-white mt-1">₹{order.total}</p>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setTargetOrderForRider(order);
-                        fetchRiders();
-                        setShowAssignRiderModal(true);
-                      }}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer"
-                    >
-                      Assign Rider Now
-                    </button>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-display font-black text-sm uppercase">Jinkzo Store Rider Dispatch</h3>
+                  <p className="text-xs text-slate-500">Orders are automatically assigned to active online riders upon placement.</p>
+                </div>
               </div>
 
-              {orders.filter(o => o.status === 'Ready_for_Pickup').length === 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {orders.filter(o => ['Placed', 'Ready_for_Pickup', 'Rider_Assigned'].includes(o.status)).map((order) => {
+                  const isRiderAssigned = !!(order.deliveryAgent?.name || order.deliveryAgent?.phone);
+                  const itemsCount = (order.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
+
+                  return (
+                    <div
+                      key={order._id}
+                      className="bg-white dark:bg-[#141926] border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs flex flex-col justify-between gap-3.5 hover:border-emerald-500/30 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                            🏬 JINKZO STORE
+                          </span>
+                          <span className="font-mono font-black text-xs text-slate-900 dark:text-white">
+                            {order.displayId || `#${order._id.substr(-6).toUpperCase()}`}
+                          </span>
+                        </div>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          isRiderAssigned ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                        }`}>
+                          {isRiderAssigned ? 'AUTO ASSIGNED' : 'WAITING FOR ACTIVE RIDER'}
+                        </span>
+                      </div>
+
+                      <div className="text-xs flex flex-col gap-1.5 bg-slate-50 dark:bg-slate-850 p-3 rounded-2xl">
+                        <div className="flex items-center justify-between font-bold text-slate-800 dark:text-white">
+                          <span>Customer: {order.customerName || order.customer?.name || 'Customer'}</span>
+                          <span className="text-slate-500 font-mono text-[11px]">{order.customerPhone || order.customer?.phone || ''}</span>
+                        </div>
+                        <p className="text-slate-500 text-[11px]">
+                          📍 {order.address?.street || order.customerLocation?.formattedAddress || 'Customer Address'}
+                        </p>
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-200/50 dark:border-slate-800 text-[11px]">
+                          <span className="text-slate-400 font-medium">{itemsCount} Total Item(s)</span>
+                          <span className="font-black text-slate-900 dark:text-white">₹{order.total}</span>
+                        </div>
+                      </div>
+
+                      {/* Rider Details Section */}
+                      <div className="flex items-center justify-between text-xs pt-1">
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-medium">Assigned Delivery Partner:</span>
+                          {isRiderAssigned ? (
+                            <p className="font-bold text-xs text-emerald-600 flex items-center gap-1">
+                              <span>🚴</span>
+                              <span>{order.deliveryAgent.name}</span>
+                              <span className="font-mono text-slate-400">({order.deliveryAgent.phone})</span>
+                            </p>
+                          ) : (
+                            <p className="font-bold text-xs text-amber-600 animate-pulse">
+                              Pending active rider connection...
+                            </p>
+                          )}
+                        </div>
+
+                        {!isRiderAssigned && (
+                          <button
+                            onClick={() => {
+                              setTargetOrderForRider(order);
+                              fetchRiders();
+                              setShowAssignRiderModal(true);
+                            }}
+                            className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold py-1.5 px-3 rounded-xl text-xs transition-colors cursor-pointer"
+                          >
+                            Assign Manually
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {orders.filter(o => ['Placed', 'Ready_for_Pickup', 'Rider_Assigned'].includes(o.status)).length === 0 && (
                 <div className="bg-white dark:bg-[#141926] border border-slate-200 dark:border-slate-800 p-8 rounded-3xl text-center text-xs text-slate-400 font-bold">
-                  No orders currently waiting for pickup dispatch.
+                  No active orders currently awaiting pickup dispatch.
                 </div>
               )}
             </div>
           )}
+
 
           {/* ══════════════════════════════════════════════
               TAB 8: REPORTS & SALES
@@ -1457,7 +1517,6 @@ export default function StoreOperationsDashboard() {
       {showAdModal && (
         <StoreBannerModal
           banner={editingAd}
-          token={token}
           onClose={() => {
             setShowAdModal(false);
             setEditingAd(null);
@@ -1467,6 +1526,25 @@ export default function StoreOperationsDashboard() {
             setEditingAd(null);
             fetchAdvertisements();
             showToast(editingAd ? 'Promotional banner updated' : 'Promotional banner created');
+          }}
+        />
+      )}
+
+      {/* ══════════════════════════════════════════════
+          MODAL: ADD / EDIT STORE CATEGORY
+         ══════════════════════════════════════════════ */}
+      {showCategoryModal && (
+        <CategoryFormModal
+          category={editingCategory}
+          onClose={() => {
+            setShowCategoryModal(false);
+            setEditingCategory(null);
+          }}
+          onSuccess={() => {
+            setShowCategoryModal(false);
+            setEditingCategory(null);
+            fetchCategories();
+            showToast(editingCategory ? 'Category updated' : 'Category created');
           }}
         />
       )}
@@ -1576,7 +1654,7 @@ export default function StoreOperationsDashboard() {
 // ══════════════════════════════════════════════
 //  STORE PROMOTIONAL BANNER MODAL
 // ══════════════════════════════════════════════
-function StoreBannerModal({ banner, token, onClose, onSuccess }) {
+function StoreBannerModal({ banner, onClose, onSuccess }) {
   const [targetSection, setTargetSection] = useState(
     banner?.displayIn?.[0] ? banner.displayIn[0].toUpperCase() : 'GROCERY'
   );
@@ -1608,7 +1686,21 @@ function StoreBannerModal({ banner, token, onClose, onSuccess }) {
     e.preventDefault();
     setErrorMsg('');
     if (!title.trim()) return setErrorMsg('Banner Title is required.');
-    if (!imageUrl.trim()) return setErrorMsg('Banner Image is required.');
+
+    const trimmedImg = imageUrl ? imageUrl.trim() : '';
+    if (!trimmedImg) return setErrorMsg('Banner Image is required.');
+
+    // Reject Google Search/imgres landing URLs
+    const isGoogleSearchUrl = (
+      trimmedImg.includes('google.com/imgres') ||
+      trimmedImg.includes('google.co.in/imgres') ||
+      trimmedImg.includes('google.com/search') ||
+      trimmedImg.includes('google.com/url') ||
+      trimmedImg.includes('images.app.goo.gl')
+    );
+    if (isGoogleSearchUrl) {
+      return setErrorMsg('Please enter a direct image URL or upload an image.');
+    }
 
     setIsSaving(true);
     try {
@@ -1616,7 +1708,7 @@ function StoreBannerModal({ banner, token, onClose, onSuccess }) {
         title: title.trim(),
         subtitle: subtitle.trim(),
         description: subtitle.trim(),
-        imageUrl: imageUrl.trim(),
+        imageUrl: trimmedImg,
         buttonText: buttonText.trim() || 'Order Now',
         displayIn: [targetSection.toLowerCase()],
         isActive,
@@ -1630,11 +1722,10 @@ function StoreBannerModal({ banner, token, onClose, onSuccess }) {
 
       const method = banner?._id ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
       });
@@ -1828,7 +1919,7 @@ function StoreBannerModal({ banner, token, onClose, onSuccess }) {
 // ══════════════════════════════════════════════
 //  ADD / EDIT PRODUCT FORM MODAL
 // ══════════════════════════════════════════════
-function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
+function ProductFormModal({ product, categories, onClose, onSuccess }) {
   const [serviceType, setServiceType] = useState(product?.serviceType || 'GROCERY');
   const [category, setCategory] = useState(product?.category || '');
   const [isCustomCategory, setIsCustomCategory] = useState(false);
@@ -1885,7 +1976,21 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
     if (!name.trim()) return setErrorMsg('Product Name (English) is required.');
     if (!category.trim()) return setErrorMsg('Category is required.');
     if (!price || isNaN(parseFloat(price))) return setErrorMsg('Valid Price is required.');
-    if (!image.trim()) return setErrorMsg('Product Image is required.');
+
+    const trimmedImg = image ? image.trim() : '';
+    if (!trimmedImg) return setErrorMsg('Product Image is required.');
+
+    // Reject Google Search/imgres landing URLs with clear message
+    const isGoogleSearchUrl = (
+      trimmedImg.includes('google.com/imgres') ||
+      trimmedImg.includes('google.co.in/imgres') ||
+      trimmedImg.includes('google.com/search') ||
+      trimmedImg.includes('google.com/url') ||
+      trimmedImg.includes('images.app.goo.gl')
+    );
+    if (isGoogleSearchUrl) {
+      return setErrorMsg('Please enter a direct image URL or upload an image.');
+    }
 
     setIsSaving(true);
     try {
@@ -1903,7 +2008,7 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
         lowStockAlert: parseInt(lowStockAlert, 10),
         description,
         brand,
-        image: image.trim(),
+        image: trimmedImg,
         details: {
           meatType,
           cutType,
@@ -1922,11 +2027,10 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
 
       const method = product?._id ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
       });
@@ -2188,7 +2292,7 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
                 type="text"
                 value={image}
                 onChange={(e) => setImage(e.target.value)}
-                placeholder="Paste Image URL or upload file below"
+                placeholder="Paste direct Image URL or upload file below"
                 className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-medium"
                 required
               />
@@ -2243,6 +2347,186 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
             </button>
           </div>
 
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+//  ADD / EDIT CATEGORY FORM MODAL
+// ══════════════════════════════════════════════
+function CategoryFormModal({ category, onClose, onSuccess }) {
+  const [serviceType, setServiceType] = useState(category?.serviceType || 'GROCERY');
+  const [name, setName] = useState(category?.name || '');
+  const [nameTelugu, setNameTelugu] = useState(category?.nameTelugu || '');
+  const [image, setImage] = useState(category?.image || '');
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsUploading(true);
+    setErrorMsg('');
+    try {
+      const url = await uploadFileToBackend(file);
+      setImage(url);
+    } catch (err) {
+      setErrorMsg(err.message || 'Category image upload failed');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    if (!name.trim()) return setErrorMsg('Category Name is required.');
+
+    const trimmedImg = image ? image.trim() : '';
+    if (trimmedImg) {
+      const isGoogleSearchUrl = (
+        trimmedImg.includes('google.com/imgres') ||
+        trimmedImg.includes('google.co.in/imgres') ||
+        trimmedImg.includes('google.com/search') ||
+        trimmedImg.includes('google.com/url') ||
+        trimmedImg.includes('images.app.goo.gl')
+      );
+      if (isGoogleSearchUrl) {
+        return setErrorMsg('Please enter a direct image URL or upload an image.');
+      }
+    }
+
+    setIsSaving(true);
+    try {
+      const payload = {
+        name: name.trim(),
+        nameTelugu: nameTelugu.trim(),
+        serviceType,
+        dashboardType: serviceType.toLowerCase(),
+        image: trimmedImg || FALLBACK_IMAGES.category
+      };
+
+      const url = category?._id
+        ? `${API_BASE}/store/categories/${category._id}`
+        : `${API_BASE}/store/categories`;
+
+      const method = category?._id ? 'PUT' : 'POST';
+
+      const res = await authFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to save category');
+      onSuccess();
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-white dark:bg-[#141926] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full flex flex-col gap-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-scale-up">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 className="font-display font-black text-base text-slate-900 dark:text-white">
+            {category ? 'Edit Store Category' : '+ Add New Store Category'}
+          </h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {errorMsg && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3 rounded-xl font-bold">
+            {errorMsg}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-xs">
+          <div>
+            <label className="font-black text-slate-700 dark:text-slate-300 block mb-1.5">SERVICE *</label>
+            <div className="grid grid-cols-2 gap-2">
+              {['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'].map((srv) => (
+                <button
+                  type="button"
+                  key={srv}
+                  onClick={() => setServiceType(srv)}
+                  className={`p-2.5 rounded-xl font-black text-xs border text-center transition-all cursor-pointer ${
+                    serviceType === srv
+                      ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  {SERVICE_CONFIG[srv]?.icon} {SERVICE_CONFIG[srv]?.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Category Name *</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Dairy & Eggs, Fresh Vegetables, Cold Drinks"
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Category Name (Telugu)</label>
+            <input
+              type="text"
+              value={nameTelugu}
+              onChange={(e) => setNameTelugu(e.target.value)}
+              placeholder="e.g. పాలు & గుడ్లు"
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-medium"
+            />
+          </div>
+
+          <div>
+            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Category Image</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={image}
+                onChange={(e) => setImage(e.target.value)}
+                placeholder="Paste direct Image URL or upload file"
+                className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-medium"
+              />
+              <label className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-3.5 py-2.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer hover:opacity-90 transition-opacity">
+                <Upload className="w-4 h-4" />
+                <span>{isUploading ? '...' : 'Upload'}</span>
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+              </label>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl text-slate-500 font-bold hover:bg-slate-100 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving || isUploading}
+              className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : (category ? 'Save Changes' : '+ Add Category')}
+            </button>
+          </div>
         </form>
       </div>
     </div>

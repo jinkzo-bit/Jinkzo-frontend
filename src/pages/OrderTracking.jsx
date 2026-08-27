@@ -257,6 +257,8 @@ export default function OrderTracking() {
     );
   }
 
+  const isStore = order.orderType === 'store' || ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT', 'STORE'].includes(String(order.serviceType || '').toUpperCase());
+
   // Active status timeline markers
   const timelineSteps = order.orderType === 'ride' ? [
     { label: 'Booking Placed', mappedState: 0, desc: 'Finding nearest Ride Captain' },
@@ -264,6 +266,12 @@ export default function OrderTracking() {
     { label: 'Captain at Pickup', mappedState: 2, desc: 'Captain is waiting at pickup spot' },
     { label: 'Ride in Progress', mappedState: 3, desc: 'Captain is en route to destination' },
     { label: 'Completed', mappedState: 4, desc: 'Reached destination successfully!' }
+  ] : isStore ? [
+    { label: 'Order Placed', mappedState: 0, desc: 'Order received at Jinkzo Store' },
+    { label: 'Rider Assigned', mappedState: 1, desc: 'Active rider auto-assigned for delivery' },
+    { label: 'Ready for Pickup', mappedState: 2, desc: 'Items packed & awaiting rider collection' },
+    { label: 'Out for Delivery', mappedState: 3, desc: 'Rider is en route to your address' },
+    { label: 'Delivered', mappedState: 4, desc: 'Order delivered successfully!' }
   ] : [
     { label: 'Order Placed', mappedState: 0, desc: 'Awaiting restaurant approval' },
     { label: 'Preparing', mappedState: 1, desc: 'Accepted & being cooked' },
@@ -280,6 +288,13 @@ export default function OrderTracking() {
       if (currentStatus === 'Picked_Up') return 3;
       if (['Delivered', 'Completed'].includes(currentStatus)) return 4;
       return 0;
+    } else if (isStore) {
+      if (currentStatus === 'Placed') return 0;
+      if (['Rider_Assigned', 'Rider_Accepted'].includes(currentStatus)) return 1;
+      if (['Ready_for_Pickup', 'Packing', 'Accepted', 'Rider_At_Restaurant', 'Picked_Up'].includes(currentStatus)) return 2;
+      if (['Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(currentStatus)) return 3;
+      if (['Delivered', 'Completed'].includes(currentStatus)) return 4;
+      return 0;
     } else {
       // Food / Parcel — UNCHANGED
       if (currentStatus === 'Placed') return 0;
@@ -290,6 +305,7 @@ export default function OrderTracking() {
       return 0;
     }
   };
+
 
   const activeIndex = getStepIndex(order.status, order.orderType);
   const allOrdersInSession = [order, ...siblingOrders].sort((a, b) => String(a._id).localeCompare(String(b._id)));
@@ -353,12 +369,13 @@ export default function OrderTracking() {
       {allOrdersInSession.length > 1 && order.orderType !== 'ride' && (
         <div className="bg-surface border border-gray-150 rounded-3xl p-4 flex flex-col gap-2.5 shadow-2xs">
           <span className="text-[9px] text-muted font-extrabold uppercase tracking-wider px-1">
-            Track Sibling Kitchens (Placed in Same Order)
+            Track All Segments (Placed in Same Order)
           </span>
           <div className="flex flex-wrap gap-2">
             {allOrdersInSession.map((sessionOrder) => {
               const isCurrent = sessionOrder._id === order._id;
-              const restName = sessionOrder.restaurant?.name || 'Restaurant';
+              const isStoreSeg = sessionOrder.orderType === 'store' || ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT', 'STORE'].includes(String(sessionOrder.serviceType || '').toUpperCase());
+              const segName = isStoreSeg ? '🏬 Jinkzo Store' : (sessionOrder.restaurant?.name || '🍽️ Restaurant');
               return (
                 <Link
                   key={sessionOrder._id}
@@ -369,7 +386,7 @@ export default function OrderTracking() {
                       : 'bg-surface text-gray-650 border-line-strong hover:bg-base/50'
                   }`}
                 >
-                  <span className="truncate max-w-[150px]">{restName}</span>
+                  <span className="truncate max-w-[160px]">{segName}</span>
                   <span className={`text-[8px] px-1.5 py-0.5 rounded font-extrabold uppercase ${
                     isCurrent
                       ? 'bg-surface/20 text-white'
@@ -377,7 +394,7 @@ export default function OrderTracking() {
                       ? 'bg-green-50 text-green-700 border border-green-150'
                       : 'bg-violet-50 text-primary border border-violet-150'
                   }`}>
-                    {sessionOrder.status}
+                    {sessionOrder.status?.replace(/_/g, ' ')}
                   </span>
                 </Link>
               );
@@ -385,6 +402,7 @@ export default function OrderTracking() {
           </div>
         </div>
       )}
+
 
       {/* Real Google Maps tracking map */}
       {/* For rides:

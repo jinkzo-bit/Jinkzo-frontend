@@ -189,12 +189,25 @@ export const uploadFileToBackend = async (file) => {
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    const res = await fetch(`${API_BASE}/upload`, {
+    let res = await fetch(`${API_BASE}/upload`, {
       method: 'POST',
       headers,
       body: formData,
       signal: controller.signal,
     });
+
+    if (res.status === 401) {
+      const newToken = await authState.refreshAccessToken();
+      if (newToken) {
+        headers['Authorization'] = `Bearer ${newToken}`;
+        res = await fetch(`${API_BASE}/upload`, {
+          method: 'POST',
+          headers,
+          body: formData,
+          signal: controller.signal,
+        });
+      }
+    }
 
     clearTimeout(timeoutId);
 
@@ -293,12 +306,25 @@ export const importImageFromUrl = async (url) => {
   const timeoutId = setTimeout(() => controller.abort(), 20000); // 20-second timeout
 
   try {
-    const res = await fetch(`${API_BASE}/upload/from-url`, {
+    let res = await fetch(`${API_BASE}/upload/from-url`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ url: trimmed }),
       signal: controller.signal
     });
+
+    if (res.status === 401) {
+      const newToken = await authState.refreshAccessToken();
+      if (newToken) {
+        headers['Authorization'] = `Bearer ${newToken}`;
+        res = await fetch(`${API_BASE}/upload/from-url`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ url: trimmed }),
+          signal: controller.signal
+        });
+      }
+    }
 
     clearTimeout(timeoutId);
 

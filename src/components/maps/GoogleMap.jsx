@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GoogleMap as GoogleMapComponent, Marker, useJsApiLoader } from '@react-google-maps/api';
 import { MapPin, Loader, AlertTriangle } from 'lucide-react';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMapsLoader';
-import MapRotationControls from './MapRotationControls';
 
 // ── Default location: Nandikotkur, Andhra Pradesh ────────────────────────────
 const DEFAULT_LAT = 15.8567;
@@ -20,6 +19,9 @@ const MAP_OPTIONS = {
   clickableIcons: false,
   gestureHandling: 'greedy',
   rotateControl: false,
+  cameraControl: false,
+  tiltInteractionEnabled: false,
+  headingInteractionEnabled: false,
   heading: 0,
   tilt: 0,
   isFractionalZoomEnabled: true,
@@ -154,6 +156,10 @@ export default function GoogleMap({
   const onLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
+    try {
+      if (typeof map.setTilt === 'function') map.setTilt(0);
+      if (typeof map.setHeading === 'function') map.setHeading(0);
+    } catch (_) {}
   }, []);
 
   const onUnmount = useCallback(() => {
@@ -251,16 +257,6 @@ export default function GoogleMap({
           />
         )}
       </GoogleMapComponent>
-
-      {/* Floating Map Rotation, Compass & 3D Tilt Controls */}
-      <MapRotationControls
-        map={mapInstance}
-        mapRef={mapRef}
-        containerRef={containerRef}
-        position="top-right"
-        showStepButtons={false}
-        show3DTilt={true}
-      />
 
       {/* Custom Zoom Controls (Swiggy/Zomato style) */}
       <div style={{ position: 'absolute', bottom: 16, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 5 }}>

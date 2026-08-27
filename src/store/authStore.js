@@ -6,6 +6,9 @@ import { API_BASE } from '../config/api';
 const ACCESS_KEY  = 'qb-auth-token';
 const REFRESH_KEY = 'qb-refresh-token';
 
+// Singleton promise to prevent concurrent refresh race conditions
+let activeRefreshPromise = null;
+
 export const useAuthStore = create((set, get) => ({
   user: null,
   isAuthenticated: localStorage.getItem(ACCESS_KEY) !== null,
@@ -15,28 +18,46 @@ export const useAuthStore = create((set, get) => ({
 
   // ── Silent token refresh ────────────────────────────────────────────────────
   refreshAccessToken: async () => {
-    const refreshToken = localStorage.getItem(REFRESH_KEY);
-    if (!refreshToken) return null;
-    try {
-      const res = await fetch(`${API_BASE}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data.token) {
-        localStorage.setItem(ACCESS_KEY, data.token);
-        set({ token: data.token });
-      }
-      if (data.refreshToken) {
-        localStorage.setItem(REFRESH_KEY, data.refreshToken);
-      }
-      return data.token || null;
-    } catch (err) {
-      console.error('[Auth] Silent token refresh failed:', err);
-      return null;
+    if (activeRefreshPromise) {
+      return activeRefreshPromise;
     }
+
+    activeRefreshPromise = (async () => {
+      const refreshToken = localStorage.getItem(REFRESH_KEY);
+      if (!refreshToken) return null;
+      try {
+        const res = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem(ACCESS_KEY);
+            localStorage.removeItem(REFRESH_KEY);
+            set({ user: null, token: null, isAuthenticated: false });
+          }
+          return null;
+        }
+        const data = await res.json();
+        if (data.token) {
+          localStorage.setItem(ACCESS_KEY, data.token);
+          set({ token: data.token, isAuthenticated: true });
+        }
+        if (data.refreshToken) {
+          localStorage.setItem(REFRESH_KEY, data.refreshToken);
+        }
+        return data.token || null;
+      } catch (err) {
+        console.error('[Auth] Silent token refresh failed:', err);
+        return null;
+      } finally {
+        activeRefreshPromise = null;
+      }
+    })();
+
+    return activeRefreshPromise;
   },
 
   // ── Session initialisation on page load ────────────────────────────────────
@@ -50,6 +71,7 @@ export const useAuthStore = create((set, get) => ({
     set({ loading: true });
     try {
       let res = await fetch(`${API_BASE}/auth/me`, {
+        credentials: 'include',
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
 
@@ -57,6 +79,7 @@ export const useAuthStore = create((set, get) => ({
         const newToken = await get().refreshAccessToken();
         if (newToken) {
           res = await fetch(`${API_BASE}/auth/me`, {
+            credentials: 'include',
             headers: { Authorization: `Bearer ${newToken}` },
           });
         }
@@ -64,7 +87,7 @@ export const useAuthStore = create((set, get) => ({
 
       if (res.ok) {
         const data = await res.json();
-        const currentToken = get().token || sessionToken;
+        const currentToken = get().token || localStorage.getItem(ACCESS_KEY) || sessionToken;
         set({ user: data, token: currentToken, isAuthenticated: true, error: null });
       } else if (res.status === 401 || res.status === 403) {
         get().logout();
@@ -472,3 +495,60 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 }));
+
+/**
+ * Authenticated Fetch Helper with Automatic Silent Token Refresh
+ *
+ * Injects the current valid Bearer token, credentials: 'include'.
+ * If the response returns 401, attempts silent refresh ONCE and retries the original request.
+ * If refresh fails, triggers logout and clears the session.
+ */
+export const authFetch = async (url, options = {}) => {
+  const store = useAuthStore.getState();
+  let currentToken = store.token || localStorage.getItem(ACCESS_KEY);
+
+  const buildHeaders = (tokenToUse) => {
+    const headers = { ...(options.headers || {}) };
+    if (tokenToUse && tokenToUse !== 'cookie-auth-active') {
+      headers['Authorization'] = `Bearer ${tokenToUse}`;
+    }
+    return headers;
+  };
+
+  const isAuthEndpoint = typeof url === 'string' && (
+    url.includes('/auth/refresh') ||
+    url.includes('/auth/login') ||
+    url.includes('/auth/signup') ||
+    url.includes('/auth/logout')
+  );
+
+  const config = {
+    ...options,
+    credentials: options.credentials || 'include',
+    headers: buildHeaders(currentToken),
+  };
+
+  let res;
+  try {
+    res = await fetch(url, config);
+  } catch (err) {
+    throw err;
+  }
+
+  // If 401 and not an auth endpoint, attempt silent token refresh once
+  if (res.status === 401 && !isAuthEndpoint) {
+    const newToken = await store.refreshAccessToken();
+    if (newToken) {
+      const retryConfig = {
+        ...options,
+        credentials: options.credentials || 'include',
+        headers: buildHeaders(newToken),
+      };
+      res = await fetch(url, retryConfig);
+    } else {
+      store.logout();
+    }
+  }
+
+  return res;
+};

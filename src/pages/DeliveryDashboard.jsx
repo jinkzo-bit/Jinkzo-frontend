@@ -16,7 +16,67 @@ import {
   HistoryEmptyState
 } from '../components/history';
 
+const getUnifiedOrderItems = (order) => {
+  if (!order) return { restaurantItems: [], storeItems: [], allItems: [], restaurantInfo: null, storeInfo: null };
+
+  const isStoreCat = (serviceType) => ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT', 'STORE'].includes(String(serviceType || '').toUpperCase());
+
+  let restaurantItems = [];
+  let storeItems = [];
+  let restaurantInfo = null;
+  let storeInfo = null;
+
+  const mainItems = Array.isArray(order.items) ? order.items : [];
+  if (order.orderType === 'store' || isStoreCat(order.serviceType)) {
+    storeItems = storeItems.concat(mainItems);
+    storeInfo = { name: 'Jinkzo Central Store', address: 'Jinkzo Central Store, Nandikotkur' };
+  } else if (order.orderType === 'food') {
+    mainItems.forEach(it => {
+      if (isStoreCat(it.serviceType) || (!it.restaurantId && it.productId) || (it.restaurantId && String(it.restaurantId).startsWith('store_'))) {
+        storeItems.push(it);
+        if (!storeInfo) storeInfo = { name: 'Jinkzo Central Store', address: 'Jinkzo Central Store, Nandikotkur' };
+      } else {
+        restaurantItems.push(it);
+      }
+    });
+    if (restaurantItems.length > 0) {
+      restaurantInfo = {
+        name: order.restaurant?.name || 'Restaurant',
+        address: order.restaurant?.address || order.restaurantLocation?.formattedAddress || ''
+      };
+    }
+  }
+
+  if (Array.isArray(order.siblingOrders)) {
+    order.siblingOrders.forEach(sib => {
+      const sibItems = Array.isArray(sib.items) ? sib.items : [];
+      if (sib.orderType === 'store' || isStoreCat(sib.serviceType)) {
+        storeItems = storeItems.concat(sibItems);
+        if (!storeInfo) storeInfo = { name: 'Jinkzo Central Store', address: 'Jinkzo Central Store, Nandikotkur' };
+      } else if (sib.orderType === 'food') {
+        sibItems.forEach(it => {
+          if (isStoreCat(it.serviceType) || (!it.restaurantId && it.productId)) {
+            storeItems.push(it);
+          } else {
+            restaurantItems.push(it);
+          }
+        });
+        if (!restaurantInfo) {
+          restaurantInfo = {
+            name: sib.restaurant?.name || 'Restaurant',
+            address: sib.restaurant?.address || sib.restaurantLocation?.formattedAddress || ''
+          };
+        }
+      }
+    });
+  }
+
+  const allItems = [...restaurantItems, ...storeItems];
+  return { restaurantItems, storeItems, allItems, restaurantInfo, storeInfo };
+};
+
 export default function DeliveryDashboard() {
+
   const { user, token, logout } = useAuthStore();
   const navigate = useNavigate();
 
@@ -1076,6 +1136,78 @@ export default function DeliveryDashboard() {
                         </div>
                       </div>
                     )}
+
+                    {/* Order Items Breakdown: RESTAURANT ITEMS & JINKZO STORE ITEMS */}
+                    {selectedOrder.orderType !== 'ride' && (() => {
+                      const { restaurantItems, storeItems, allItems, restaurantInfo } = getUnifiedOrderItems(selectedOrder);
+                      if (allItems.length === 0) return null;
+                      const isMixed = restaurantItems.length > 0 && storeItems.length > 0;
+
+                      return (
+                        <div className="bg-surface rounded-2xl p-4 border border-line flex flex-col gap-3 shadow-2xs">
+                          <div className="flex items-center justify-between border-b border-line pb-2">
+                            <h5 className="font-display font-extrabold text-xs text-main uppercase tracking-wider flex items-center gap-1.5">
+                              <ShoppingBag className="w-4 h-4 text-primary" />
+                              <span>Total Order Items ({allItems.reduce((s, i) => s + (i.quantity || 1), 0)})</span>
+                            </h5>
+                            {isMixed && (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                                MIXED DELIVERY
+                              </span>
+                            )}
+                          </div>
+
+                          {restaurantItems.length > 0 && (
+                            <div className="flex flex-col gap-1.5 bg-amber-50/60 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-200/60 dark:border-amber-900/40">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1">
+                                  <span>🍽️</span> RESTAURANT ITEMS
+                                </span>
+                                <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                                  Collect from: {restaurantInfo?.name || selectedOrderRestaurantName || 'Restaurant'}
+                                </span>
+                              </div>
+                              <div className="flex flex-col divide-y divide-amber-200/40 dark:divide-amber-900/30 pt-1">
+                                {restaurantItems.map((it, idx) => (
+                                  <div key={idx} className="py-1 flex items-center justify-between text-xs">
+                                    <span className="text-main font-semibold">• {it.quantity}x {it.name}</span>
+                                    <span className="text-muted text-[11px] font-mono">₹{(it.price || 0) * (it.quantity || 1)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {storeItems.length > 0 && (
+                            <div className="flex flex-col gap-1.5 bg-emerald-50/60 dark:bg-emerald-950/20 p-3 rounded-xl border border-emerald-200/60 dark:border-emerald-900/40">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1">
+                                  <span>🏬</span> JINKZO STORE ITEMS
+                                </span>
+                                <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                                  Collect from: Jinkzo Central Store
+                                </span>
+                              </div>
+                              <div className="flex flex-col divide-y divide-emerald-200/40 dark:divide-emerald-900/30 pt-1">
+                                {storeItems.map((it, idx) => (
+                                  <div key={idx} className="py-1 flex items-center justify-between text-xs">
+                                    <span className="text-main font-semibold">• {it.quantity}x {it.name}</span>
+                                    <span className="text-muted text-[11px] font-mono">₹{(it.price || 0) * (it.quantity || 1)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {isMixed && (
+                            <p className="text-[10px] text-muted text-center font-medium italic">
+                              * Note: Collect both restaurant and Jinkzo Store items for this single customer delivery.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
+
 
                     {/* Action buttons */}
                     {(selectedOrder.status === 'Rider_Assigned' || (selectedOrder.orderType === 'food' && selectedOrder.riderStatus === 'Pending' && (selectedOrder.deliveryAgent?.id === user?._id || selectedOrder.deliveryAgent?.phone === user?.phone))) ? (

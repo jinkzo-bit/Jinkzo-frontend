@@ -4,7 +4,6 @@ import { useJsApiLoader, GoogleMap, Marker, Polyline, InfoWindow } from '@react-
 import { io } from 'socket.io-client';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
 import { API_BASE } from '../config/api';
-import MapRotationControls from './maps/MapRotationControls';
 
 // ── Default fallback coords (Nandikotkur, AP) ───────────────────────────────────
 const DEFAULT_CENTER = { lat: 15.8562, lng: 78.2700 };
@@ -23,6 +22,9 @@ const MAP_OPTIONS = {
   clickableIcons: false,
   gestureHandling: 'greedy',
   rotateControl: false,
+  cameraControl: false,
+  tiltInteractionEnabled: false,
+  headingInteractionEnabled: false,
   heading: 0,
   tilt: 0,
   isFractionalZoomEnabled: true,
@@ -214,6 +216,10 @@ export default function GoogleMapContainer({
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
+    try {
+      if (typeof map.setTilt === 'function') map.setTilt(0);
+      if (typeof map.setHeading === 'function') map.setHeading(0);
+    } catch (_) {}
     if (window.google) {
       trafficLayerRef.current = new window.google.maps.TrafficLayer();
     }
@@ -828,17 +834,6 @@ export default function GoogleMapContainer({
             </button>
           </div>
         )}
-
-        {/* ── Map Rotation, Compass & 3D Tilt Controls ── */}
-        <MapRotationControls
-          map={mapInstance}
-          mapRef={mapRef}
-          containerRef={containerRef}
-          position="bottom-right"
-          showStepButtons={false}
-          show3DTilt={true}
-          className={mode === 'tracking' ? '!bottom-[195px] !right-3' : '!bottom-16 !right-3'}
-        />
 
         {/* ── Top-Left: Live GPS Status Badge ── */}
         {mode === 'tracking' && (

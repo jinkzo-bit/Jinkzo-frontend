@@ -332,10 +332,29 @@ export default function OrderHistory() {
       ) : (
         <div className="flex flex-col gap-4">
           {historyFilter.filteredItems.map((order) => {
+            const isStoreOrder = order.orderType === 'store' || ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT', 'STORE'].includes(String(order.serviceType || '').toUpperCase());
             const catInfo = getOrderCategoryInfo(order);
             const isActiveOrder = !['Delivered', 'Completed', 'Rejected', 'Cancelled', 'Rider_Rejected'].includes(order.status);
             const orderDisplayId = order.displayId || `#ORD${order._id.slice(-6).toUpperCase()}`;
-            const storeOrRestName = order.restaurant?.name || (order.orderType === 'store' || ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'].includes(order.serviceType) ? `Jinkzo Store (${catInfo.label})` : null);
+            const totalItemsCount = (order.items || []).reduce((sum, i) => sum + (i.quantity || 1), 0);
+
+            const storeCategorySummary = (() => {
+              if (!isStoreOrder || !Array.isArray(order.items) || order.items.length === 0) return null;
+              const counts = {};
+              order.items.forEach(it => {
+                let s = String(it.serviceType || 'GROCERY').trim().toUpperCase();
+                if (['BAKERY', 'BAKERY & BEVERAGES', 'BEVERAGES', 'COOL_HOT', 'HOT_COOL'].includes(s)) s = 'Bakery';
+                else if (['VEG_FRUITS', 'FRUITS-VEGETABLES', 'FRUITS_VEGETABLES', 'VEGETABLES', 'FRUITS & VEGETABLES', 'VEG & FRUITS'].includes(s)) s = 'Veg & Fruits';
+                else if (['MEAT', 'NON-VEG', 'MEAT & SEAFOOD'].includes(s)) s = 'Meat';
+                else s = 'Grocery';
+
+                counts[s] = (counts[s] || 0) + (it.quantity || 1);
+              });
+
+              return Object.entries(counts).map(([cat, count]) => `${cat} • ${count} ${count === 1 ? 'item' : 'items'}`).join(' | ');
+            })();
+
+            const storeOrRestName = order.restaurant?.name || (isStoreOrder ? 'Jinkzo Central Store' : null);
 
             return (
               <div key={order._id} className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4 hover:shadow-md transition-shadow">
@@ -346,20 +365,30 @@ export default function OrderHistory() {
                       <span className="font-display font-black text-xs text-primary bg-primary-light/60 px-2 py-0.5 rounded-md">
                         {orderDisplayId}
                       </span>
-                      <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${catInfo.badgeClass}`}>
-                        {catInfo.label}
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                        isStoreOrder ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' : catInfo.badgeClass
+                      }`}>
+                        {isStoreOrder ? '🏬 Jinkzo Store' : catInfo.label}
                       </span>
                     </div>
 
                     <h4 className="font-display font-bold text-base text-main mt-0.5">
                       {order.orderType === 'ride' ? (
                         'Bike Ride Hailing'
+                      ) : isStoreOrder ? (
+                        `Jinkzo Store (${totalItemsCount} ${totalItemsCount === 1 ? 'item' : 'items'})`
                       ) : (
                         (order.items && order.items.length > 0)
                           ? (order.items.length === 1 ? order.items[0].name : `${order.items[0].name} +${order.items.length - 1} items`)
                           : 'Order'
                       )}
                     </h4>
+
+                    {storeCategorySummary && (
+                      <p className="text-[11px] font-bold text-primary dark:text-primary-light">
+                        {storeCategorySummary}
+                      </p>
+                    )}
 
                     <p className="text-[11px] text-muted font-medium flex flex-wrap items-center gap-1.5 mt-0.5">
                       <Calendar className="w-3.5 h-3.5" />
@@ -374,6 +403,7 @@ export default function OrderHistory() {
                       )}
                     </p>
                   </div>
+
 
                   <div className="text-right flex flex-col items-end gap-1 flex-shrink-0">
                     <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
