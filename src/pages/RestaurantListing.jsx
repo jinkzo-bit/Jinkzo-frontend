@@ -577,24 +577,47 @@ export default function RestaurantListing() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {dishes.map((dish) => {
                   const qty = getItemQuantity(dish._id);
+                  const isFav = favouriteItems.some((i) => String(i._id) === String(dish._id));
                   return (
-                    <div key={dish._id} className="bg-surface rounded-2xl p-4 border border-line flex items-center justify-between gap-3">
+                    <div key={dish._id} className="bg-surface rounded-2xl p-4 border border-line flex items-center justify-between gap-3 relative group">
                       <div className="flex items-center gap-3">
-                        <img src={getImageUrl(dish.image, 'product')} alt={dish.name} onError={(e) => handleImageError(e, 'product')} className="w-16 h-16 rounded-xl object-cover" />
+                        <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0">
+                          <img src={getImageUrl(dish.image, 'product')} alt={dish.name} onError={(e) => handleImageError(e, 'product')} className="w-full h-full object-cover" />
+                        </div>
                         <div>
                           <h4 className="font-bold text-xs">{dish.name}</h4>
                           <span className="font-black text-sm">₹{dish.price}</span>
                         </div>
                       </div>
-                      {qty > 0 ? (
-                        <div className="flex items-center gap-2 bg-primary/10 rounded-xl px-2 py-1">
-                          <button onClick={() => removeItem(dish._id)}><Minus className="w-3.5 h-3.5 text-primary" /></button>
-                          <span className="font-bold text-xs">{qty}</span>
-                          <button onClick={() => handleAddToCart(dish)}><Plus className="w-3.5 h-3.5 text-primary" /></button>
-                        </div>
-                      ) : (
-                        <button onClick={() => handleAddToCart(dish)} className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-xl">ADD</button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toggleItem({
+                              ...dish,
+                              serviceType: 'FOOD',
+                              restaurant: dish.restaurant || { name: 'Jinkzo Restaurant', _id: 'rest_default' }
+                            });
+                          }}
+                          className="p-1.5 rounded-full bg-base hover:bg-surface border border-line transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                          title={isFav ? t('favourites.removeFromFavourites', 'Remove from Favourites') : t('favourites.addToFavourites', 'Add to Favourites')}
+                        >
+                          <Heart className={`w-3.5 h-3.5 transition-colors ${
+                            isFav ? 'text-red-500 fill-red-500' : 'text-gray-400 hover:text-red-500'
+                          }`} />
+                        </button>
+                        {qty > 0 ? (
+                          <div className="flex items-center gap-2 bg-primary/10 rounded-xl px-2 py-1">
+                            <button onClick={() => removeItem(dish._id)}><Minus className="w-3.5 h-3.5 text-primary" /></button>
+                            <span className="font-bold text-xs">{qty}</span>
+                            <button onClick={() => handleAddToCart(dish)}><Plus className="w-3.5 h-3.5 text-primary" /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => handleAddToCart(dish)} className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer">ADD</button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -612,6 +635,7 @@ export default function RestaurantListing() {
               {products.map((item) => {
                 const qty = getItemQuantity(item._id);
                 const isOutOfStock = item.stock <= 0;
+                const isFav = favouriteItems.some((i) => String(i._id) === String(item._id));
                 return (
                   <div
                     key={item._id}
@@ -631,6 +655,31 @@ export default function RestaurantListing() {
                           Bestseller
                         </span>
                       )}
+
+                      {/* Favourite Heart Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleItem({
+                            ...item,
+                            serviceType: storeServiceEnum || item.serviceType || 'GROCERY',
+                            restaurant: {
+                              name: `Jinkzo Store (${storeServiceEnum || item.serviceType || 'STORE'})`,
+                              _id: `store_${(storeServiceEnum || item.serviceType || 'store').toLowerCase()}`
+                            }
+                          });
+                        }}
+                        className="absolute top-2 right-2 p-1.5 rounded-full bg-white/90 dark:bg-[#141926]/90 shadow-sm border border-gray-100 dark:border-white/10 hover:scale-110 active:scale-95 transition-all cursor-pointer z-10"
+                        title={isFav ? t('favourites.removeFromFavourites', 'Remove from Favourites') : t('favourites.addToFavourites', 'Add to Favourites')}
+                      >
+                        <Heart className={`w-3.5 h-3.5 transition-colors ${
+                          isFav
+                            ? 'text-red-500 fill-red-500'
+                            : 'text-gray-400 hover:text-red-500'
+                        }`} />
+                      </button>
                       {isOutOfStock && (
                         <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-2xs flex items-center justify-center">
                           <span className="text-white text-[10px] font-black uppercase tracking-wider bg-rose-600 px-2.5 py-1 rounded-full shadow-md">

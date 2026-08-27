@@ -201,11 +201,33 @@ export default function useHistoryFilter(items = [], config = {}) {
         }
       }
 
-      // ── 2. Type Filtering (e.g. food vs ride) ───────────────────────────
+      // ── 2. Category / Type Filtering ─────────────────────────────────────
       if (typeFilter && typeFilter !== 'all') {
-        const itemType = item[typeKey] || 'food';
-        if (typeFilter === 'food' && itemType === 'ride') return false;
-        if (typeFilter === 'ride' && itemType !== 'ride') return false;
+        const itemType = (item[typeKey] || '').toLowerCase(); // 'food' | 'ride' | 'store'
+        const rawService = item.serviceType || (item.items && item.items[0]?.serviceType);
+        const sType = (
+          rawService ||
+          (itemType === 'ride' ? 'RIDE' : (itemType === 'food' ? 'FOOD' : 'GROCERY'))
+        ).toLowerCase();
+
+        const filterLower = typeFilter.toLowerCase();
+        if (filterLower === 'ride') {
+          if (itemType !== 'ride' && sType !== 'ride' && sType !== 'courier') return false;
+        } else if (filterLower === 'food') {
+          if (itemType === 'ride') return false;
+          if (itemType === 'store' && sType !== 'food') return false;
+          if (sType !== 'food' && ['grocery', 'bakery', 'veg_fruits', 'meat'].includes(sType)) return false;
+        } else if (filterLower === 'grocery') {
+          if (sType !== 'grocery') return false;
+        } else if (filterLower === 'bakery' || filterLower === 'beverages' || filterLower === 'cool_hot') {
+          if (sType !== 'bakery' && sType !== 'cool_hot' && sType !== 'beverages') return false;
+        } else if (filterLower === 'veg_fruits' || filterLower === 'fruits-vegetables') {
+          if (sType !== 'veg_fruits' && sType !== 'fruits-vegetables') return false;
+        } else if (filterLower === 'meat') {
+          if (sType !== 'meat') return false;
+        } else {
+          if (sType !== filterLower && itemType !== filterLower) return false;
+        }
       }
 
       // ── 3. Status Filtering ──────────────────────────────────────────────

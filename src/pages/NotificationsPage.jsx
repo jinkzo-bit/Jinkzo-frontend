@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Trash2
 } from 'lucide-react';
+import { API_BASE } from '../config/api';
 import { useAuthStore } from '../store/authStore';
 
 const SERVICE_ICONS = {
@@ -45,6 +46,10 @@ const NotificationsPage = () => {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ totalPages: 1, totalCount: 0 });
 
+  const getAuthToken = () => {
+    return useAuthStore.getState().token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token');
+  };
+
   useEffect(() => {
     fetchNotifications();
   }, [activeTab, filterRead, page]);
@@ -52,13 +57,13 @@ const NotificationsPage = () => {
   const fetchNotifications = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         navigate('/login');
         return;
       }
 
-      let url = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/notifications?page=${page}&limit=25`;
+      let url = `${API_BASE}/notifications?page=${page}&limit=25`;
       if (activeTab !== 'ALL') {
         url += `&serviceType=${activeTab}`;
       }
@@ -85,8 +90,9 @@ const NotificationsPage = () => {
   const markAsRead = async (id, e) => {
     if (e) e.stopPropagation();
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/notifications/${id}/read`, {
+      const token = getAuthToken();
+      if (!token) return;
+      await fetch(`${API_BASE}/notifications/${id}/read`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -99,8 +105,9 @@ const NotificationsPage = () => {
 
   const markAllAsRead = async () => {
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/notifications/read-all`, {
+      const token = getAuthToken();
+      if (!token) return;
+      await fetch(`${API_BASE}/notifications/read-all`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` }
       });

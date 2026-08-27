@@ -75,15 +75,36 @@ export const useFavoriteStore = create(
         if (exists) {
           updatedItems = currentItems.filter((i) => String(i._id || i.id) !== targetId);
         } else {
+          let sType = (item.serviceType || '').toUpperCase();
+          if (!sType) {
+            const cat = String(item.category || '').toUpperCase();
+            if (['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'].includes(cat)) {
+              sType = cat;
+            } else {
+              sType = 'FOOD';
+            }
+          }
+
           const itemData = {
             _id: targetId,
             name: item.name || 'Delicious Item',
+            nameTelugu: item.nameTelugu || '',
             image: item.image || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&h=200&q=80',
             price: Number(item.price) || 0,
+            mrp: Number(item.mrp) || Number(item.price) || 0,
             isVeg: !!item.isVeg,
             category: item.category || 'Special',
+            serviceType: sType,
+            unit: item.unit || '',
+            weight: item.weight || '',
+            packSize: item.packSize || '',
             description: item.description || '',
-            restaurant: item.restaurant || { name: 'Jinkzo Store', _id: 'rest_default' }
+            stock: item.stock != null ? item.stock : 99,
+            isBestSeller: !!item.isBestSeller,
+            restaurant: item.restaurant || {
+              name: sType !== 'FOOD' ? `Jinkzo Store (${sType})` : 'Jinkzo Store',
+              _id: sType !== 'FOOD' ? `store_${sType.toLowerCase()}` : 'rest_default'
+            }
           };
           updatedItems = [...currentItems, itemData];
         }

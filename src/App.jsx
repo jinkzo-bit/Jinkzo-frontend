@@ -105,6 +105,11 @@ export default function App() {
                   <OrderHistory />
                 </ProtectedRoute>
               } />
+              <Route path="/order-history" element={
+                <ProtectedRoute>
+                  <OrderHistory />
+                </ProtectedRoute>
+              } />
               <Route path="/notifications" element={
                 <ProtectedRoute>
                   <NotificationsPage />

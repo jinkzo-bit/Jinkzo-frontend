@@ -3,6 +3,8 @@ import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, ExternalLink, Filter, UtensilsCrossed, ShoppingBag, Bike, Tag, CreditCard, ShieldAlert, Sparkles, Check } from 'lucide-react';
+import { API_BASE } from '../config/api';
+import { useAuthStore } from '../store/authStore';
 
 const SERVICE_ICONS = {
   FOOD: { icon: UtensilsCrossed, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border-amber-200' },
@@ -28,11 +30,19 @@ const NotificationCenter = ({ userId, role, restaurantId }) => {
   const dropdownRef = useRef(null);
   const audioRef = useRef(null);
 
+  const getAuthToken = () => {
+    return useAuthStore.getState().token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token');
+  };
+
   useEffect(() => {
     fetchNotifications();
 
-    const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-    const socket = io(socketUrl, { withCredentials: true });
+    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
+    const socket = io(socketHost, {
+      auth: { token: getAuthToken() },
+      withCredentials: true,
+      transports: ['websocket', 'polling']
+    });
 
     socket.on('connect', () => {
       if (userId) socket.emit('join', `user_${userId}`);
@@ -70,9 +80,9 @@ const NotificationCenter = ({ userId, role, restaurantId }) => {
 
   const fetchNotifications = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) return;
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/notifications?limit=30`, {
+      const res = await fetch(`${API_BASE}/notifications?limit=30`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -94,8 +104,9 @@ const NotificationCenter = ({ userId, role, restaurantId }) => {
   const markAsRead = async (id, e) => {
     if (e) e.stopPropagation();
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/notifications/${id}/read`, {
+      const token = getAuthToken();
+      if (!token) return;
+      await fetch(`${API_BASE}/notifications/${id}/read`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -108,8 +119,9 @@ const NotificationCenter = ({ userId, role, restaurantId }) => {
 
   const markAllAsRead = async () => {
     try {
-      const token = localStorage.getItem('token');
-      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/notifications/read-all`, {
+      const token = getAuthToken();
+      if (!token) return;
+      await fetch(`${API_BASE}/notifications/read-all`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -151,7 +163,10 @@ const NotificationCenter = ({ userId, role, restaurantId }) => {
   const filteredNotifications = notifications.filter(n => {
     if (activeTab === 'ALL') return true;
     if (activeTab === 'FOOD') return n.serviceType === 'FOOD';
-    if (activeTab === 'STORE') return ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'].includes(n.serviceType);
+    if (activeTab === 'GROCERY') return n.serviceType === 'GROCERY';
+    if (activeTab === 'BAKERY') return n.serviceType === 'BAKERY';
+    if (activeTab === 'VEG_FRUITS') return n.serviceType === 'VEG_FRUITS';
+    if (activeTab === 'MEAT') return n.serviceType === 'MEAT';
     if (activeTab === 'RIDE') return ['RIDE', 'COURIER'].includes(n.serviceType);
     if (activeTab === 'OFFERS') return n.serviceType === 'OFFER';
     if (activeTab === 'OTHERS') return !['FOOD', 'GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT', 'RIDE', 'COURIER', 'OFFER'].includes(n.serviceType);
@@ -189,7 +204,10 @@ const NotificationCenter = ({ userId, role, restaurantId }) => {
   const tabs = [
     { id: 'ALL', label: 'All' },
     { id: 'FOOD', label: 'Food' },
-    { id: 'STORE', label: 'Store' },
+    { id: 'GROCERY', label: 'Grocery' },
+    { id: 'BAKERY', label: 'Bakery' },
+    { id: 'VEG_FRUITS', label: 'Veg & Fruits' },
+    { id: 'MEAT', label: 'Meat' },
     { id: 'RIDE', label: 'Ride' },
     { id: 'OFFERS', label: 'Offers' }
   ];

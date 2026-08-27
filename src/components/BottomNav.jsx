@@ -55,6 +55,13 @@ export default function BottomNav() {
     location.pathname.startsWith('/my-deliveries') ||
     location.pathname.startsWith('/delivery-partner');
 
+  // Hide customer bottom navigation on Store Operations and Admin dashboards
+  const isOperationsOrAdmin =
+    location.pathname.startsWith('/store-operations') ||
+    location.pathname.startsWith('/store-dashboard') ||
+    location.pathname.startsWith('/admin-dashboard') ||
+    location.pathname.startsWith('/admin');
+
   // Active check for customer routes
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/';
@@ -89,6 +96,12 @@ export default function BottomNav() {
   };
 
   // ══════════════════════════════════════════════════════════════════════════
+  // IMPORTANT: Keep all React hooks above this conditional return.
+  // This prevents "Rendered fewer hooks than expected" errors.
+  if (isOperationsOrAdmin) {
+    return null;
+  }
+
   //  RESTAURANT PARTNER NAVIGATION (ONLY SHOWN INSIDE RESTAURANT PARTNER PAGE)
   // ══════════════════════════════════════════════════════════════════════════
   if (isRestaurantPartner) {

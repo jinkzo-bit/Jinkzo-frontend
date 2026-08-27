@@ -22,6 +22,7 @@ import {
   Trash2,
   Pencil,
   ChevronRight,
+  ChevronDown,
   Filter,
   ArrowUpDown,
   Upload,
@@ -63,6 +64,10 @@ export default function StoreOperationsDashboard() {
   // Sound Alert Preference
   const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Operations dropdown state
+  const [isOperationsDropdownOpen, setIsOperationsDropdownOpen] = useState(false);
+  const operationsMenuRef = useRef(null);
+
   // Entities State
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
@@ -90,6 +95,17 @@ export default function StoreOperationsDashboard() {
     setToastMsg({ text, type });
     setTimeout(() => setToastMsg({ text: '', type: 'success' }), 3500);
   };
+
+  // Close operations dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (operationsMenuRef.current && !operationsMenuRef.current.contains(e.target)) {
+        setIsOperationsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Socket setup for live alerts
   useEffect(() => {
@@ -138,7 +154,7 @@ export default function StoreOperationsDashboard() {
   useEffect(() => {
     if (activeTab === 'dashboard') fetchAnalytics();
     else if (activeTab === 'orders') fetchOrders();
-    else if (activeTab === 'products') fetchProducts();
+    else if (activeTab === 'products') { fetchProducts(); fetchCategories(); }
     else if (activeTab === 'categories') fetchCategories();
     else if (activeTab === 'inventory') fetchInventory();
     else if (activeTab === 'advertisements') fetchAdvertisements();
@@ -371,7 +387,7 @@ export default function StoreOperationsDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0B0E17] text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-300">
-      
+
       {/* Toast Notification */}
       {toastMsg.text && (
         <div className={`fixed top-5 right-5 z-50 px-5 py-3 rounded-2xl shadow-xl border text-sm font-semibold flex items-center gap-2.5 animate-bounce-in ${
@@ -407,10 +423,11 @@ export default function StoreOperationsDashboard() {
         </div>
 
         {/* Right Header Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <NotificationCenter userId={user?._id} role="store_operator" />
 
           <button
+            type="button"
             onClick={() => setSoundEnabled(!soundEnabled)}
             className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors text-slate-600 dark:text-slate-300 cursor-pointer"
             title={soundEnabled ? 'Mute Alert Sounds' : 'Unmute Alert Sounds'}
@@ -419,11 +436,13 @@ export default function StoreOperationsDashboard() {
           </button>
 
           <button
+            type="button"
             onClick={() => {
               if (activeTab === 'dashboard') fetchAnalytics();
               else if (activeTab === 'orders') fetchOrders();
               else if (activeTab === 'products') fetchProducts();
               else if (activeTab === 'inventory') fetchInventory();
+              else if (activeTab === 'advertisements') fetchAdvertisements();
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/60 text-xs font-bold transition-colors cursor-pointer"
           >
@@ -431,8 +450,76 @@ export default function StoreOperationsDashboard() {
             <span className="hidden sm:inline">Refresh</span>
           </button>
 
+          {/* Operations Dropdown Menu (Secondary Tools) */}
+          <div className="relative" ref={operationsMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsOperationsDropdownOpen(!isOperationsDropdownOpen)}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                ['categories', 'inventory', 'advertisements', 'reports', 'settings'].includes(activeTab)
+                  ? 'bg-amber-500 text-white border-amber-600 shadow-sm shadow-amber-500/25'
+                  : 'bg-white dark:bg-[#141926] border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Operations</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${isOperationsDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isOperationsDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#141926] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-2 z-50 flex flex-col gap-1 animate-scale-up">
+                <div className="px-2.5 py-1.5 border-b border-slate-100 dark:border-slate-800/80">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Operations Hub</span>
+                </div>
+                {[
+                  { id: 'categories', label: 'Categories', icon: Layers, desc: 'Manage store categories' },
+                  { id: 'inventory', label: 'Inventory', icon: Boxes, desc: 'Stock alerts & inventory', badge: analytics?.inventoryAlerts?.lowStockCount || 0 },
+                  { id: 'advertisements', label: 'Promotional Banners', icon: Megaphone, desc: 'Category-specific promo banners' },
+                  { id: 'reports', label: 'Reports & Sales', icon: BarChart3, desc: 'Analytics & performance' },
+                  { id: 'settings', label: 'Store Settings', icon: SettingsIcon, desc: 'Operations configuration' }
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        setIsOperationsDropdownOpen(false);
+                      }}
+                      className={`flex items-center justify-between p-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer ${
+                        isActive
+                          ? 'bg-amber-500 text-white shadow-xs'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`p-1.5 rounded-lg ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                          <Icon className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="truncate">{item.label}</span>
+                          <span className={`text-[9px] font-normal truncate ${isActive ? 'text-white/80' : 'text-slate-400'}`}>{item.desc}</span>
+                        </div>
+                      </div>
+                      {item.badge > 0 && (
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                          isActive ? 'bg-white text-amber-600' : 'bg-rose-500 text-white'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {user?.role === 'admin' && (
             <button
+              type="button"
               onClick={() => navigate('/admin-dashboard')}
               className="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
             >
@@ -445,24 +532,20 @@ export default function StoreOperationsDashboard() {
       {/* Main Layout Container */}
       <div className="flex-1 flex flex-col md:flex-row max-w-7xl w-full mx-auto p-3 sm:p-6 gap-6">
 
-        {/* Sidebar Navigation */}
+        {/* Sidebar Navigation: ONLY 4 PRIMARY ITEMS */}
         <aside className="w-full md:w-64 flex-shrink-0 flex flex-row md:flex-col gap-1.5 bg-white dark:bg-[#141926] p-2.5 sm:p-3 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-x-auto no-scrollbar shadow-xs h-fit">
           {[
             { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
             { id: 'orders', label: 'Orders', icon: ShoppingBag, badge: analytics?.statusCounts?.new || 0 },
             { id: 'products', label: 'Products', icon: Package },
-            { id: 'categories', label: 'Categories', icon: Layers },
-            { id: 'inventory', label: 'Inventory', icon: Boxes, badge: analytics?.inventoryAlerts?.lowStockCount || 0 },
-            { id: 'advertisements', label: 'Advertisements', icon: Megaphone },
-            { id: 'dispatch', label: 'Rider Dispatch', icon: Bike, badge: analytics?.statusCounts?.readyForPickup || 0 },
-            { id: 'reports', label: 'Reports', icon: BarChart3 },
-            { id: 'settings', label: 'Settings', icon: SettingsIcon }
+            { id: 'dispatch', label: 'Rider Dispatch', icon: Bike, badge: analytics?.statusCounts?.readyForPickup || 0 }
           ].map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => setActiveTab(item.id)}
                 className={`flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex-shrink-0 md:flex-shrink ${
                   isActive
@@ -604,7 +687,7 @@ export default function StoreOperationsDashboard() {
              ══════════════════════════════════════════════ */}
           {activeTab === 'orders' && (
             <div className="flex flex-col gap-4 animate-fade-in">
-              
+
               {/* Service Filter Tabs */}
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
                 {['ALL', 'GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'].map((srv) => (
@@ -1062,75 +1145,178 @@ export default function StoreOperationsDashboard() {
           )}
 
           {/* ══════════════════════════════════════════════
-              TAB 6: ADVERTISEMENTS MANAGEMENT
+              TAB 6: ADVERTISEMENTS (STORE PROMOTIONAL BANNERS)
              ══════════════════════════════════════════════ */}
           {activeTab === 'advertisements' && (
             <div className="flex flex-col gap-4 animate-fade-in">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-display font-black text-sm uppercase">Store Offer & Ad Banners</h3>
-                  <p className="text-xs text-slate-400">Manage carousel banners shown to customers in Grocery, Bakery, Veg, and Meat sections.</p>
+                  <h3 className="font-display font-black text-base uppercase text-slate-900 dark:text-white flex items-center gap-2">
+                    <Megaphone className="w-5 h-5 text-amber-500" />
+                    Store Promotional Banners
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Manage category-specific carousel banners for Grocery, Meat, Bakery, and Veg & Fruits.
+                  </p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     setEditingAd(null);
                     setShowAdModal(true);
                   }}
-                  className="bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-xs cursor-pointer"
+                  className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-md shadow-amber-500/20 flex items-center gap-2 cursor-pointer self-start sm:self-auto"
                 >
-                  + Create Advertisement
+                  <Plus className="w-4 h-4 stroke-[3]" />
+                  <span>+ Add New Banner</span>
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {advertisements.map((ad) => (
-                  <div
-                    key={ad._id}
-                    className="bg-white dark:bg-[#141926] border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs flex flex-col justify-between"
+              {/* Category Filter for Banners */}
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                {['ALL', 'GROCERY', 'MEAT', 'BAKERY', 'VEG_FRUITS'].map((srv) => (
+                  <button
+                    key={srv}
+                    type="button"
+                    onClick={() => setSelectedService(srv)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex-shrink-0 ${
+                      selectedService === srv
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : 'bg-white dark:bg-[#141926] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                    }`}
                   >
-                    <div className="h-36 w-full overflow-hidden bg-slate-100 dark:bg-slate-800 relative">
-                      <img
-                        src={getImageUrl(ad.imageUrl, 'banner')}
-                        alt={ad.title}
-                        onError={(e) => handleImageError(e, 'banner')}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute top-2 right-2 flex gap-1">
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                          (ad.isActive ?? ad.active ?? true) ? 'bg-emerald-500 text-white' : 'bg-slate-600 text-white'
-                        }`}>
-                          {(ad.isActive ?? ad.active ?? true) ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="p-4 flex flex-col gap-2">
-                      <h4 className="font-bold text-xs">{ad.title}</h4>
-                      <div className="flex flex-wrap gap-1 text-[10px]">
-                        {(ad.displayIn || ['food']).map((d, i) => (
-                          <span key={i} className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md font-bold uppercase">
-                            {d}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
-                        <span>Target: {ad.targetType || 'None'} {ad.targetName ? `(${ad.targetName})` : ''}</span>
-                        <button
-                          onClick={async () => {
-                            await fetch(`${API_BASE}/store/advertisements/${ad._id}/toggle`, {
-                              method: 'PUT',
-                              headers: { Authorization: `Bearer ${token}` }
-                            });
-                            fetchAdvertisements();
-                          }}
-                          className="text-xs font-bold text-amber-600 hover:underline cursor-pointer"
-                        >
-                          {(ad.isActive ?? ad.active ?? true) ? 'Deactivate' : 'Activate'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                    {srv === 'ALL' ? 'All Banners' : srv === 'VEG_FRUITS' ? 'Veg & Fruits' : srv.charAt(0) + srv.slice(1).toLowerCase()}
+                  </button>
                 ))}
               </div>
+
+              {/* Banners Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {advertisements
+                  .filter((ad) => {
+                    if (selectedService === 'ALL') return true;
+                    const displays = (ad.displayIn || []).map(d => String(d).toUpperCase());
+                    if (selectedService === 'BAKERY') return displays.includes('BAKERY') || displays.includes('COOL_HOT') || displays.includes('BEVERAGES');
+                    if (selectedService === 'VEG_FRUITS') return displays.includes('VEG_FRUITS') || displays.includes('FRUITS-VEGETABLES') || displays.includes('FRUITS_VEGETABLES');
+                    return displays.includes(selectedService);
+                  })
+                  .map((ad) => {
+                    const isAct = ad.isActive ?? ad.active ?? true;
+                    const targetCat = (ad.displayIn?.[0] || 'grocery').toUpperCase();
+                    return (
+                      <div
+                        key={ad._id}
+                        className="bg-white dark:bg-[#141926] border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs flex flex-col justify-between group hover:shadow-md transition-shadow"
+                      >
+                        <div className="h-40 w-full overflow-hidden bg-slate-100 dark:bg-slate-800 relative">
+                          <img
+                            src={getImageUrl(ad.imageUrl || ad.image, 'banner')}
+                            alt={ad.title}
+                            onError={(e) => handleImageError(e, 'banner')}
+                            className="w-full h-full object-cover group-hover:scale-102 transition-transform"
+                          />
+                          {/* Target Section Badge */}
+                          <div className="absolute top-3 left-3 flex gap-1.5">
+                            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-lg bg-black/70 backdrop-blur-xs text-white border border-white/20">
+                              {targetCat === 'VEG_FRUITS' ? 'Veg & Fruits' : targetCat}
+                            </span>
+                          </div>
+                          {/* Active / Inactive Status */}
+                          <div className="absolute top-3 right-3 flex gap-1">
+                            <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                              isAct ? 'bg-emerald-500 text-white shadow-xs' : 'bg-slate-700 text-slate-200'
+                            }`}>
+                              {isAct ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="p-4 flex flex-col gap-3">
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-900 dark:text-white line-clamp-1">{ad.title}</h4>
+                            {(ad.subtitle || ad.description) && (
+                              <p className="text-xs text-slate-400 line-clamp-2 mt-0.5">
+                                {ad.subtitle || ad.description}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Action Buttons: Edit, Toggle, Delete */}
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingAd(ad);
+                                  setShowAdModal(true);
+                                }}
+                                className="flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                                <span>Edit</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await fetch(`${API_BASE}/store/advertisements/${ad._id}/toggle`, {
+                                      method: 'PUT',
+                                      headers: { Authorization: `Bearer ${token}` }
+                                    });
+                                    showToast(isAct ? 'Banner deactivated' : 'Banner activated');
+                                    fetchAdvertisements();
+                                  } catch (e) {
+                                    showToast('Failed to toggle banner', 'error');
+                                  }
+                                }}
+                                className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${
+                                  isAct
+                                    ? 'border-amber-200 text-amber-600 hover:bg-amber-50 dark:border-amber-800/40 dark:hover:bg-amber-950/30'
+                                    : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-800/40 dark:hover:bg-emerald-950/30'
+                                }`}
+                              >
+                                {isAct ? 'Deactivate' : 'Activate'}
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (window.confirm(`Are you sure you want to delete promotional banner "${ad.title}"?`)) {
+                                  try {
+                                    const res = await fetch(`${API_BASE}/store/advertisements/${ad._id}`, {
+                                      method: 'DELETE',
+                                      headers: { Authorization: `Bearer ${token}` }
+                                    });
+                                    if (res.ok) {
+                                      showToast('Promotional banner deleted');
+                                      fetchAdvertisements();
+                                    }
+                                  } catch (e) {
+                                    showToast('Delete failed', 'error');
+                                  }
+                                }
+                              }}
+                              className="p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-500 transition-colors cursor-pointer"
+                              title="Delete Banner"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {advertisements.length === 0 && (
+                <div className="bg-white dark:bg-[#141926] border border-slate-200 dark:border-slate-800 p-10 rounded-3xl text-center flex flex-col items-center justify-center gap-2 text-slate-400">
+                  <Megaphone className="w-8 h-8 opacity-40 mb-1" />
+                  <h4 className="font-bold text-slate-700 dark:text-slate-300">No Promotional Banners Yet</h4>
+                  <p className="text-xs">Create category-specific banners for Grocery, Meat, Bakery, or Veg & Fruits.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -1140,7 +1326,7 @@ export default function StoreOperationsDashboard() {
           {activeTab === 'dispatch' && (
             <div className="flex flex-col gap-4 animate-fade-in">
               <h3 className="font-display font-black text-sm uppercase">Active Orders Awaiting Pickup Dispatch</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {orders.filter(o => o.status === 'Ready_for_Pickup').map((order) => (
                   <div
@@ -1252,11 +1438,35 @@ export default function StoreOperationsDashboard() {
           product={editingProduct}
           categories={categories}
           token={token}
-          onClose={() => setShowProductModal(false)}
+          onClose={() => {
+            setShowProductModal(false);
+            setEditingProduct(null);
+          }}
           onSuccess={() => {
             setShowProductModal(false);
+            setEditingProduct(null);
             fetchProducts();
             showToast(editingProduct ? 'Product updated' : 'Product created');
+          }}
+        />
+      )}
+
+      {/* ══════════════════════════════════════════════
+          MODAL: ADD / EDIT STORE PROMOTIONAL BANNER
+         ══════════════════════════════════════════════ */}
+      {showAdModal && (
+        <StoreBannerModal
+          banner={editingAd}
+          token={token}
+          onClose={() => {
+            setShowAdModal(false);
+            setEditingAd(null);
+          }}
+          onSuccess={() => {
+            setShowAdModal(false);
+            setEditingAd(null);
+            fetchAdvertisements();
+            showToast(editingAd ? 'Promotional banner updated' : 'Promotional banner created');
           }}
         />
       )}
@@ -1364,11 +1574,264 @@ export default function StoreOperationsDashboard() {
 }
 
 // ══════════════════════════════════════════════
+//  STORE PROMOTIONAL BANNER MODAL
+// ══════════════════════════════════════════════
+function StoreBannerModal({ banner, token, onClose, onSuccess }) {
+  const [targetSection, setTargetSection] = useState(
+    banner?.displayIn?.[0] ? banner.displayIn[0].toUpperCase() : 'GROCERY'
+  );
+  const [title, setTitle] = useState(banner?.title || '');
+  const [subtitle, setSubtitle] = useState(banner?.subtitle || banner?.description || '');
+  const [imageUrl, setImageUrl] = useState(banner?.imageUrl || banner?.image || '');
+  const [buttonText, setButtonText] = useState(banner?.buttonText || 'Order Now');
+  const [isActive, setIsActive] = useState(banner ? (banner.isActive ?? banner.active ?? true) : true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsUploading(true);
+    setErrorMsg('');
+    try {
+      const url = await uploadFileToBackend(file);
+      setImageUrl(url);
+    } catch (err) {
+      setErrorMsg(err.message || 'Banner image upload failed');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    if (!title.trim()) return setErrorMsg('Banner Title is required.');
+    if (!imageUrl.trim()) return setErrorMsg('Banner Image is required.');
+
+    setIsSaving(true);
+    try {
+      const payload = {
+        title: title.trim(),
+        subtitle: subtitle.trim(),
+        description: subtitle.trim(),
+        imageUrl: imageUrl.trim(),
+        buttonText: buttonText.trim() || 'Order Now',
+        displayIn: [targetSection.toLowerCase()],
+        isActive,
+        active: isActive,
+        link: `/restaurants?category=${targetSection.toLowerCase()}`
+      };
+
+      const url = banner?._id
+        ? `${API_BASE}/store/advertisements/${banner._id}`
+        : `${API_BASE}/store/advertisements`;
+
+      const method = banner?._id ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to save promotional banner');
+      onSuccess();
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-white dark:bg-[#141926] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full flex flex-col gap-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-scale-up">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 className="font-display font-black text-base text-slate-900 dark:text-white">
+            {banner ? 'Edit Store Promotional Banner' : '+ Add New Store Promotional Banner'}
+          </h3>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {errorMsg && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3 rounded-xl font-bold">
+            {errorMsg}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-xs">
+          {/* Target Store Section */}
+          <div>
+            <label className="font-black text-slate-700 dark:text-slate-300 block mb-1.5">
+              TARGET STORE SECTION *
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { id: 'GROCERY', label: 'Grocery', icon: '🛒' },
+                { id: 'MEAT', label: 'Meat', icon: '🍗' },
+                { id: 'BAKERY', label: 'Bakery', icon: '🥐' },
+                { id: 'VEG_FRUITS', label: 'Veg & Fruits', icon: '🥦' }
+              ].map((s) => (
+                <button
+                  type="button"
+                  key={s.id}
+                  onClick={() => setTargetSection(s.id)}
+                  className={`p-2.5 rounded-xl font-black text-xs border text-center transition-all cursor-pointer ${
+                    targetSection === s.id
+                      ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <span className="block text-base mb-0.5">{s.icon}</span>
+                  <span>{s.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Banner Title */}
+          <div>
+            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+              Banner Title *
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Fresh Groceries At Your Doorstep"
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-bold text-slate-900 dark:text-white"
+              required
+            />
+          </div>
+
+          {/* Banner Subtitle / Description */}
+          <div>
+            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+              Banner Subtitle / Description
+            </label>
+            <input
+              type="text"
+              value={subtitle}
+              onChange={(e) => setSubtitle(e.target.value)}
+              placeholder="e.g. Get daily essentials, farm veggies & fresh cuts in minutes"
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-medium text-slate-900 dark:text-white"
+            />
+          </div>
+
+          {/* Optional CTA Text */}
+          <div>
+            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+              CTA Button Text (Optional)
+            </label>
+            <input
+              type="text"
+              value={buttonText}
+              onChange={(e) => setButtonText(e.target.value)}
+              placeholder="e.g. Order Now, Shop Now"
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-medium text-slate-900 dark:text-white"
+            />
+          </div>
+
+          {/* Banner Image Upload / URL + Live Preview */}
+          <div>
+            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+              Banner Image *
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="Paste Image URL or upload a banner file"
+                className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-medium text-slate-900 dark:text-white"
+                required
+              />
+              <label className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer hover:opacity-90 transition-opacity">
+                <Upload className="w-4 h-4" />
+                <span>{isUploading ? 'Uploading...' : 'Upload'}</span>
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+              </label>
+            </div>
+
+            {/* Live Image Preview */}
+            {imageUrl && (
+              <div className="mt-2.5 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 h-28 w-full relative">
+                <img
+                  src={getImageUrl(imageUrl, 'banner')}
+                  alt="Banner Preview"
+                  onError={(e) => handleImageError(e, 'banner')}
+                  className="w-full h-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => setImageUrl('')}
+                  className="absolute top-2 right-2 bg-black/60 hover:bg-black text-white p-1 rounded-full text-[10px]"
+                  title="Remove Image"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Active / Inactive Toggle */}
+          <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+            <div>
+              <span className="font-bold text-slate-800 dark:text-white block">Banner Status</span>
+              <span className="text-[10px] text-slate-400">
+                {isActive ? 'Active (Visible to customers)' : 'Inactive (Hidden from customers)'}
+              </span>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isActive}
+                onChange={(e) => setIsActive(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
+          {/* Modal Footer Actions */}
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl text-slate-500 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving || isUploading}
+              className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? 'Saving Banner...' : (banner ? 'Save Changes' : '+ Add Banner')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
 //  ADD / EDIT PRODUCT FORM MODAL
 // ══════════════════════════════════════════════
 function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
   const [serviceType, setServiceType] = useState(product?.serviceType || 'GROCERY');
   const [category, setCategory] = useState(product?.category || '');
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [name, setName] = useState(product?.name || '');
   const [nameTelugu, setNameTelugu] = useState(product?.nameTelugu || '');
   const [price, setPrice] = useState(product?.price || '');
@@ -1396,8 +1859,8 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
   const [netQuantity, setNetQuantity] = useState(product?.details?.netQuantity || '');
 
   // Filter categories matching selected service
-  const filteredCategories = categories.filter(c => 
-    (c.serviceType && c.serviceType === serviceType) || 
+  const filteredCategories = categories.filter(c =>
+    (c.serviceType && c.serviceType.toUpperCase() === serviceType.toUpperCase()) ||
     (c.dashboardType && c.dashboardType.toLowerCase() === serviceType.toLowerCase())
   );
 
@@ -1405,6 +1868,7 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
     const file = e.target.files[0];
     if (!file) return;
     setIsUploading(true);
+    setErrorMsg('');
     try {
       const url = await uploadFileToBackend(file);
       setImage(url);
@@ -1427,7 +1891,7 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
     try {
       const payload = {
         serviceType,
-        category,
+        category: category.trim(),
         name: name.trim(),
         nameTelugu: nameTelugu.trim(),
         price: parseFloat(price),
@@ -1439,7 +1903,7 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
         lowStockAlert: parseInt(lowStockAlert, 10),
         description,
         brand,
-        image,
+        image: image.trim(),
         details: {
           meatType,
           cutType,
@@ -1478,11 +1942,11 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
       <div className="bg-white dark:bg-[#141926] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-xl w-full flex flex-col gap-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-scale-up">
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <h3 className="font-display font-black text-base">{product ? 'Edit Store Product' : '+ Add New Store Product'}</h3>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 cursor-pointer">
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -1494,7 +1958,7 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-xs">
-          
+
           {/* 1. REQUIRED: SERVICE SELECTION */}
           <div>
             <label className="font-black text-slate-700 dark:text-slate-300 block mb-1.5">
@@ -1505,7 +1969,10 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
                 <button
                   type="button"
                   key={srv}
-                  onClick={() => setServiceType(srv)}
+                  onClick={() => {
+                    setServiceType(srv);
+                    setCategory('');
+                  }}
                   className={`p-2.5 rounded-xl font-black text-xs border text-center transition-all cursor-pointer ${
                     serviceType === srv
                       ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
@@ -1521,18 +1988,39 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
           {/* 2. CATEGORY SELECTION */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Category *</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                required
-              >
-                <option value="">Select Category</option>
-                {filteredCategories.map(c => (
-                  <option key={c._id || c.name} value={c.name}>{c.name}</option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300">Category *</label>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomCategory(!isCustomCategory)}
+                  className="text-[10px] text-amber-600 hover:underline font-bold"
+                >
+                  {isCustomCategory ? 'Select from list' : '+ Custom Category'}
+                </button>
+              </div>
+
+              {isCustomCategory || filteredCategories.length === 0 ? (
+                <input
+                  type="text"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  placeholder="e.g. Atta & Flours, Fresh Meat, Cakes"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                  required
+                />
+              ) : (
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                  required
+                >
+                  <option value="">Select Category</option>
+                  {filteredCategories.map(c => (
+                    <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Brand</label>
@@ -1554,7 +2042,7 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Fresh Chicken Curry Cut"
+                placeholder="e.g. Aashirvaad Superior MP Atta 5kg"
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-bold"
                 required
               />
@@ -1565,7 +2053,7 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
                 type="text"
                 value={nameTelugu}
                 onChange={(e) => setNameTelugu(e.target.value)}
-                placeholder="e.g. తాజా చికెన్ కర్రీ కట్"
+                placeholder="e.g. ఆశీర్వాద్ గోధుమ పిండి"
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-medium"
               />
             </div>
@@ -1609,7 +2097,7 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
                 type="text"
                 value={weight || unit}
                 onChange={(e) => { setWeight(e.target.value); setUnit(e.target.value); }}
-                placeholder="e.g. 500g, 1kg"
+                placeholder="e.g. 500g, 1kg, 5kg"
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-medium"
               />
             </div>
@@ -1692,7 +2180,7 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
             </div>
           )}
 
-          {/* 6. IMAGE URL / UPLOAD */}
+          {/* 6. IMAGE URL / UPLOAD + LIVE PREVIEW */}
           <div>
             <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Product Image *</label>
             <div className="flex gap-2">
@@ -1704,12 +2192,38 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
                 className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-medium"
                 required
               />
-              <label className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer">
+              <label className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer hover:opacity-90 transition-opacity">
                 <Upload className="w-4 h-4" />
                 <span>{isUploading ? 'Uploading...' : 'Upload'}</span>
                 <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
               </label>
             </div>
+
+            {/* Live Image Preview Thumbnail */}
+            {image && (
+              <div className="mt-2.5 flex items-center gap-3 p-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60">
+                <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex-shrink-0">
+                  <img
+                    src={getImageUrl(image, 'product')}
+                    alt="Product Preview"
+                    onError={(e) => handleImageError(e, 'product')}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[10px] font-bold text-emerald-600 block">✓ Image Ready</span>
+                  <span className="text-[10px] text-slate-400 truncate block">{image}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setImage('')}
+                  className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 cursor-pointer"
+                  title="Remove Image"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -1722,7 +2236,7 @@ function ProductFormModal({ product, categories, token, onClose, onSuccess }) {
             </button>
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || isUploading}
               className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-2.5 rounded-xl font-black shadow-md cursor-pointer disabled:opacity-50"
             >
               {isSaving ? 'Saving Product...' : (product ? 'Save Changes' : '+ Create Product')}

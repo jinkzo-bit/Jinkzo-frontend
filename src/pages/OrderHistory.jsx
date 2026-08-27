@@ -176,8 +176,63 @@ export default function OrderHistory() {
     return formatAppDate(dateStr);
   };
 
+  const getOrderCategoryInfo = (order) => {
+    if (order.orderType === 'ride') {
+      return {
+        type: 'RIDE',
+        label: 'Ride',
+        badgeClass: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+      };
+    }
+    const rawService = order.serviceType || (order.items && order.items[0]?.serviceType);
+    const sType = String(rawService || (order.orderType === 'store' ? 'GROCERY' : 'FOOD')).toUpperCase();
+    switch (sType) {
+      case 'GROCERY':
+        return {
+          type: 'GROCERY',
+          label: 'Grocery',
+          badgeClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+        };
+      case 'BAKERY':
+        return {
+          type: 'BAKERY',
+          label: 'Bakery',
+          badgeClass: 'bg-pink-50 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300 border-pink-200 dark:border-pink-800'
+        };
+      case 'VEG_FRUITS':
+        return {
+          type: 'VEG_FRUITS',
+          label: 'Veg & Fruits',
+          badgeClass: 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300 border-green-200 dark:border-green-800'
+        };
+      case 'MEAT':
+        return {
+          type: 'MEAT',
+          label: 'Meat',
+          badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+        };
+      case 'FOOD':
+      default:
+        return {
+          type: 'FOOD',
+          label: 'Food',
+          badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+        };
+    }
+  };
+
+  const categoryFilterOptions = [
+    { id: 'all', label: 'All' },
+    { id: 'food', label: 'Food' },
+    { id: 'grocery', label: 'Grocery' },
+    { id: 'bakery', label: 'Bakery' },
+    { id: 'veg_fruits', label: 'Veg & Fruits' },
+    { id: 'meat', label: 'Meat' },
+    { id: 'ride', label: 'Rides' },
+  ];
+
   return (
-    <div className="max-w-5xl mx-auto px-4 md:px-8 pb-32 animate-fade-in flex flex-col gap-8 w-full">
+    <div className="max-w-5xl mx-auto px-4 md:px-8 pb-32 animate-fade-in flex flex-col gap-6 w-full">
       {/* Page Header */}
       <div className="border-b border-line pb-4 flex items-center justify-between">
         <div>
@@ -185,9 +240,34 @@ export default function OrderHistory() {
             <ClipboardList className="w-6 h-6 text-primary" />
             {t('profile.orderHistory', 'Order History')}
           </h1>
-          <p className="text-xs text-muted font-medium mt-0.5">Your food orders and ride history</p>
+          <p className="text-xs text-muted font-medium mt-0.5">
+            Your food orders, grocery, bakery, fresh produce, meat & rides in one place
+          </p>
         </div>
       </div>
+
+      {/* Category Filter Pills */}
+      {orders.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+          {categoryFilterOptions.map((cat) => {
+            const isSelected = historyFilter.typeFilter === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => historyFilter.setTypeFilter(cat.id)}
+                className={`px-4 py-2 rounded-2xl text-xs font-extrabold border transition-all cursor-pointer whitespace-nowrap shadow-3xs ${
+                  isSelected
+                    ? 'bg-primary text-white border-primary shadow-sm'
+                    : 'bg-surface border-line text-muted hover:text-main hover:border-primary/40'
+                }`}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Global History Filter Toolbar */}
       {orders.length > 0 && (
@@ -201,8 +281,8 @@ export default function OrderHistory() {
             historyFilter.typeFilter === 'ride'
               ? 'Clear All Ride History'
               : historyFilter.typeFilter === 'food'
-              ? 'Clear All Order History'
-              : 'Clear All History'
+              ? 'Clear Food Order History'
+              : 'Clear History'
           }
           availableYears={historyFilter.availableYears}
           selectedYear={historyFilter.dateFilter.type === 'year' ? historyFilter.dateFilter.year : null}
@@ -211,6 +291,10 @@ export default function OrderHistory() {
           typeOptions={[
             { id: 'all', label: 'All Orders & Rides' },
             { id: 'food', label: 'Food Orders' },
+            { id: 'grocery', label: 'Grocery' },
+            { id: 'bakery', label: 'Bakery' },
+            { id: 'veg_fruits', label: 'Veg & Fruits' },
+            { id: 'meat', label: 'Meat' },
             { id: 'ride', label: 'Bike Rides' },
           ]}
           onTypeChange={historyFilter.setTypeFilter}
@@ -237,7 +321,7 @@ export default function OrderHistory() {
           <ShoppingBag className="w-10 h-10 text-gray-300" />
           <h4 className="font-display font-extrabold text-sm text-main">No past orders yet</h4>
           <p className="text-xs text-muted max-w-xs leading-relaxed">
-            When you make purchases or book rides, your receipt catalog and histories will populate right here.
+            When you place orders across food, groceries, bakery, meat, or book rides, your receipt catalog and histories will appear right here.
           </p>
         </div>
       ) : historyFilter.filteredItems.length === 0 ? (
@@ -247,119 +331,177 @@ export default function OrderHistory() {
         />
       ) : (
         <div className="flex flex-col gap-4">
-          {historyFilter.filteredItems.map((order) => (
-            <div key={order._id} className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4">
-              {/* Row 1: Restaurant/Order Summary */}
-              <div className="flex justify-between items-start border-b border-line pb-3 gap-4">
-                <div>
-                  <h4 className="font-display font-bold text-base text-main flex items-center gap-1.5">
-                    {order.orderType === 'ride' ? (
-                      <>
-                        <span className="text-[9px] bg-yellow-400 text-black px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Ride</span>
-                        <span>Bike Ride Hailing</span>
-                      </>
-                    ) : (
-                      (order.items && order.items.length > 0)
-                        ? (order.items.length === 1 ? order.items[0].name : `${order.items[0].name} +${order.items.length - 1} items`)
-                        : 'Order'
-                    )}
-                  </h4>
-                  <p className="text-[10px] text-muted font-semibold flex flex-wrap items-center gap-1.5 mt-0.5">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>Placed on {formatDate(order.createdAt)}</span>
-                    {order.restaurant && (
-                      <>
-                        <span className="text-gray-300">•</span>
-                        <span className="text-primary font-extrabold bg-primary-light/50 px-2 py-0.5 rounded-md">
-                          Delivered by: {order.restaurant.name}
-                        </span>
-                      </>
-                    )}
-                  </p>
-                </div>
+          {historyFilter.filteredItems.map((order) => {
+            const catInfo = getOrderCategoryInfo(order);
+            const isActiveOrder = !['Delivered', 'Completed', 'Rejected', 'Cancelled', 'Rider_Rejected'].includes(order.status);
+            const orderDisplayId = order.displayId || `#ORD${order._id.slice(-6).toUpperCase()}`;
+            const storeOrRestName = order.restaurant?.name || (order.orderType === 'store' || ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'].includes(order.serviceType) ? `Jinkzo Store (${catInfo.label})` : null);
 
-                <div className="text-right flex flex-col items-end gap-1">
-                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
-                    order.status === 'Delivered'
-                      ? 'bg-green-100 text-green-700'
-                      : order.status === 'Placed'
-                      ? 'bg-violet-100 text-violet-700 animate-pulse'
-                      : order.status === 'Rejected'
-                      ? 'bg-red-100 text-red-700'
-                      : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {t('orderStatus.' + order.status.toLowerCase(), order.status)}
-                  </span>
-                  <p className="text-xs font-bold text-main mt-0.5">₹{(order.total != null ? order.total : 0).toFixed(2)}</p>
-                </div>
-              </div>
-
-              {/* Rejection Reason (if rejected) */}
-              {order.status === 'Rejected' && order.rejectionReason && (
-                <div className="bg-red-50 border border-red-100 rounded-xl p-3 -mt-1">
-                  <p className="text-[10px] text-red-800 font-bold uppercase tracking-wider mb-0.5">Rejection Reason:</p>
-                  <p className="text-xs text-red-900 font-semibold">{order.rejectionReason}</p>
-                </div>
-              )}
-
-              {/* Row 2: Actions */}
-              <div className="flex justify-between items-center gap-4">
-                {/* Items text summary */}
-                <p className="text-[11px] text-muted font-semibold truncate max-w-[60%]">
-                  {order.orderType === 'ride' ? (
-                    `Pickup: ${order.pickupAddress?.street || 'Customer Location'} ➔ Drop: ${order.address?.street || 'Destination Address'}`
-                  ) : (
-                    (order.items && order.items.length > 0)
-                      ? order.items.map(i => `${i.name} (${i.quantity})`).join(', ')
-                      : '—'
-                  )}
-                </p>
-
-                <div className="flex items-center gap-2">
-                  {order.status === 'Delivered' && Number(order.riderReview?.rating) > 0 && (
-                    <div className="flex items-center gap-1 text-[10px] text-green-700 font-bold bg-green-50 px-2.5 py-1 rounded-xl border border-green-200 mr-1">
-                      {order.riderReview.tipAmount > 0 && (
-                        <span>Tipped ₹{order.riderReview.tipAmount} •&nbsp;</span>
-                      )}
-                      <span className="flex items-center">
-                        {order.riderReview.rating}
-                        <Star className="w-3 h-3 text-yellow-500 fill-yellow-500 ml-0.5" />
+            return (
+              <div key={order._id} className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4 hover:shadow-md transition-shadow">
+                {/* Row 1: Order ID, Category Badge, Restaurant/Store, Date & Status */}
+                <div className="flex justify-between items-start border-b border-line pb-3 gap-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-display font-black text-xs text-primary bg-primary-light/60 px-2 py-0.5 rounded-md">
+                        {orderDisplayId}
+                      </span>
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${catInfo.badgeClass}`}>
+                        {catInfo.label}
                       </span>
                     </div>
-                  )}
 
-                  {order.status === 'Delivered' && !(Number(order.riderReview?.rating) > 0) && order.deliveryAgent && (
-                    <button
-                      onClick={() => {
-                        setSelectedReviewOrder(order);
-                        setIsRiderModalOpen(true);
-                      }}
-                      className="bg-violet-50 hover:bg-violet-100 text-primary font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
-                    >
-                      Rate & Tip Rider
-                    </button>
-                  )}
+                    <h4 className="font-display font-bold text-base text-main mt-0.5">
+                      {order.orderType === 'ride' ? (
+                        'Bike Ride Hailing'
+                      ) : (
+                        (order.items && order.items.length > 0)
+                          ? (order.items.length === 1 ? order.items[0].name : `${order.items[0].name} +${order.items.length - 1} items`)
+                          : 'Order'
+                      )}
+                    </h4>
 
-                  {/* Active tracking or View details link */}
-                  <Link
-                    to={`/order-tracking/${order._id}`}
-                    className="bg-primary-light text-primary hover:bg-violet-100 font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
-                  >
-                    {order.status === 'Delivered' ? t('common.viewDetails', 'View details') : t('common.trackLive', 'Track Live')}
-                  </Link>
+                    <p className="text-[11px] text-muted font-medium flex flex-wrap items-center gap-1.5 mt-0.5">
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>Placed on {formatDate(order.createdAt)}</span>
+                      {storeOrRestName && (
+                        <>
+                          <span className="text-gray-300">•</span>
+                          <span className="text-main font-bold">
+                            {storeOrRestName}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  </div>
 
-                  {order.orderType !== 'ride' && (
-                    <button
-                      onClick={() => handleReorder(order)}
-                      className="bg-primary hover:bg-primary-hover text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-colors cursor-pointer"
-                    >
-                      {t('common.reorder', 'Reorder')}
-                    </button>
+                  <div className="text-right flex flex-col items-end gap-1 flex-shrink-0">
+                    <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
+                      order.status === 'Delivered' || order.status === 'Completed'
+                        ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300'
+                        : order.status === 'Placed' || order.status === 'Preparing' || order.status === 'Packing' || order.status === 'Out_for_Delivery' || order.status === 'Out for Delivery'
+                        ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 animate-pulse'
+                        : order.status === 'Rejected' || order.status === 'Cancelled'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                        : 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
+                    }`}>
+                      {t('orderStatus.' + order.status.toLowerCase(), order.status)}
+                    </span>
+                    <p className="text-sm font-black text-main mt-0.5">₹{(order.total != null ? order.total : 0).toFixed(2)}</p>
+                  </div>
+                </div>
+
+                {/* Row 2: Items Details List / Ride Route */}
+                <div className="text-xs text-muted font-medium flex flex-col gap-1">
+                  {order.orderType === 'ride' ? (
+                    <p className="text-[11px] text-main font-semibold">
+                      Pickup: <span className="text-muted">{order.pickupAddress?.street || 'Customer Location'}</span> ➔ Drop: <span className="text-muted">{order.address?.street || 'Destination Address'}</span>
+                    </p>
+                  ) : (
+                    order.items && order.items.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {order.items.map((it, idx) => (
+                          <span key={idx} className="bg-base border border-line px-2 py-0.5 rounded-lg text-[11px] text-main font-bold">
+                            {it.name} <span className="text-primary font-black">×{it.quantity}</span>
+                            {it.weight || it.unit || it.packSize ? ` (${it.weight || it.unit || it.packSize})` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    )
                   )}
                 </div>
+
+                {/* Delivery Agent Info if assigned */}
+                {order.deliveryAgent && order.deliveryAgent.name && (
+                  <div className="bg-base border border-line/60 rounded-xl px-3 py-2 flex items-center justify-between text-[11px]">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted font-semibold">Delivery Partner:</span>
+                      <span className="font-bold text-main">{order.deliveryAgent.name}</span>
+                      {order.deliveryAgent.phone && (
+                        <span className="text-muted">({order.deliveryAgent.phone})</span>
+                      )}
+                    </div>
+                    {order.deliveryAgent.rating && (
+                      <div className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400 font-bold">
+                        <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                        <span>{order.deliveryAgent.rating}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Rejection Reason (if rejected) */}
+                {order.status === 'Rejected' && order.rejectionReason && (
+                  <div className="bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/40 rounded-xl p-3 -mt-1">
+                    <p className="text-[10px] text-red-800 dark:text-red-300 font-bold uppercase tracking-wider mb-0.5">Rejection Reason:</p>
+                    <p className="text-xs text-red-900 dark:text-red-200 font-semibold">{order.rejectionReason}</p>
+                  </div>
+                )}
+
+                {/* Row 3: Action Buttons */}
+                <div className="flex justify-between items-center gap-3 pt-1 border-t border-line">
+                  <div className="flex items-center gap-2">
+                    {order.status === 'Delivered' && Number(order.riderReview?.rating) > 0 && (
+                      <div className="flex items-center gap-1 text-[10px] text-green-700 dark:text-green-400 font-bold bg-green-50 dark:bg-green-950/40 px-2.5 py-1 rounded-xl border border-green-200 dark:border-green-800">
+                        {order.riderReview.tipAmount > 0 && (
+                          <span>Tipped ₹{order.riderReview.tipAmount} •&nbsp;</span>
+                        )}
+                        <span className="flex items-center">
+                          {order.riderReview.rating}
+                          <Star className="w-3 h-3 text-yellow-500 fill-yellow-500 ml-0.5" />
+                        </span>
+                      </div>
+                    )}
+
+                    {order.status === 'Delivered' && !(Number(order.riderReview?.rating) > 0) && order.deliveryAgent && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedReviewOrder(order);
+                          setIsRiderModalOpen(true);
+                        }}
+                        className="bg-violet-50 dark:bg-violet-950/40 hover:bg-violet-100 text-primary font-bold text-xs px-3.5 py-2 rounded-xl transition-colors cursor-pointer"
+                      >
+                        Rate & Tip Rider
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 ml-auto">
+                    {/* Track Order (for active orders) / View Details (for completed/cancelled) */}
+                    <Link
+                      to={`/order-tracking/${order._id}`}
+                      className={`font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                        isActiveOrder
+                          ? 'bg-primary text-white hover:bg-primary-hover shadow-sm shadow-purple-500/25 animate-pulse'
+                          : 'bg-primary-light text-primary hover:bg-violet-100 dark:hover:bg-violet-950/60'
+                      }`}
+                    >
+                      {isActiveOrder ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                          <span>Track Order</span>
+                        </>
+                      ) : (
+                        <span>{t('common.viewDetails', 'View Details')}</span>
+                      )}
+                    </Link>
+
+                    {order.orderType !== 'ride' && (
+                      <button
+                        type="button"
+                        onClick={() => handleReorder(order)}
+                        className="bg-base hover:bg-surface border border-line text-main font-bold text-xs px-4 py-2.5 rounded-xl shadow-3xs transition-colors cursor-pointer hover:border-primary/40"
+                      >
+                        {t('common.reorder', 'Reorder')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
