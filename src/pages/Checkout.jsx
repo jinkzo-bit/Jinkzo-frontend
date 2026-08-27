@@ -227,24 +227,42 @@ export default function Checkout() {
     try {
       const activeAddress = activeAddresses[selectedAddressIndex] || activeAddresses[0];
 
-      const orderPayload = {
-        items: items.map(i => ({
-          menuItemId: i.menuItemId,
-          name: i.name,
-          quantity: i.quantity,
-          price: i.price,
-          image: i.image,
-          isVeg: i.isVeg,
-          restaurantId: i.restaurantId
-        })),
-        addressId: activeAddress._id,
-        restaurantId: items[0]?.restaurantId || restaurant?._id,
-        paymentMethod,
-        promoCode: promoCode || '',
-        instruction: deliveryInstructions
-      };
+      const storeServiceTypes = ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'];
 
-      const res = await fetch(`${API_BASE}/orders`, {
+      const isStoreOrder = items.some(item =>
+        storeServiceTypes.includes(String(item.serviceType || '').toUpperCase())
+      );
+
+      const serviceType = isStoreOrder
+        ? String(
+            items.find(item => item.serviceType)?.serviceType || 'GROCERY'
+          ).toUpperCase()
+        : undefined;
+
+      const orderPayload = {
+  items: items.map(i => ({
+    menuItemId: i.menuItemId,
+    productId: i.productId || i.menuItemId,
+    name: i.name,
+    quantity: i.quantity,
+    price: i.price,
+    image: i.image,
+    isVeg: i.isVeg,
+    serviceType: i.serviceType,
+    restaurantId: i.restaurantId
+  })),
+
+  addressId: activeAddress._id,
+  restaurantId: items[0]?.restaurantId || restaurant?._id,
+
+  orderType: isStoreOrder ? 'store' : 'food',
+
+  ...(isStoreOrder ? { serviceType } : {}),
+
+  paymentMethod,
+  promoCode: promoCode || '',
+  instruction: deliveryInstructions
+};      const res = await fetch(`${API_BASE}/orders`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
