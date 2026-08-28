@@ -261,6 +261,22 @@ export default function RestaurantDashboard() {
       }
     });
 
+    socket.on('newFoodOrder', (data) => {
+      if (data && data.order && String(data.order.restaurantId) === String(user?.restaurantId)) {
+        setIncomingOrderAlert(data.order);
+        setOrders(prev => {
+          const exists = prev.find(o => o._id === data.order._id);
+          if (exists) {
+            return prev.map(o => o._id === data.order._id ? { ...o, ...data.order } : o);
+          }
+          return [data.order, ...prev];
+        });
+        fetchOrders();
+        fetchMetrics();
+        try { new Audio('/notification.mp3').play().catch(() => {}); } catch(e) {}
+      }
+    });
+
     socket.on('orderStatusChanged', (data) => {
       if (data && data.order) {
         if (data.status === 'Placed' && String(data.order.restaurantId) === String(user?.restaurantId)) {
@@ -1107,26 +1123,73 @@ export default function RestaurantDashboard() {
                       <div key={order._id} className="bg-surface border border-line p-5 rounded-3xl shadow-2xs flex flex-col gap-3 animate-fade-in">
                         <div className="flex justify-between items-center border-b border-line pb-2">
                           <div>
-                            <span className="text-[10px] font-mono font-bold text-muted">#{order._id.substr(-8).toUpperCase()}</span>
+                            <span className="text-[10px] font-mono font-bold text-muted">#{order.displayId || order._id.substr(-8).toUpperCase()}</span>
                             <span className="text-[10px] text-muted font-semibold ml-2">• Placed on {order.createdAt ? formatAppDate(order.createdAt) : ''}</span>
                           </div>
                           <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
                             ['Delivered', 'Completed'].includes(order.status) ? 'bg-green-100 text-green-700 border border-green-200' : 
                             ['Rejected', 'Cancelled'].includes(order.status) ? 'bg-red-100 text-red-700 border border-red-200' :
-                            'bg-violet-100 text-violet-700 animate-pulse border border-violet-200'
+                            order.status === 'Placed' ? 'bg-violet-100 text-violet-700 animate-pulse border border-violet-200' :
+                            'bg-primary/10 text-primary border border-primary/20'
                           }`}>
-                            {order.status}
+                            {order.status === 'Placed' ? 'NEW ORDER' : order.status}
                           </span>
+                        </div>
+
+                        {/* Customer & Address Details */}
+                        <div className="bg-base/60 rounded-2xl p-3 flex flex-col gap-1 text-xs border border-line">
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted font-bold">Customer:</span>
+                            <span className="text-main font-bold">
+                              {order.userId?.name || order.customer?.name || 'Customer'}
+                              {(order.userId?.phone || order.customer?.phone) ? ` (${order.userId?.phone || order.customer?.phone})` : ''}
+                            </span>
+                          </div>
+                          {(order.address || order.customerLocation?.formattedAddress) && (
+                            <div className="flex justify-between items-start gap-2 pt-0.5">
+                              <span className="text-muted font-bold whitespace-nowrap">Delivery:</span>
+                              <span className="text-muted font-medium text-right line-clamp-2">
+                                {typeof order.address === 'object'
+                                  ? `${order.address.houseNo ? order.address.houseNo + ', ' : ''}${order.address.street || ''}, ${order.address.city || ''} ${order.address.zip || ''}`.trim().replace(/^,|,$/g, '')
+                                  : (order.address || order.customerLocation?.formattedAddress || '')}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex justify-between items-center pt-0.5 border-t border-line/60">
+                            <span className="text-muted font-bold">Payment:</span>
+                            <span className="text-main font-bold uppercase">{order.paymentDetails?.method || 'COD'}</span>
+                          </div>
                         </div>
 
                         {/* List items */}
                         <div className="flex flex-col gap-1.5 py-1">
+                          <p className="text-[10px] text-muted font-extrabold uppercase">Order Items:</p>
                           {order.items.map((item, idx) => (
                             <div key={idx} className="flex justify-between text-xs font-bold text-main">
                               <span>x{item.quantity} {item.name}</span>
-                              <span className="text-muted font-medium">₹{item.price * item.quantity}</span>
+                              <span className="text-muted font-medium">₹{(item.price * item.quantity).toFixed(2)}</span>
                             </div>
                           ))}
+                        </div>
+
+                        {/* Pricing details */}
+                        <div className="flex flex-col gap-1 text-[11px] font-semibold text-muted border-t border-line pt-2">
+                          <div className="flex justify-between">
+                            <span>Subtotal:</span>
+                            <span className="text-main font-bold">₹{order.subtotal?.toFixed(2)}</span>
+                          </div>
+                          {order.deliveryFee !== undefined && (
+                            <div className="flex justify-between">
+                              <span>Delivery Charge:</span>
+                              <span>₹{order.deliveryFee?.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {order.platformFee > 0 && (
+                            <div className="flex justify-between">
+                              <span>Platform Fee:</span>
+                              <span>₹{order.platformFee?.toFixed(2)}</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Review details */}
