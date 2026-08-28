@@ -16,6 +16,36 @@ import {
   HistoryEmptyState
 } from '../components/history';
 
+const getOrderSources = (order) => {
+  if (!order) return [];
+  if (Array.isArray(order.sources) && order.sources.length > 0) {
+    return order.sources;
+  }
+  
+  const isStoreCat = (serviceType) => ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT', 'STORE'].includes(String(serviceType || '').toUpperCase());
+  const isStore = order.orderType === 'store' || isStoreCat(order.serviceType) || String(order.restaurantId).startsWith('store_');
+  const isReady = ['Ready_for_Pickup', 'Picked_Up', 'Out_for_Delivery', 'Out for Delivery', 'Delivered', 'Completed'].includes(order.status);
+  const isPickedUp = ['Picked_Up', 'Out_for_Delivery', 'Out for Delivery', 'Delivered', 'Completed'].includes(order.status);
+  const isRejected = ['Rejected', 'Cancelled'].includes(order.status);
+
+  return [{
+    orderId: String(order._id),
+    displayId: order.displayId || String(order._id).slice(-6).toUpperCase(),
+    type: isStore ? 'store' : 'restaurant',
+    restaurantId: order.restaurantId,
+    name: isStore ? 'Jinkzo Central Store' : (order.restaurant?.name || 'Restaurant'),
+    address: isStore ? 'Jinkzo Central Store, Nandikotkur' : (order.restaurant?.address || order.restaurantLocation?.formattedAddress || ''),
+    items: order.items || [],
+    status: order.status,
+    isReady,
+    isPickedUp,
+    isRejected,
+    subtotal: order.subtotal || 0,
+    total: order.total || 0,
+    orderType: order.orderType
+  }];
+};
+
 const getUnifiedOrderItems = (order) => {
   if (!order) return { restaurantItems: [], storeItems: [], allItems: [], restaurantInfo: null, storeInfo: null };
 
@@ -621,12 +651,34 @@ export default function DeliveryDashboard() {
       fetchOrdersData();
     });
 
-    // When a rider wins the race (status becomes Rider_Assigned),
-    // other riders should re-fetch so the claimed order disappears from their pool.
-    socket.on('orderStatusChanged', ({ status } = {}) => {
-      if (status === 'Rider_Assigned') {
-        fetchOrdersData();
+    // Real-time status update & pool synchronization
+    socket.on('orderStatusChanged', (data) => {
+      fetchOrdersData();
+      if (data && data.orderId) {
+        setSelectedOrder(prev => {
+          if (!prev) return prev;
+          if (String(prev._id) === String(data.orderId)) {
+            return { ...prev, status: data.status, ...(data.order || {}) };
+          }
+          if (Array.isArray(prev.sources)) {
+            const updatedSources = prev.sources.map(src => {
+              if (String(src.orderId) === String(data.orderId)) {
+                const isReady = ['Ready_for_Pickup', 'Picked_Up', 'Out_for_Delivery', 'Out for Delivery', 'Delivered', 'Completed'].includes(data.status);
+                const isPickedUp = ['Picked_Up', 'Out_for_Delivery', 'Out for Delivery', 'Delivered', 'Completed'].includes(data.status);
+                const isRejected = ['Rejected', 'Cancelled'].includes(data.status);
+                return { ...src, status: data.status, isReady, isPickedUp, isRejected };
+              }
+              return src;
+            });
+            return { ...prev, sources: updatedSources };
+          }
+          return prev;
+        });
       }
+    });
+
+    socket.on('statusUpdated', () => {
+      fetchOrdersData();
     });
 
     return () => {
@@ -1031,53 +1083,72 @@ export default function DeliveryDashboard() {
               <div className="md:col-span-1 flex flex-col gap-3">
                 <h3 className="font-display font-extrabold text-sm text-main uppercase tracking-wider pb-1">Claimed Runs</h3>
                 {activeOrders.length > 0 ? (
-                  activeOrders.map(order => (
-                    <div
-                      key={order._id}
-                      onClick={() => setSelectedOrder(order)}
-                      className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 ${
-                        selectedOrder?._id === order._id ? 'border-primary bg-violet-50/15' : 'border-line bg-surface'
-                      }`}
-                    >
-                      <div className="flex justify-between items-center text-[9px] font-bold text-muted">
-                        <span>#{order._id.substr(-8).toUpperCase()}</span>
-                        <span className={`px-1.5 py-0.5 rounded ${getStatusBadge(order.status)}`}>{order.status}</span>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        {order.orderType === 'ride' ? (
-                          <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] font-black text-main">🏍️ BIKE RIDE</span>
-                            <span className="text-[9px] font-bold text-muted truncate">
-                              Customer: {order.customerName || order.user?.name || order.userId?.name || 'Customer'}
-                            </span>
-                            <div className="flex flex-col gap-1 mt-1 bg-gray-50 p-2 rounded-lg border border-gray-150">
-                              <span className="text-[9px] font-extrabold text-gray-500">FROM</span>
-                              <span className="text-[10px] font-bold text-main truncate">
-                                {order.pickupLocation?.formattedAddress || order.pickupAddress?.street || order.pickupAddress?.city || (order.pickupLocation?.lat ? `${order.pickupLocation.lat.toFixed(4)}, ${order.pickupLocation.lng.toFixed(4)}` : 'Selected Pickup')}
+                  activeOrders.map(order => {
+                    const sources = getOrderSources(order);
+                    const isMulti = sources.length > 1;
+
+                    return (
+                      <div
+                        key={order._id}
+                        onClick={() => setSelectedOrder(order)}
+                        className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 ${
+                          selectedOrder?._id === order._id ? 'border-primary bg-violet-50/15' : 'border-line bg-surface'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center text-[9px] font-bold text-muted">
+                          <span>#{order.displayId || order._id.substr(-8).toUpperCase()}</span>
+                          <span className={`px-1.5 py-0.5 rounded ${getStatusBadge(order.status)}`}>{order.status}</span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          {order.orderType === 'ride' ? (
+                            <div className="flex flex-col gap-1.5">
+                              <span className="text-[10px] font-black text-main">🏍️ BIKE RIDE</span>
+                              <span className="text-[9px] font-bold text-muted truncate">
+                                Customer: {order.customerName || order.user?.name || order.userId?.name || 'Customer'}
                               </span>
-                              <span className="text-[9px] font-extrabold text-gray-500 mt-0.5">TO</span>
-                              <span className="text-[10px] font-bold text-main truncate">
-                                {order.dropLocation?.formattedAddress || order.address?.street || 'Drop'}
-                              </span>
-                            </div>
-                            {order.distance && (
-                              <div className="text-[9px] font-bold text-muted mt-1">
-                                Distance: {Number(order.distance || 0).toFixed(2)} km
+                              <div className="flex flex-col gap-1 mt-1 bg-gray-50 p-2 rounded-lg border border-gray-150">
+                                <span className="text-[9px] font-extrabold text-gray-500">FROM</span>
+                                <span className="text-[10px] font-bold text-main truncate">
+                                  {order.pickupLocation?.formattedAddress || order.pickupAddress?.street || order.pickupAddress?.city || (order.pickupLocation?.lat ? `${order.pickupLocation.lat.toFixed(4)}, ${order.pickupLocation.lng.toFixed(4)}` : 'Selected Pickup')}
+                                </span>
+                                <span className="text-[9px] font-extrabold text-gray-500 mt-0.5">TO</span>
+                                <span className="text-[10px] font-bold text-main truncate">
+                                  {order.dropLocation?.formattedAddress || order.address?.street || 'Drop'}
+                                </span>
                               </div>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="text-xs font-bold text-main line-clamp-1">
-                            To: {['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? (selectedOrderRestaurantName || 'Restaurant') : (order.customerLocation?.formattedAddress || `${order.address?.street || 'Customer Location'}, ${order.address?.city || ''}`)}
-                          </p>
-                        )}
+                              {order.distance && (
+                                <div className="text-[9px] font-bold text-muted mt-1">
+                                  Distance: {Number(order.distance || 0).toFixed(2)} km
+                                </div>
+                              )}
+                            </div>
+                          ) : isMulti ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] font-black text-primary uppercase">📦 COMBINED ({sources.length} SOURCES)</span>
+                              <p className="text-xs font-bold text-main line-clamp-1">
+                                Customer: {order.customerName || order.userId?.name || 'Customer'}
+                              </p>
+                              <div className="flex items-center gap-1.5 flex-wrap text-[9px] font-bold mt-0.5">
+                                {sources.map((s, idx) => (
+                                  <span key={idx} className={`px-1.5 py-0.5 rounded ${s.isPickedUp ? 'bg-green-100 text-green-800' : s.isReady ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>
+                                    {s.type === 'restaurant' ? '🍗' : '🛒'} {s.isPickedUp ? 'Picked Up' : s.isReady ? 'Ready' : 'Preparing'}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs font-bold text-main line-clamp-1">
+                              To: {['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(order.status) ? (sources[0]?.name || selectedOrderRestaurantName || 'Restaurant') : (order.customerLocation?.formattedAddress || `${order.address?.street || 'Customer Location'}, ${order.address?.city || ''}`)}
+                            </p>
+                          )}
+                        </div>
+                        <div className="border-t border-line pt-2 flex justify-between items-center text-[10px] font-bold text-muted">
+                          <span>Grand Total: ₹{order.combinedTotal || order.total}</span>
+                          <span className="text-primary flex items-center">Track <ChevronRight className="w-3 h-3" /></span>
+                        </div>
                       </div>
-                      <div className="border-t border-line pt-2 flex justify-between items-center text-[10px] font-bold text-muted">
-                        <span>Grand Total: ₹{order.total}</span>
-                        <span className="text-primary flex items-center">Track <ChevronRight className="w-3 h-3" /></span>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="bg-surface rounded-2xl p-6 text-center border border-line flex flex-col items-center gap-1.5">
                     <Bike className="w-8 h-8 text-gray-300" />
@@ -1096,7 +1167,7 @@ export default function DeliveryDashboard() {
                         <h4 className="font-display font-extrabold text-sm text-main">
                           {selectedOrder.orderType === 'ride' ? '🏍️ BIKE RIDE' : 'Dispatch Details'}
                         </h4>
-                        <p className="text-[9px] font-mono text-muted">ID: {selectedOrder._id}</p>
+                        <p className="text-[9px] font-mono text-muted">ID: {selectedOrder.displayId || selectedOrder._id}</p>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${getStatusBadge(selectedOrder.status)}`}>{selectedOrder.status}</span>
                     </div>
@@ -1137,121 +1208,220 @@ export default function DeliveryDashboard() {
                       </div>
                     )}
 
-                    {/* Order Items Breakdown: RESTAURANT ITEMS & JINKZO STORE ITEMS */}
+                    {/* Pickup Sources Breakdown for Delivery Orders */}
                     {selectedOrder.orderType !== 'ride' && (() => {
-                      const { restaurantItems, storeItems, allItems, restaurantInfo } = getUnifiedOrderItems(selectedOrder);
-                      if (allItems.length === 0) return null;
-                      const isMixed = restaurantItems.length > 0 && storeItems.length > 0;
+                      const sources = getOrderSources(selectedOrder);
+                      const totalItemsCount = sources.reduce((sum, src) => sum + (Array.isArray(src.items) ? src.items.reduce((cnt, it) => cnt + (it.quantity || 1), 0) : 0), 0);
+                      const allPickedUp = sources.length > 0 && sources.every(s => s.isPickedUp || s.isRejected);
+                      const isMixed = sources.length > 1;
 
                       return (
-                        <div className="bg-surface rounded-2xl p-4 border border-line flex flex-col gap-3 shadow-2xs">
-                          <div className="flex items-center justify-between border-b border-line pb-2">
-                            <h5 className="font-display font-extrabold text-xs text-main uppercase tracking-wider flex items-center gap-1.5">
-                              <ShoppingBag className="w-4 h-4 text-primary" />
-                              <span>Total Order Items ({allItems.reduce((s, i) => s + (i.quantity || 1), 0)})</span>
-                            </h5>
-                            {isMixed && (
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
-                                MIXED DELIVERY
-                              </span>
-                            )}
+                        <div className="flex flex-col gap-3">
+                          <div className="bg-surface rounded-2xl p-4 border border-line flex flex-col gap-3 shadow-2xs">
+                            <div className="flex items-center justify-between border-b border-line pb-2">
+                              <h5 className="font-display font-extrabold text-xs text-main uppercase tracking-wider flex items-center gap-1.5">
+                                <ShoppingBag className="w-4 h-4 text-primary" />
+                                <span>Pickup Sources ({sources.length}) • {totalItemsCount} Total Items</span>
+                              </h5>
+                              {isMixed && (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                                  COMBINED ORDER
+                                </span>
+                              )}
+                            </div>
+
+                            {/* List of pickup sources with live red/green badges */}
+                            <div className="flex flex-col gap-3">
+                              {sources.map((src, sIdx) => {
+                                const isFood = src.type === 'restaurant';
+                                const isReady = src.isReady;
+                                const isPickedUp = src.isPickedUp;
+                                const isRejected = src.isRejected;
+
+                                return (
+                                  <div 
+                                    key={sIdx} 
+                                    className={`p-3.5 rounded-2xl border transition-all flex flex-col gap-2 ${
+                                      isPickedUp
+                                        ? 'bg-green-50/50 border-green-200 dark:bg-green-950/20 dark:border-green-900/40'
+                                        : isReady
+                                        ? 'bg-emerald-50/70 border-emerald-300 shadow-xs dark:bg-emerald-950/30 dark:border-emerald-800'
+                                        : isRejected
+                                        ? 'bg-red-50 border-red-200 text-red-700'
+                                        : 'bg-amber-50/50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900/40'
+                                    }`}
+                                  >
+                                    {/* Source Header */}
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-base">{isFood ? '🍗' : '🛒'}</span>
+                                        <div>
+                                          <h6 className="text-xs font-bold text-main">{src.name}</h6>
+                                          <p className="text-[10px] text-muted truncate max-w-[200px]">{src.address}</p>
+                                        </div>
+                                      </div>
+
+                                      {/* Readiness Badge */}
+                                      <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
+                                        isPickedUp
+                                          ? 'bg-green-100 text-green-800 border border-green-300'
+                                          : isReady
+                                          ? 'bg-green-600 text-white animate-pulse shadow-sm'
+                                          : isRejected
+                                          ? 'bg-red-100 text-red-800 border border-red-300'
+                                          : 'bg-red-100 text-red-700 border border-red-200'
+                                      }`}>
+                                        <span>{isPickedUp ? '✅' : isReady ? '🟢' : isRejected ? '❌' : '🔴'}</span>
+                                        <span>
+                                          {isPickedUp
+                                            ? (isFood ? 'FOOD PICKED UP' : 'STORE PICKED UP')
+                                            : isReady
+                                            ? (isFood ? 'FOOD READY FOR PICKUP' : 'STORE READY FOR PICKUP')
+                                            : isRejected
+                                            ? 'REJECTED BY RESTAURANT'
+                                            : (isFood ? 'FOOD PREPARING' : 'STORE PACKING')}
+                                        </span>
+                                      </span>
+                                    </div>
+
+                                    {/* Items List */}
+                                    <div className="flex flex-col divide-y divide-line/40 pt-1">
+                                      {src.items && src.items.map((it, idx) => (
+                                        <div key={idx} className="py-1 flex items-center justify-between text-xs font-semibold text-main">
+                                          <span>• {it.quantity}x {it.name}</span>
+                                          <span className="text-muted text-[11px] font-mono">₹{(it.price || 0) * (it.quantity || 1)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {/* Pickup Action button for this specific source when ready & not yet picked up */}
+                                    {isReady && !isPickedUp && !['Out_for_Delivery', 'Out for Delivery', 'Rider_At_Customer', 'Delivered', 'Completed'].includes(selectedOrder.status) && (
+                                      <div className="pt-1.5 border-t border-line/60">
+                                        <button
+                                          onClick={() => handleUpdateStatus(src.orderId, 'Picked_Up')}
+                                          disabled={updatingId === src.orderId}
+                                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50"
+                                        >
+                                          <CheckCircle className="w-4 h-4" />
+                                          <span>{isFood ? 'PICK UP FOOD FROM RESTAURANT' : 'PICK UP STORE ITEMS'}</span>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
 
-                          {restaurantItems.length > 0 && (
-                            <div className="flex flex-col gap-1.5 bg-amber-50/60 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-200/60 dark:border-amber-900/40">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[11px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1">
-                                  <span>🍽️</span> RESTAURANT ITEMS
-                                </span>
-                                <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">
-                                  Collect from: {restaurantInfo?.name || selectedOrderRestaurantName || 'Restaurant'}
-                                </span>
-                              </div>
-                              <div className="flex flex-col divide-y divide-amber-200/40 dark:divide-amber-900/30 pt-1">
-                                {restaurantItems.map((it, idx) => (
-                                  <div key={idx} className="py-1 flex items-center justify-between text-xs">
-                                    <span className="text-main font-semibold">• {it.quantity}x {it.name}</span>
-                                    <span className="text-muted text-[11px] font-mono">₹{(it.price || 0) * (it.quantity || 1)}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                          {/* Milestone Controls */}
+                          <div className="bg-base border border-gray-150 p-4 rounded-2xl flex flex-col gap-2">
+                            <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Milestone Control</span>
 
-                          {storeItems.length > 0 && (
-                            <div className="flex flex-col gap-1.5 bg-emerald-50/60 dark:bg-emerald-950/20 p-3 rounded-xl border border-emerald-200/60 dark:border-emerald-900/40">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[11px] font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1">
-                                  <span>🏬</span> JINKZO STORE ITEMS
-                                </span>
-                                <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                                  Collect from: Jinkzo Central Store
+                            {selectedOrder.status === 'Rider_Assigned' || selectedOrder.riderStatus === 'Pending' ? (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleUpdateStatus(selectedOrder._id, 'Rider_Accepted')}
+                                  disabled={updatingId === selectedOrder._id}
+                                  className="flex-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                                >
+                                  <CheckCircle className="w-4.5 h-4.5" />
+                                  <span>ACCEPT & CLAIM ORDER</span>
+                                </button>
+                                <button
+                                  onClick={() => { setRejectingOrderId(selectedOrder._id); setRejectionReason(''); setCustomRejectionReason(''); }}
+                                  disabled={updatingId === selectedOrder._id}
+                                  className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                                >
+                                  <span>REJECT</span>
+                                </button>
+                              </div>
+                            ) : !allPickedUp && !['Out_for_Delivery', 'Out for Delivery', 'Rider_At_Customer', 'Delivered', 'Completed'].includes(selectedOrder.status) ? (
+                              <div className="bg-violet-50/70 border border-violet-200 text-violet-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2">
+                                <Clock className="w-5 h-5 text-primary shrink-0" />
+                                <span>
+                                  {sources.some(s => s.isPickedUp)
+                                    ? 'Partially picked up. Collect remaining items from ready sources above.'
+                                    : sources.some(s => s.isReady)
+                                    ? 'Ready items available! Click the pickup button above for ready sources.'
+                                    : 'Awaiting preparation... You can collect ready sources as soon as they turn green.'}
                                 </span>
                               </div>
-                              <div className="flex flex-col divide-y divide-emerald-200/40 dark:divide-emerald-900/30 pt-1">
-                                {storeItems.map((it, idx) => (
-                                  <div key={idx} className="py-1 flex items-center justify-between text-xs">
-                                    <span className="text-main font-semibold">• {it.quantity}x {it.name}</span>
-                                    <span className="text-muted text-[11px] font-mono">₹{(it.price || 0) * (it.quantity || 1)}</span>
-                                  </div>
-                                ))}
+                            ) : ['Delivered', 'Completed'].includes(selectedOrder.status) ? (
+                              <div className="bg-green-50 border border-green-200 text-green-700 text-xs font-bold p-3.5 rounded-xl flex items-center justify-center gap-2">
+                                <CheckCircle className="w-5 h-5" />
+                                <span>✅ Delivery successfully completed!</span>
                               </div>
-                            </div>
-                          )}
-
-                          {isMixed && (
-                            <p className="text-[10px] text-muted text-center font-medium italic">
-                              * Note: Collect both restaurant and Jinkzo Store items for this single customer delivery.
-                            </p>
-                          )}
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  if (['Out_for_Delivery', 'Out for Delivery'].includes(selectedOrder.status)) {
+                                    handleUpdateStatus(selectedOrder._id, 'Rider_At_Customer');
+                                  } else if (selectedOrder.status === 'Rider_At_Customer') {
+                                    handleUpdateStatus(selectedOrder._id, 'Delivered');
+                                  } else {
+                                    handleUpdateStatus(selectedOrder._id, 'Out_for_Delivery');
+                                  }
+                                }}
+                                disabled={updatingId === selectedOrder._id}
+                                className="bg-primary hover:bg-primary-hover text-white text-xs font-black py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shadow-md"
+                              >
+                                <CheckCircle className="w-4.5 h-4.5" />
+                                <span>
+                                  {['Out_for_Delivery', 'Out for Delivery'].includes(selectedOrder.status)
+                                    ? 'REACHED CUSTOMER LOCATION'
+                                    : selectedOrder.status === 'Rider_At_Customer'
+                                    ? 'MARK ORDER AS DELIVERED'
+                                    : 'START DELIVERY (OUT FOR DELIVERY)'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })()}
 
-
-                    {/* Action buttons */}
-                    {(selectedOrder.status === 'Rider_Assigned' || (selectedOrder.orderType === 'food' && selectedOrder.riderStatus === 'Pending' && (selectedOrder.deliveryAgent?.id === user?._id || selectedOrder.deliveryAgent?.phone === user?.phone))) ? (
+                    {/* Ride Milestone Controls */}
+                    {selectedOrder.orderType === 'ride' && (
                       <div className="bg-base border border-gray-150 p-4 rounded-2xl flex flex-col gap-2">
-                        <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Milestone Control</span>
-                        <div className="flex gap-2">
+                        <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Ride Milestone</span>
+                        {selectedOrder.status === 'Rider_Assigned' || selectedOrder.riderStatus === 'Pending' ? (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleUpdateStatus(selectedOrder._id, 'Rider_Accepted')}
+                              disabled={updatingId === selectedOrder._id}
+                              className="flex-1 bg-yellow-400 hover:bg-yellow-500 text-black text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                              <CheckCircle className="w-4.5 h-4.5" />
+                              <span>ACCEPT RIDE</span>
+                            </button>
+                            <button
+                              onClick={() => { setRejectingOrderId(selectedOrder._id); setRejectionReason(''); setCustomRejectionReason(''); }}
+                              disabled={updatingId === selectedOrder._id}
+                              className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                              <span>REJECT RIDE</span>
+                            </button>
+                          </div>
+                        ) : getNextRiderAction(selectedOrder.status, 'ride') ? (
                           <button
-                            onClick={() => handleUpdateStatus(selectedOrder._id, 'Rider_Accepted')}
+                            onClick={() => handleUpdateStatus(selectedOrder._id, getNextRiderAction(selectedOrder.status, 'ride').next)}
                             disabled={updatingId === selectedOrder._id}
-                            className="flex-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                            className="bg-yellow-400 hover:bg-yellow-500 text-black text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                           >
                             <CheckCircle className="w-4.5 h-4.5" />
-                            <span>{selectedOrder.orderType === 'ride' ? 'ACCEPT RIDE' : 'ACCEPT ORDER'}</span>
+                            <span>{getNextRiderAction(selectedOrder.status, 'ride').label}</span>
                           </button>
-                          <button
-                            onClick={() => { setRejectingOrderId(selectedOrder._id); setRejectionReason(''); setCustomRejectionReason(''); }}
-                            disabled={updatingId === selectedOrder._id}
-                            className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                          >
-                            <span>{selectedOrder.orderType === 'ride' ? 'REJECT RIDE' : 'REJECT'}</span>
-                          </button>
-                        </div>
-                      </div>
-                    ) : getNextRiderAction(selectedOrder.status, selectedOrder.orderType) ? (
-                      <div className="bg-base border border-gray-150 p-4 rounded-2xl flex flex-col gap-2">
-                        <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Milestone Control</span>
-                        <button
-                          onClick={() => handleUpdateStatus(selectedOrder._id, getNextRiderAction(selectedOrder.status, selectedOrder.orderType).next)}
-                          disabled={updatingId === selectedOrder._id}
-                          className="bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          <CheckCircle className="w-4.5 h-4.5" />
-                          <span>{getNextRiderAction(selectedOrder.status, selectedOrder.orderType).label}</span>
-                        </button>
-                      </div>
-                    ) : ['Delivered', 'Completed'].includes(selectedOrder.status) ? (
-                      <div className="bg-green-50 border border-green-200 text-green-700 text-xs font-bold p-3.5 rounded-xl flex items-center justify-center gap-2">
-                        <CheckCircle className="w-5 h-5" />
-                        <span>{selectedOrder.orderType === 'ride' ? '✅ Ride successfully completed!' : '✅ Delivery successfully completed!'}</span>
-                      </div>
-                    ) : (
-                      <div className="bg-violet-50 border border-violet-100 text-violet-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2 animate-pulse">
-                        <Clock className="w-5 h-5 text-primary" />
-                        <span>{selectedOrder.orderType === 'ride' ? 'Waiting for pickup...' : 'Awaiting kitchen preparation...'}</span>
+                        ) : ['Delivered', 'Completed'].includes(selectedOrder.status) ? (
+                          <div className="bg-green-50 border border-green-200 text-green-700 text-xs font-bold p-3.5 rounded-xl flex items-center justify-center gap-2">
+                            <CheckCircle className="w-5 h-5" />
+                            <span>✅ Ride successfully completed!</span>
+                          </div>
+                        ) : (
+                          <div className="bg-violet-50 border border-violet-100 text-violet-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2 animate-pulse">
+                            <Clock className="w-5 h-5 text-primary" />
+                            <span>Waiting for pickup...</span>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1491,65 +1661,99 @@ export default function DeliveryDashboard() {
                 </div>
               ) : availableOrders.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {availableOrders.map(order => (
-                    <div key={order._id} className={`bg-surface border p-5 rounded-3xl shadow-2xs flex flex-col gap-3 justify-between ${order.orderType === 'ride' ? 'border-yellow-200' : 'border-line'}`}>
-                      <div>
-                        <div className="flex justify-between items-center text-[9px] font-bold text-muted pb-2 border-b border-line">
-                          <span className={order.orderType === 'ride' ? 'text-yellow-600' : ''}>
-                            {order.orderType === 'ride' ? '🏍️ RIDE REQUEST' : 'FOOD ORDER'} #{order._id.substr(-8).toUpperCase()}
-                          </span>
-                          <span className={order.orderType === 'ride' ? 'text-yellow-700' : ''}>₹{order.total} {order.orderType === 'ride' ? 'fare' : 'total'}</span>
+                  {availableOrders.map(order => {
+                    const sources = getOrderSources(order);
+                    const isMulti = sources.length > 1;
+                    const combinedTotal = order.combinedTotal || order.total || 0;
+                    const combinedEarnings = order.combinedEarnings || (order.deliveryFee ? order.deliveryFee + 20 : 40);
+
+                    return (
+                      <div key={order._id} className={`bg-surface border p-5 rounded-3xl shadow-2xs flex flex-col gap-3 justify-between ${order.orderType === 'ride' ? 'border-yellow-200' : isMulti ? 'border-violet-200' : 'border-line'}`}>
+                        <div>
+                          <div className="flex justify-between items-center text-[9px] font-bold text-muted pb-2 border-b border-line">
+                            <span className={order.orderType === 'ride' ? 'text-yellow-600' : isMulti ? 'text-primary font-black' : ''}>
+                              {order.orderType === 'ride' ? '🏍️ RIDE REQUEST' : isMulti ? `📦 COMBINED DELIVERY (${sources.length} SOURCES)` : 'FOOD ORDER'} #{order.displayId || order._id.substr(-8).toUpperCase()}
+                            </span>
+                            <span className={order.orderType === 'ride' ? 'text-yellow-700 font-black' : 'font-black'}>₹{combinedTotal} {order.orderType === 'ride' ? 'fare' : 'total'}</span>
+                          </div>
+
+                          <div className="flex flex-col gap-1.5 mt-3 text-xs leading-tight font-bold">
+                            {order.orderType === 'ride' ? (
+                              <>
+                                <div className="flex items-center gap-1.5 text-main">
+                                  <span className="font-extrabold text-[10px] text-gray-500 w-16">CUSTOMER:</span>
+                                  <span className="truncate">{order.customerName || order.user?.name || order.userId?.name || 'Customer'}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-main">
+                                  <span className="font-extrabold text-[10px] text-gray-500 w-10">FROM:</span>
+                                  <span className="truncate">{order.pickupLocation?.formattedAddress || order.pickupAddress?.street || order.pickupAddress?.city || (order.pickupLocation?.lat ? `${order.pickupLocation.lat.toFixed(4)}, ${order.pickupLocation.lng.toFixed(4)}` : 'Selected Pickup')}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-muted">
+                                  <span className="font-extrabold text-[10px] text-gray-400 w-10">TO:</span>
+                                  <span className="truncate">{order.dropLocation?.formattedAddress || order.address?.street || 'Drop Location'}</span>
+                                </div>
+                                <div className="flex justify-between items-center mt-1 text-[10px] text-gray-500">
+                                  <span>{order.distance ? `${order.distance} km` : ''}</span>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                {/* Pickup Sources List with Red/Green badges */}
+                                <div className="flex flex-col gap-2 my-1">
+                                  <span className="text-[10px] text-muted font-extrabold uppercase">PICKUP LOCATIONS:</span>
+                                  {sources.map((src, sIdx) => {
+                                    const isFood = src.type === 'restaurant';
+                                    const isReady = src.isReady;
+                                    return (
+                                      <div key={sIdx} className="bg-base/70 rounded-xl p-2.5 border border-line flex flex-col gap-1">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-xs font-bold text-main flex items-center gap-1.5">
+                                            <span>{isFood ? '🍗' : '🛒'}</span>
+                                            <span className="truncate max-w-[150px]">{src.name}</span>
+                                          </span>
+                                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 ${
+                                            isReady ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'
+                                          }`}>
+                                            <span>{isReady ? '🟢' : '🔴'}</span>
+                                            <span>{isReady ? (isFood ? 'FOOD READY' : 'STORE READY') : (isFood ? 'FOOD PREPARING' : 'STORE PACKING')}</span>
+                                          </span>
+                                        </div>
+                                        <div className="text-[10px] text-muted font-medium">
+                                          {src.items && src.items.length > 0
+                                            ? src.items.map(it => `${it.quantity}x ${it.name}`).join(', ')
+                                            : `${src.items?.length || 0} items`}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                <div className="flex items-center gap-1.5 text-main pt-1 border-t border-line/60">
+                                  <span className="font-extrabold text-[10px] text-gray-500 w-24">CUSTOMER:</span>
+                                  <span className="truncate">{order.customerName || order.user?.name || order.userId?.name || 'Customer'}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-muted">
+                                  <span className="font-extrabold text-[10px] text-gray-400 w-24">DELIVER TO:</span>
+                                  <span className="truncate">{order.customerLocation?.formattedAddress || `${order.address?.street || 'Customer Location'}, ${order.address?.city || ''}`}</span>
+                                </div>
+                                <div className="flex justify-between items-center mt-1 text-[10px] text-gray-500">
+                                  <span>{order.distance ? `${order.distance} km` : ''}</span>
+                                  <span className="font-bold text-green-600">Earnings: ₹{combinedEarnings}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex flex-col gap-1.5 mt-3 text-xs leading-tight font-bold">
-                          {order.orderType === 'ride' ? (
-                            <>
-                              <div className="flex items-center gap-1.5 text-main">
-                                <span className="font-extrabold text-[10px] text-gray-500 w-16">CUSTOMER:</span>
-                                <span className="truncate">{order.customerName || order.user?.name || order.userId?.name || 'Customer'}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-main">
-                                <span className="font-extrabold text-[10px] text-gray-500 w-10">FROM:</span>
-                                <span className="truncate">{order.pickupLocation?.formattedAddress || order.pickupAddress?.street || order.pickupAddress?.city || (order.pickupLocation?.lat ? `${order.pickupLocation.lat.toFixed(4)}, ${order.pickupLocation.lng.toFixed(4)}` : 'Selected Pickup')}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-muted">
-                                <span className="font-extrabold text-[10px] text-gray-400 w-10">TO:</span>
-                                <span className="truncate">{order.dropLocation?.formattedAddress || order.address?.street || 'Drop Location'}</span>
-                              </div>
-                              <div className="flex justify-between items-center mt-1 text-[10px] text-gray-500">
-                                <span>{order.distance ? `${order.distance} km` : ''}</span>
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <div className="flex items-center gap-1.5 text-main">
-                                <span className="font-extrabold text-[10px] text-gray-500 w-24">CUSTOMER:</span>
-                                <span className="truncate">{order.customerName || order.user?.name || order.userId?.name || 'Customer'}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-main">
-                                <span className="font-extrabold text-[10px] text-gray-500 w-24">RESTAURANT:</span>
-                                <span className="truncate">{order.restaurant?.name || 'Restaurant'}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-muted">
-                                <span className="font-extrabold text-[10px] text-gray-400 w-24">LOCATION:</span>
-                                <span className="truncate">{order.customerLocation?.formattedAddress || `${order.address?.street || 'Customer Location'}, ${order.address?.city || ''}`}</span>
-                              </div>
-                              <div className="flex justify-between items-center mt-1 text-[10px] text-gray-500">
-                                <span>{order.distance ? `${order.distance} km` : ''}</span>
-                                <span className="font-bold text-green-600">Earning: ₹{order.deliveryFee ? order.deliveryFee + 20 : 40}</span>
-                              </div>
-                            </>
-                          )}
-                        </div>
+                        <button
+                          onClick={() => handleAcceptOrder(order._id)}
+                          disabled={updatingId === order._id}
+                          className={`${order.orderType === 'ride' ? 'bg-yellow-400 hover:bg-yellow-500 text-black' : 'bg-primary hover:bg-primary-hover text-white'} text-[10px] font-black py-2.5 rounded-xl mt-3 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 shadow-sm`}
+                        >
+                          {order.orderType === 'ride' ? 'Accept & Claim Ride' : isMulti ? 'ACCEPT & CLAIM COMBINED ORDER' : 'Accept & Claim Delivery'}
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleAcceptOrder(order._id)}
-                        disabled={updatingId === order._id}
-                        className={`${order.orderType === 'ride' ? 'bg-yellow-400 hover:bg-yellow-500 text-black' : 'bg-primary hover:bg-primary-hover text-white'} text-[10px] font-bold py-2.5 rounded-xl mt-3 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50`}
-                      >
-                        {order.orderType === 'ride' ? 'Accept & Claim Ride' : 'Accept & Claim Delivery'}
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="bg-surface rounded-3xl p-16 text-center flex flex-col items-center justify-center border border-line shadow-2xs gap-3">

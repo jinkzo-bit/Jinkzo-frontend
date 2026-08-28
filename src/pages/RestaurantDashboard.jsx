@@ -1175,21 +1175,9 @@ export default function RestaurantDashboard() {
                         {/* Pricing details */}
                         <div className="flex flex-col gap-1 text-[11px] font-semibold text-muted border-t border-line pt-2">
                           <div className="flex justify-between">
-                            <span>Subtotal:</span>
+                            <span>Restaurant Subtotal:</span>
                             <span className="text-main font-bold">₹{order.subtotal?.toFixed(2)}</span>
                           </div>
-                          {order.deliveryFee !== undefined && (
-                            <div className="flex justify-between">
-                              <span>Delivery Charge:</span>
-                              <span>₹{order.deliveryFee?.toFixed(2)}</span>
-                            </div>
-                          )}
-                          {order.platformFee > 0 && (
-                            <div className="flex justify-between">
-                              <span>Platform Fee:</span>
-                              <span>₹{order.platformFee?.toFixed(2)}</span>
-                            </div>
-                          )}
                         </div>
 
                         {/* Review details */}
@@ -1225,7 +1213,7 @@ export default function RestaurantDashboard() {
                         )}
 
                         <div className="border-t border-line pt-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                          <span className="text-xs font-black text-main">Total: ₹{order.total.toFixed(2)}</span>
+                          <span className="text-xs font-black text-main">Food Total: ₹{order.subtotal?.toFixed(2)}</span>
                           
                           {/* Accept/Advance Actions */}
                           <div className="flex flex-col sm:flex-row gap-2">
@@ -1246,9 +1234,25 @@ export default function RestaurantDashboard() {
                                 <Check className="w-3.5 h-3.5" />
                                 <span>{action.label}</span>
                               </button>
+                            ) : order.status === 'Ready_for_Pickup' ? (
+                              <span className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                                <Check className="w-4 h-4 text-green-600" /> Food Ready (Waiting for Rider Pickup)
+                              </span>
+                            ) : order.status === 'Picked_Up' ? (
+                              <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                                <Check className="w-4 h-4 text-blue-600" /> Food Picked Up by Rider
+                              </span>
+                            ) : (order.status === 'Out for Delivery' || order.status === 'Out_for_Delivery') ? (
+                              <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                                <Check className="w-4 h-4 text-purple-600" /> Out for Delivery
+                              </span>
+                            ) : order.status === 'Delivered' ? (
+                              <span className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                                <Check className="w-4 h-4 text-green-600" /> Delivered to Customer
+                              </span>
                             ) : (
                               <span className="text-[10px] font-bold text-muted flex items-center gap-1">
-                                <Check className="w-4 h-4 text-green-600" /> {order.status === 'Out for Delivery' ? 'Handed Over to Rider (Out for Delivery)' : 'Finished & Handed Over'}
+                                <Check className="w-4 h-4 text-green-600" /> Finished & Handed Over
                               </span>
                             )}
                           </div>
@@ -2160,8 +2164,8 @@ export default function RestaurantDashboard() {
                 <span className="text-main font-bold uppercase">{incomingOrderAlert.paymentDetails?.method || 'COD'}</span>
               </div>
               <div className="flex justify-between items-center text-xs border-t border-line pt-2">
-                <span className="text-muted font-bold">Total Amount:</span>
-                <span className="text-lg font-black text-orange-600">₹{incomingOrderAlert.total?.toFixed(2)}</span>
+                <span className="text-muted font-bold">Restaurant Subtotal:</span>
+                <span className="text-lg font-black text-orange-600">₹{(incomingOrderAlert.subtotal || incomingOrderAlert.total || 0).toFixed(2)}</span>
               </div>
             </div>
 
