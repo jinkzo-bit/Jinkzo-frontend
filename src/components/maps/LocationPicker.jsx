@@ -1,17 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MapPin, Navigation, Loader, Check, Copy } from 'lucide-react';
+import { MapPin, Navigation, Loader, Check, Copy, AlertCircle, AlertTriangle } from 'lucide-react';
 import { useJsApiLoader, GoogleMap } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMapsLoader';
 import { parseAddressComponents } from '../../utils/parseAddressComponents';
 import { isValidCoordinates } from '../../utils/coordinates';
 import { API_BASE } from '../../config/api';
+import { useLocationStore } from '../../store/locationStore';
 import PlacesAutocomplete from './PlacesAutocomplete';
 
-const INDIA_CENTER_LAT = 20.5937;
-const INDIA_CENTER_LNG = 78.9629;
-const HIGH_ZOOM    = 17;
+const DEFAULT_LAT = 15.8567;
+const DEFAULT_LNG = 78.2656;
+const HIGH_ZOOM   = 17;
 
-const MAP_CONTAINER_STYLE = { height: '100%', width: '100%' };
+const MAP_CONTAINER_STYLE = { height: '100%', width: '100%', position: 'relative' };
 
 const MAP_OPTIONS = {
   disableDefaultUI: true,
@@ -27,6 +28,8 @@ const MAP_OPTIONS = {
   headingInteractionEnabled: false,
   heading: 0,
   tilt: 0,
+  minZoom: 3,
+  maxZoom: 20,
   isFractionalZoomEnabled: true,
   mapTypeId: 'roadmap',
   ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
@@ -69,15 +72,17 @@ export default function LocationPicker({
   });
 
   const [mapCenter, setMapCenter] = useState({
-    lat: (initialAddress?.lat != null && initialAddress?.lat !== '') ? Number(initialAddress.lat) : INDIA_CENTER_LAT,
-    lng: (initialAddress?.lng != null && initialAddress?.lng !== '') ? Number(initialAddress.lng) : INDIA_CENTER_LNG,
+    lat: (initialAddress?.lat != null && initialAddress?.lat !== '') ? Number(initialAddress.lat) : DEFAULT_LAT,
+    lng: (initialAddress?.lng != null && initialAddress?.lng !== '') ? Number(initialAddress.lng) : DEFAULT_LNG,
   });
-  const [mapZoom, setMapZoom] = useState((initialAddress?.lat != null && initialAddress?.lat !== '') ? HIGH_ZOOM : 4);
+  const [mapZoom, setMapZoom] = useState((initialAddress?.lat != null && initialAddress?.lat !== '') ? HIGH_ZOOM : HIGH_ZOOM);
   const [hasValidLocation, setHasValidLocation] = useState((initialAddress?.lat != null && initialAddress?.lat !== ''));
 
   const [isLocating, setIsLocating]   = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [locationSource, setLocationSource] = useState('MANUAL');
+  const [gpsError, setGpsError] = useState(null);
+  const [gpsAccuracyWarning, setGpsAccuracyWarning] = useState(null);
 
   const fillForm = useCallback((addr, sourceOverride = null, authoritativeCoords = null) => {
     const components = addr.addressComponents || {};
@@ -185,10 +190,38 @@ export default function LocationPicker({
         skipNextGeocodeRef.current = true;
       }
     } else {
-      setMapCenter({ lat: INDIA_CENTER_LAT, lng: INDIA_CENTER_LNG });
-      setMapZoom(4);
-      setSelectedLocation(prev => ({ ...prev, lat: null, lng: null, placeId: null, placeName: '', formattedAddress: '' }));
-      setHasValidLocation(false);
+      const storedLocation = useLocationStore.getState();
+      if (storedLocation?.lat && storedLocation?.lng) {
+        const sLat = Number(storedLocation.lat);
+        const sLng = Number(storedLocation.lng);
+        setMapCenter({ lat: sLat, lng: sLng });
+        setMapZoom(HIGH_ZOOM);
+        setSelectedLocation(prev => ({
+          ...prev,
+          lat: sLat,
+          lng: sLng,
+          placeName: storedLocation.placeName || '',
+          formattedAddress: storedLocation.formattedAddress || storedLocation.address || '',
+          accuracy: storedLocation.accuracy || null,
+        }));
+        setHasValidLocation(true);
+        fillForm({
+          placeName: storedLocation.placeName || '',
+          street: storedLocation.address || '',
+          area: storedLocation.area || '',
+          city: storedLocation.city || storedLocation.villageTownCity || '',
+          state: storedLocation.state || '',
+          zip: storedLocation.pincode || '',
+          formattedAddress: storedLocation.formattedAddress || storedLocation.address || '',
+          lat: sLat,
+          lng: sLng,
+        }, storedLocation.source || 'SAVED', { lat: sLat, lng: sLng });
+      } else {
+        setMapCenter({ lat: DEFAULT_LAT, lng: DEFAULT_LNG });
+        setMapZoom(HIGH_ZOOM);
+        setSelectedLocation(prev => ({ ...prev, lat: null, lng: null, placeId: null, placeName: '', formattedAddress: '' }));
+        setHasValidLocation(false);
+      }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -202,6 +235,28 @@ export default function LocationPicker({
     };
   }, []);
 
+  // ResizeObserver to handle modal/container size changes and window resize
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      if (mapRef.current && window.google?.maps?.event) {
+        window.google.maps.event.trigger(mapRef.current, 'resize');
+      }
+    });
+    ro.observe(mapContainerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      if (mapRef.current && window.google?.maps?.event) {
+        window.google.maps.event.trigger(mapRef.current, 'resize');
+      }
+    };
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, []);
+
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
@@ -209,6 +264,26 @@ export default function LocationPicker({
       if (typeof map.setTilt === 'function') map.setTilt(0);
       if (typeof map.setHeading === 'function') map.setHeading(0);
     } catch (_) {}
+
+    // Trigger resize immediately and after short timeouts to ensure full container coverage
+    if (window.google?.maps?.event) {
+      window.google.maps.event.trigger(map, 'resize');
+      requestAnimationFrame(() => {
+        if (mapRef.current && window.google?.maps?.event) {
+          window.google.maps.event.trigger(mapRef.current, 'resize');
+        }
+      });
+      setTimeout(() => {
+        if (mapRef.current && window.google?.maps?.event) {
+          window.google.maps.event.trigger(mapRef.current, 'resize');
+        }
+      }, 100);
+      setTimeout(() => {
+        if (mapRef.current && window.google?.maps?.event) {
+          window.google.maps.event.trigger(mapRef.current, 'resize');
+        }
+      }, 300);
+    }
 
     const listener = map.addListener('idle', async () => {
       const center = map.getCenter();
@@ -225,6 +300,8 @@ export default function LocationPicker({
       setSelectedLocation(prev => ({ ...prev, lat, lng, placeId: null, locationType: 'MANUAL' }));
       setHasValidLocation(true);
       setLocationSource('MANUAL');
+      setGpsError(null);
+      setGpsAccuracyWarning(null);
 
       clearTimeout(geocodeDebounceRef.current);
       geocodeDebounceRef.current = setTimeout(async () => {
@@ -262,6 +339,8 @@ export default function LocationPicker({
     const resolvedPlaceName = pName || parsed.placeName || parsed.pointOfInterest || '';
 
     setPlaceName(resolvedPlaceName);
+    setGpsError(null);
+    setGpsAccuracyWarning(null);
     
     // Authoritative coordinates directly from Google Places API (New) Place Details
     setSelectedLocation({
@@ -290,6 +369,9 @@ export default function LocationPicker({
     if (mapRef.current) {
       mapRef.current.panTo({ lat, lng });
       mapRef.current.setZoom(HIGH_ZOOM);
+      if (window.google?.maps?.event) {
+        window.google.maps.event.trigger(mapRef.current, 'resize');
+      }
     } else {
       setMapCenter({ lat, lng });
       setMapZoom(HIGH_ZOOM);
@@ -297,16 +379,26 @@ export default function LocationPicker({
   }, [fillForm]);
 
   const handleGps = (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+    setGpsError(null);
+    setGpsAccuracyWarning(null);
+
     if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser.');
+      setGpsError('Geolocation is not supported by your browser.');
       return;
     }
+
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
         
+        let warning = null;
+        if (accuracy && accuracy > 100) {
+          warning = 'GPS accuracy is low. Move outdoors or adjust the pin manually.';
+        }
+        setGpsAccuracyWarning(warning);
+
         // Authoritative device GPS coordinates
         setSelectedLocation(prev => ({
           ...prev,
@@ -318,11 +410,16 @@ export default function LocationPicker({
         }));
         setHasValidLocation(true);
         setLocationSource('GPS');
+        setMapCenter({ lat, lng });
+        setMapZoom(HIGH_ZOOM);
         skipNextGeocodeRef.current = true;
 
         if (mapRef.current) {
           mapRef.current.panTo({ lat, lng });
           mapRef.current.setZoom(HIGH_ZOOM);
+          if (window.google?.maps?.event) {
+            window.google.maps.event.trigger(mapRef.current, 'resize');
+          }
         } else {
           setMapCenter({ lat, lng });
           setMapZoom(HIGH_ZOOM);
@@ -345,9 +442,11 @@ export default function LocationPicker({
         console.error('GPS error:', err.code, err.message);
         setIsLocating(false);
         if (err.code === 1) {
-          alert('Location permission denied. Please enable it in your browser settings.');
+          setGpsError('Location permission is required to use GPS. Please allow location access in your browser.');
+        } else if (err.code === 3) {
+          setGpsError('Unable to get your GPS location. Please try again or select the location manually.');
         } else {
-          alert('Unable to get your current location. Search for your area or move the map manually.');
+          setGpsError('GPS is unavailable. Please select your delivery location manually.');
         }
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
@@ -361,8 +460,7 @@ export default function LocationPicker({
       typeof selectedLocation.lat !== 'number' || 
       typeof selectedLocation.lng !== 'number' ||
       selectedLocation.lat < -90 || selectedLocation.lat > 90 ||
-      selectedLocation.lng < -180 || selectedLocation.lng > 180 ||
-      (selectedLocation.lat === 19.0760 && selectedLocation.lng === 72.8777)
+      selectedLocation.lng < -180 || selectedLocation.lng > 180
     ) {
       alert('Please select your exact location on the map.');
       return;
@@ -391,6 +489,7 @@ export default function LocationPicker({
       lat: selectedLocation.lat,
       lng: selectedLocation.lng,
       locationSource: locationSource,
+      accuracy: selectedLocation.accuracy,
     });
   };
 
@@ -439,22 +538,38 @@ export default function LocationPicker({
             onClick={handleGps}
             disabled={isLocating}
             title="Use GPS location"
-            className="flex-shrink-0 flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-[12px] font-bold py-2.5 px-3.5 rounded-xl cursor-pointer transition-all disabled:opacity-60 shadow-md"
+            className="flex-shrink-0 flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-[12px] font-bold py-2.5 px-3.5 rounded-xl cursor-pointer transition-all disabled:opacity-60 shadow-md active:scale-95"
           >
             {isLocating
               ? <Loader className="w-4 h-4 animate-spin" />
               : <Navigation className="w-4 h-4" />
             }
-            <span>{isLocating ? '...' : 'GPS'}</span>
+            <span>{isLocating ? 'Locating...' : 'GPS'}</span>
           </button>
         </div>
       </div>
 
+      {/* GPS Error Alert */}
+      {gpsError && (
+        <div className="mx-4 mb-2 p-2.5 bg-red-500/15 border border-red-500/30 rounded-xl flex items-center gap-2 text-red-300 text-[11px] font-semibold animate-fade-in flex-shrink-0">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400" />
+          <span>{gpsError}</span>
+        </div>
+      )}
+
+      {/* GPS Low Accuracy Warning */}
+      {gpsAccuracyWarning && (
+        <div className="mx-4 mb-2 p-2.5 bg-amber-500/15 border border-amber-500/30 rounded-xl flex items-center gap-2 text-amber-300 text-[11px] font-semibold animate-fade-in flex-shrink-0">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-400" />
+          <span>{gpsAccuracyWarning}</span>
+        </div>
+      )}
+
       {/* Map Section */}
       <div
         ref={mapContainerRef}
-        className="relative flex-shrink-0 mx-4 rounded-2xl overflow-hidden border border-white/10"
-        style={{ height: '260px' }}
+        className="relative flex-shrink-0 mx-4 rounded-2xl overflow-hidden border border-white/10 w-[calc(100%-2rem)]"
+        style={{ height: '260px', minHeight: '260px' }}
       >
         {!isLoaded || loadError ? (
           <div className="w-full h-full flex items-center justify-center bg-[#1a1a2e]">
@@ -468,16 +583,14 @@ export default function LocationPicker({
             )}
           </div>
         ) : (
-          <>
-            <GoogleMap
-              mapContainerStyle={MAP_CONTAINER_STYLE}
-              center={mapCenter}
-              zoom={mapZoom}
-              options={MAP_OPTIONS}
-              onLoad={onMapLoad}
-              onUnmount={onMapUnmount}
-            />
-          </>
+          <GoogleMap
+            mapContainerStyle={MAP_CONTAINER_STYLE}
+            center={mapCenter}
+            zoom={mapZoom}
+            options={MAP_OPTIONS}
+            onLoad={onMapLoad}
+            onUnmount={onMapUnmount}
+          />
         )}
 
         {/* Fixed Center Pin */}
@@ -509,49 +622,51 @@ export default function LocationPicker({
         )}
 
         {/* Coordinates Badge */}
-        {selectedLocation.lat && selectedLocation.lng && (
+        {selectedLocation.lat != null && selectedLocation.lng != null && (
           <div className="absolute top-3 left-3 z-20">
             <button
               type="button"
               onClick={handleCopyCoords}
               title="Copy coordinates"
-              className="bg-black/70 backdrop-blur-sm text-white/80 text-[10px] font-mono px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-black/90 transition-colors cursor-pointer"
+              className="bg-black/75 backdrop-blur-md border border-white/15 text-white text-[10px] font-mono px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 hover:bg-black/90 transition-all cursor-pointer shadow-lg"
             >
-              <MapPin className="w-3 h-3 text-violet-400" />
-              {selectedLocation.lat.toFixed(5)}°N {selectedLocation.lng.toFixed(5)}°E
-              <Copy className="w-2.5 h-2.5 text-white/40" />
+              <MapPin className="w-3.5 h-3.5 text-violet-400" />
+              <span>{selectedLocation.lat.toFixed(5)}°N, {selectedLocation.lng.toFixed(5)}°E</span>
+              <Copy className="w-3 h-3 text-white/50" />
             </button>
           </div>
         )}
 
         {/* Accuracy Circle */}
-        {selectedLocation.accuracy && selectedLocation.lat && selectedLocation.lng && (
+        {selectedLocation.accuracy != null && selectedLocation.lat != null && selectedLocation.lng != null && (
           <>
             <div
-              className="absolute inset-0 pointer-events-none"
+              className="absolute inset-0 pointer-events-none z-10"
               style={{ transform: 'translate(-50%, -50%)', left: '50%', top: '50%' }}
             >
               <div
                 style={{
-                  width: `${Math.min(selectedLocation.accuracy * 2, 800)}px`,
-                  height: `${Math.min(selectedLocation.accuracy * 2, 800)}px`,
-                  borderRadius: '50%', border: '2px solid #7c3aed',
-                  background: 'rgba(124, 58, 237, 0.08)',
-                  transform: 'translate(-50%, -50%)', pointerEvents: 'none',
+                  width: `${Math.min(Math.max(selectedLocation.accuracy * 1.5, 30), 400)}px`,
+                  height: `${Math.min(Math.max(selectedLocation.accuracy * 1.5, 30), 400)}px`,
+                  borderRadius: '50%',
+                  border: selectedLocation.accuracy <= 50 ? '2px solid #10b981' : selectedLocation.accuracy <= 100 ? '2px solid #8b5cf6' : '2px solid #f59e0b',
+                  background: selectedLocation.accuracy <= 50 ? 'rgba(16, 185, 129, 0.12)' : selectedLocation.accuracy <= 100 ? 'rgba(139, 92, 246, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                  transform: 'translate(-50%, -50%)',
+                  pointerEvents: 'none',
                 }}
               />
             </div>
             <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-1">
-              <div className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg ${
-                selectedLocation.accuracy <= 20 
-                  ? 'bg-emerald-600' 
-                  : selectedLocation.accuracy <= 50 
-                    ? 'bg-violet-600' 
-                    : selectedLocation.accuracy <= 100 
-                      ? 'bg-amber-600' 
-                      : 'bg-red-600'
+              <div className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-lg backdrop-blur-md border border-white/10 ${
+                selectedLocation.accuracy <= 20
+                  ? 'bg-emerald-600/90'
+                  : selectedLocation.accuracy <= 50
+                    ? 'bg-violet-600/90'
+                    : selectedLocation.accuracy <= 100
+                      ? 'bg-amber-600/90'
+                      : 'bg-rose-600/90'
               }`}>
-                <MapPin className="w-3 h-3" />
+                <Navigation className="w-3 h-3" />
                 ±{Math.round(selectedLocation.accuracy)}m ({
                   selectedLocation.accuracy <= 20 
                     ? 'Excellent' 
@@ -562,11 +677,6 @@ export default function LocationPicker({
                         : 'Low accuracy'
                 })
               </div>
-              {selectedLocation.accuracy > 100 && (
-                <div className="bg-black/80 backdrop-blur-sm text-amber-300 text-[9px] font-medium px-2 py-0.5 rounded-md shadow-md max-w-[200px] text-right">
-                  Move pin manually to exact location
-                </div>
-              )}
             </div>
           </>
         )}
@@ -575,25 +685,37 @@ export default function LocationPicker({
         <div style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <button
             type="button"
-            onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || HIGH_ZOOM) + 1)}
+            onClick={() => {
+              if (mapRef.current) {
+                const z = mapRef.current.getZoom() || HIGH_ZOOM;
+                mapRef.current.setZoom(Math.min(z + 1, 20));
+              }
+            }}
             style={{
               width: 30, height: 30, background: 'white', border: '1px solid #e5e7eb', borderRadius: 6,
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 17, color: '#374151', fontWeight: 700
             }}
+            title="Zoom in"
           >+</button>
           <button
             type="button"
-            onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || HIGH_ZOOM) - 1)}
+            onClick={() => {
+              if (mapRef.current) {
+                const z = mapRef.current.getZoom() || HIGH_ZOOM;
+                mapRef.current.setZoom(Math.max(z - 1, 3));
+              }
+            }}
             style={{
               width: 30, height: 30, background: 'white', border: '1px solid #e5e7eb', borderRadius: 6,
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 17, color: '#374151', fontWeight: 700
             }}
+            title="Zoom out"
           >−</button>
         </div>
 
         {/* Hint */}
         <div className="absolute bottom-3 left-3 z-20">
-          <div className="bg-black/70 backdrop-blur-sm text-white/60 text-[10px] px-2.5 py-1 rounded-lg font-medium">
+          <div className="bg-black/75 backdrop-blur-md border border-white/10 text-white/80 text-[10px] px-2.5 py-1 rounded-xl font-medium">
             Drag map to adjust pin
           </div>
         </div>

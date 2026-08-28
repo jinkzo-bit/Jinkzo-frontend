@@ -5,8 +5,8 @@ import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMapsLoader';
 import { API_BASE } from '../../config/api';
 
 /**
- * Reusable Google Places Autocomplete input using server proxy.
- * Includes session tokens for cost optimization (billed per session, not per keystroke).
+ * Reusable Google Places Autocomplete input using server proxy with client-side fallback.
+ * Includes session tokens for cost optimization and direct Geocoding on Enter.
  * 
  * Props:
  *   onPlaceSelect   fn({ formattedAddress, lat, lng, placeId, addressComponents })
@@ -50,7 +50,73 @@ export default function PlacesAutocomplete({
     sessionTokenRef.current = createSessionToken();
   }, []);
 
-  // ── Handle text input change — calls backend proxy ────────────────────────────
+  // ── Direct Geocode Search (e.g. on Enter key press or direct query) ──────────
+  const handleDirectSearch = useCallback(async (searchText) => {
+    const textToSearch = (searchText || query).trim();
+    if (!textToSearch) return;
+
+    setIsSearching(true);
+    setError(null);
+    setPredictions([]);
+    setNoResults(false);
+
+    // 1. Try Google Maps Geocoder if loaded in browser
+    if (window.google?.maps?.Geocoder) {
+      try {
+        const geocoder = new window.google.maps.Geocoder();
+        const response = await geocoder.geocode({ address: textToSearch, componentRestrictions: { country } });
+        if (response.results && response.results.length > 0) {
+          const result = response.results[0];
+          const lat = result.geometry.location.lat();
+          const lng = result.geometry.location.lng();
+          const formattedAddress = result.formatted_address;
+          const placeId = result.place_id;
+
+          if (onPlaceSelect) {
+            onPlaceSelect({
+              placeName: textToSearch,
+              formattedAddress,
+              lat,
+              lng,
+              placeId,
+              addressComponents: result.address_components,
+            });
+          }
+          setIsSearching(false);
+          return;
+        }
+      } catch (geocoderErr) {
+        console.warn('[PlacesAutocomplete] Client geocode attempt:', geocoderErr);
+      }
+    }
+
+    // 2. Try backend geocode endpoint
+    try {
+      const res = await fetch(`${API_BASE}/maps/geocode?address=${encodeURIComponent(textToSearch)}`);
+      const data = await res.json();
+      setIsSearching(false);
+      if (data.success && data.data) {
+        if (onPlaceSelect) {
+          onPlaceSelect({
+            placeName: data.data.placeName || textToSearch,
+            formattedAddress: data.data.formattedAddress || textToSearch,
+            lat: data.data.lat,
+            lng: data.data.lng,
+            placeId: data.data.placeId,
+            addressComponents: data.data.addressComponents,
+            rawComponents: data.data.addressComponents,
+          });
+        }
+      } else {
+        setError(`No location found for "${textToSearch}". Try dragging the map pin.`);
+      }
+    } catch (err) {
+      setIsSearching(false);
+      setError('Search failed. Please try again or select location on map.');
+    }
+  }, [query, country, onPlaceSelect]);
+
+  // ── Handle text input change — calls backend proxy with fallback ─────────────
   const handleChange = (e) => {
     const val = e.target.value;
     setQuery(val);
@@ -84,28 +150,40 @@ export default function PlacesAutocomplete({
           if (results.length > 0) {
             setPredictions(results);
             setNoResults(false);
-          } else {
-            setPredictions([]);
-            setNoResults(true);
+            return;
           }
-        } else if (data.message === 'OVER_QUERY_LIMIT') {
-          setPredictions([]);
-          setError('Search quota exceeded. Please try again shortly.');
-        } else if (data.message === 'REQUEST_DENIED') {
-          setPredictions([]);
-          setError('Places API not enabled. Check your Google Cloud Console.');
-        } else {
-          setPredictions([]);
-          setNoResults(true);
         }
       } catch (err) {
         setIsSearching(false);
-        setError('Search failed. Please check your connection.');
       }
+
+      // Fallback: Check client-side Google Places AutocompleteService if available
+      if (window.google?.maps?.places?.AutocompleteService) {
+        try {
+          const service = new window.google.maps.places.AutocompleteService();
+          service.getPlacePredictions(
+            { input: val, componentRestrictions: { country } },
+            (clientResults, status) => {
+              if (status === window.google.maps.places.PlacesServiceStatus.OK && clientResults && clientResults.length > 0) {
+                setPredictions(clientResults);
+                setNoResults(false);
+                setError(null);
+              } else {
+                setPredictions([]);
+                setNoResults(true);
+              }
+            }
+          );
+          return;
+        } catch (_) {}
+      }
+
+      setPredictions([]);
+      setNoResults(true);
     }, 300);
   };
 
-  // ── Handle suggestion click — fetch full place details via proxy ────────────
+  // ── Handle suggestion click — fetch full place details via proxy / client ─────
   const handleSelect = useCallback(
     async (prediction) => {
       setPredictions([]);
@@ -115,6 +193,7 @@ export default function PlacesAutocomplete({
       const mainText = prediction.structured_formatting?.main_text || '';
       const secondaryText = prediction.structured_formatting?.secondary_text || '';
 
+      // 1. Try backend place-details proxy
       try {
         const params = new URLSearchParams({ placeId: prediction.place_id });
         if (sessionTokenRef.current) {
@@ -148,15 +227,54 @@ export default function PlacesAutocomplete({
             });
           }
           resetSessionToken();
-        } else {
-          setError('Could not load place details. Please try another result.');
+          return;
         }
       } catch (err) {
-        setError('Failed to load place details.');
+        console.warn('[PlacesAutocomplete] Backend place-details error, trying client geocoder');
       }
+
+      // 2. Fallback: Client Geocoder with place_id or description
+      if (window.google?.maps?.Geocoder) {
+        try {
+          const geocoder = new window.google.maps.Geocoder();
+          const req = prediction.place_id ? { placeId: prediction.place_id } : { address: prediction.description };
+          const result = await geocoder.geocode(req);
+          if (result.results && result.results.length > 0) {
+            const r = result.results[0];
+            if (onPlaceSelect) {
+              onPlaceSelect({
+                placeName: mainText || r.formatted_address,
+                formattedAddress: r.formatted_address || prediction.description,
+                secondaryText,
+                lat: r.geometry.location.lat(),
+                lng: r.geometry.location.lng(),
+                placeId: r.place_id || prediction.place_id,
+                addressComponents: r.address_components,
+              });
+            }
+            resetSessionToken();
+            return;
+          }
+        } catch (_) {}
+      }
+
+      // 3. Fallback: Direct search by description
+      handleDirectSearch(prediction.description);
     },
-    [onPlaceSelect]
+    [onPlaceSelect, handleDirectSearch]
   );
+
+  // ── Handle Key Down (Enter key to search directly) ───────────────────────────
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (predictions.length > 0) {
+        handleSelect(predictions[0]);
+      } else if (query.trim().length >= 2) {
+        handleDirectSearch(query);
+      }
+    }
+  };
 
   // ── Clear input ────────────────────────────────────────────────────────────
   const handleClear = () => {
@@ -181,7 +299,9 @@ export default function PlacesAutocomplete({
           <input
             type="text"
             disabled
-            placeholder="Loading search..."
+            value=""
+            readOnly
+            placeholder="Search area, street, school, hospital, city..."
             className={
               darkMode
                 ? 'w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-10 py-2.5 text-[13px] text-white/30 placeholder:text-white/20 outline-none font-medium cursor-not-allowed'
@@ -218,8 +338,8 @@ export default function PlacesAutocomplete({
   const secondaryCls = darkMode ? 'text-white/40' : 'text-muted';
 
   const emptyMsgCls = darkMode
-    ? 'px-4 py-3 text-[12px] text-white/40 flex items-center gap-2'
-    : 'px-4 py-2.5 text-xs text-muted flex items-center gap-2';
+    ? 'px-4 py-3 text-[12px] text-white/40 flex items-center justify-between'
+    : 'px-4 py-2.5 text-xs text-muted flex items-center justify-between';
 
   const errorCls = darkMode ? 'text-red-400' : 'text-red-500';
 
@@ -238,6 +358,7 @@ export default function PlacesAutocomplete({
           type="text"
           value={query}
           onChange={handleChange}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className={inputCls}
           autoComplete="off"
@@ -270,7 +391,7 @@ export default function PlacesAutocomplete({
           {predictions.length > 0
             ? predictions.map((pred) => (
                 <button
-                  key={pred.place_id}
+                  key={pred.place_id || pred.description}
                   type="button"
                   onClick={() => handleSelect(pred)}
                   className={itemCls}
@@ -290,8 +411,17 @@ export default function PlacesAutocomplete({
               ))
             : noResults && (
                 <div className={emptyMsgCls}>
-                  <MapPin className={`w-3.5 h-3.5 flex-shrink-0 ${darkMode ? 'text-white/30' : 'text-muted'}`} />
-                  <span>No results for &ldquo;{query}&rdquo;</span>
+                  <div className="flex items-center gap-2">
+                    <MapPin className={`w-3.5 h-3.5 flex-shrink-0 ${darkMode ? 'text-white/30' : 'text-muted'}`} />
+                    <span>Search for &ldquo;{query}&rdquo;</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDirectSearch(query)}
+                    className="text-[11px] font-bold text-violet-400 hover:text-violet-300 px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 transition-colors"
+                  >
+                    Find Location ↵
+                  </button>
                 </div>
               )}
         </div>

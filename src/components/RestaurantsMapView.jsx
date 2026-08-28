@@ -23,6 +23,8 @@ const MAP_OPTIONS = {
   headingInteractionEnabled: false,
   heading: 0,
   tilt: 0,
+  minZoom: 3,
+  maxZoom: 20,
   isFractionalZoomEnabled: true,
   ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
   styles: [
@@ -45,6 +47,28 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
 
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
+  // ── ResizeObserver & Window Resize Handling ──────────────────────────────
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      if (mapRef.current && window.google?.maps?.event) {
+        window.google.maps.event.trigger(mapRef.current, 'resize');
+      }
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      if (mapRef.current && window.google?.maps?.event) {
+        window.google.maps.event.trigger(mapRef.current, 'resize');
+      }
+    };
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, []);
+
   // ── Map load callback ──────────────────────────────────────────────────────
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
@@ -53,6 +77,20 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
       if (typeof map.setTilt === 'function') map.setTilt(0);
       if (typeof map.setHeading === 'function') map.setHeading(0);
     } catch (_) {}
+
+    if (window.google?.maps?.event) {
+      window.google.maps.event.trigger(map, 'resize');
+      requestAnimationFrame(() => {
+        if (mapRef.current && window.google?.maps?.event) {
+          window.google.maps.event.trigger(mapRef.current, 'resize');
+        }
+      });
+      setTimeout(() => {
+        if (mapRef.current && window.google?.maps?.event) {
+          window.google.maps.event.trigger(mapRef.current, 'resize');
+        }
+      }, 150);
+    }
     // Initialize marker clusterer
     if (window.google && !clustererRef.current) {
       clustererRef.current = new MarkerClusterer({

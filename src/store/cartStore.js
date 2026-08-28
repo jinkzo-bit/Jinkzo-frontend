@@ -54,7 +54,7 @@ export const useCartStore = create(
 
   addItem: (item, restaurant) => {
     const { items, platformSettings } = get();
-    const isStoreItem = item.serviceType && ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'].includes(item.serviceType);
+    const isStoreItem = item.serviceType && ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'].includes(String(item.serviceType).toUpperCase());
 
     if (!isStoreItem) {
       // 0. Check restaurant open status and item custom availability for food
@@ -118,8 +118,8 @@ export const useCartStore = create(
         packSize: item.packSize || '',
         stock: item.stock,
         quantity: 1,
-        restaurantId: restaurant?._id || 'store_jinkzo',
-        restaurantName: restaurant?.name || 'Jinkzo Store',
+        restaurantId: isStoreItem ? 'store_jinkzo' : (restaurant?._id || 'rest_default'),
+        restaurantName: isStoreItem ? 'Jinkzo Store' : (restaurant?.name || 'Restaurant'),
         restaurantImage: restaurant?.image || restaurant?.logo || '',
         restaurantDeliveryTime: restaurant?.deliveryTime || 25,
         restaurantOffers: restaurant?.offers || [],

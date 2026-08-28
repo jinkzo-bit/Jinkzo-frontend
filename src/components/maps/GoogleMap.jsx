@@ -24,6 +24,8 @@ const MAP_OPTIONS = {
   headingInteractionEnabled: false,
   heading: 0,
   tilt: 0,
+  minZoom: 3,
+  maxZoom: 20,
   isFractionalZoomEnabled: true,
   ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
   styles: [
@@ -71,21 +73,10 @@ const PICKER_ICON = {
 };
 
 // Container style — fills parent; parent must have explicit height
-const CONTAINER_STYLE = { width: '100%', height: '100%' };
+const CONTAINER_STYLE = { width: '100%', height: '100%', position: 'relative' };
 
 /**
  * Reusable Google Map component.
- *
- * Props:
- *   latitude          number   — initial center latitude  (default: Nandikotkur)
- *   longitude         number   — initial center longitude (default: Nandikotkur)
- *   onLocationChange  fn(lat, lng) — called when marker is dragged or map clicked
- *   address           string   — (optional) descriptive address, unused for rendering
- *   zoom              number   — initial zoom level (default: 15)
- *   draggable         boolean  — whether the marker is draggable (default: true)
- *   showMarker        boolean  — whether to show the position marker (default: true)
- *   className         string   — extra class for the outer wrapper
- *   mapOptions        object   — extra Google Maps options to merge
  */
 export default function GoogleMap({
   latitude,
@@ -119,7 +110,6 @@ export default function GoogleMap({
     if (propsCenter) {
       setMarkerPos(propsCenter);
     } else {
-      // No coords provided → try browser geolocation once
       if (!navigator.geolocation) {
         setMarkerPos(DEFAULT_CENTER);
         return;
@@ -131,18 +121,19 @@ export default function GoogleMap({
           setMarkerPos(loc);
           if (mapRef.current) {
             mapRef.current.panTo(loc);
+            if (window.google?.maps?.event) {
+              window.google.maps.event.trigger(mapRef.current, 'resize');
+            }
           }
           setGeoLocating(false);
         },
         () => {
-          // Permission denied or timeout → use default
           setMarkerPos(DEFAULT_CENTER);
           setGeoLocating(false);
         },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     }
-    // Only run when prop coords change
     // eslint-disable-next-line
   }, [latitude, longitude]);
 
@@ -152,6 +143,28 @@ export default function GoogleMap({
     // eslint-disable-next-line
   }, [latitude, longitude]);
 
+  // ── ResizeObserver & Window Resize Handling ──────────────────────────────
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      if (mapRef.current && window.google?.maps?.event) {
+        window.google.maps.event.trigger(mapRef.current, 'resize');
+      }
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      if (mapRef.current && window.google?.maps?.event) {
+        window.google.maps.event.trigger(mapRef.current, 'resize');
+      }
+    };
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, []);
+
   // ── Map load callback ──────────────────────────────────────────────────────
   const onLoad = useCallback((map) => {
     mapRef.current = map;
@@ -160,6 +173,20 @@ export default function GoogleMap({
       if (typeof map.setTilt === 'function') map.setTilt(0);
       if (typeof map.setHeading === 'function') map.setHeading(0);
     } catch (_) {}
+
+    if (window.google?.maps?.event) {
+      window.google.maps.event.trigger(map, 'resize');
+      requestAnimationFrame(() => {
+        if (mapRef.current && window.google?.maps?.event) {
+          window.google.maps.event.trigger(mapRef.current, 'resize');
+        }
+      });
+      setTimeout(() => {
+        if (mapRef.current && window.google?.maps?.event) {
+          window.google.maps.event.trigger(mapRef.current, 'resize');
+        }
+      }, 150);
+    }
   }, []);
 
   const onUnmount = useCallback(() => {
@@ -238,7 +265,7 @@ export default function GoogleMap({
   const center = markerPos || DEFAULT_CENTER;
 
   return (
-    <div ref={containerRef} className={`w-full h-full relative ${className}`}>
+    <div ref={containerRef} className={`w-full h-full relative ${className}`} style={{ minHeight: '200px' }}>
       <GoogleMapComponent
         mapContainerStyle={CONTAINER_STYLE}
         center={center}
@@ -258,10 +285,15 @@ export default function GoogleMap({
         )}
       </GoogleMapComponent>
 
-      {/* Custom Zoom Controls (Swiggy/Zomato style) */}
+      {/* Custom Zoom Controls */}
       <div style={{ position: 'absolute', bottom: 16, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 5 }}>
         <button
-          onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || zoom) + 1)}
+          onClick={() => {
+            if (mapRef.current) {
+              const z = mapRef.current.getZoom() || zoom;
+              mapRef.current.setZoom(Math.min(z + 1, 20));
+            }
+          }}
           style={{
             width: 32, height: 32,
             background: 'white',
@@ -275,7 +307,12 @@ export default function GoogleMap({
           title="Zoom in"
         >+</button>
         <button
-          onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || zoom) - 1)}
+          onClick={() => {
+            if (mapRef.current) {
+              const z = mapRef.current.getZoom() || zoom;
+              mapRef.current.setZoom(Math.max(z - 1, 3));
+            }
+          }}
           style={{
             width: 32, height: 32,
             background: 'white',

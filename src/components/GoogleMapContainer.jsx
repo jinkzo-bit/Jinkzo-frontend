@@ -27,6 +27,8 @@ const MAP_OPTIONS = {
   headingInteractionEnabled: false,
   heading: 0,
   tilt: 0,
+  minZoom: 3,
+  maxZoom: 20,
   isFractionalZoomEnabled: true,
   mapTypeId: 'roadmap',
   ...(import.meta.env.VITE_GOOGLE_MAP_ID ? { mapId: import.meta.env.VITE_GOOGLE_MAP_ID } : {}),
@@ -212,6 +214,28 @@ export default function GoogleMapContainer({
   const rideIcon   = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26, riderBearing)   : undefined;
   const pickerIcon = isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50) : undefined;
 
+  // ── ResizeObserver & Window Resize Handling ──────────────────────────────
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      if (mapRef.current && window.google?.maps?.event) {
+        window.google.maps.event.trigger(mapRef.current, 'resize');
+      }
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      if (mapRef.current && window.google?.maps?.event) {
+        window.google.maps.event.trigger(mapRef.current, 'resize');
+      }
+    };
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, []);
+
   // ── Map load callback ──────────────────────────────────────────────────────
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
@@ -222,6 +246,17 @@ export default function GoogleMapContainer({
     } catch (_) {}
     if (window.google) {
       trafficLayerRef.current = new window.google.maps.TrafficLayer();
+      window.google.maps.event.trigger(map, 'resize');
+      requestAnimationFrame(() => {
+        if (mapRef.current && window.google?.maps?.event) {
+          window.google.maps.event.trigger(mapRef.current, 'resize');
+        }
+      });
+      setTimeout(() => {
+        if (mapRef.current && window.google?.maps?.event) {
+          window.google.maps.event.trigger(mapRef.current, 'resize');
+        }
+      }, 150);
     }
   }, []);
 
@@ -762,7 +797,12 @@ export default function GoogleMapContainer({
           }}>
             {/* Zoom In */}
             <button
-              onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || 15) + 1)}
+              onClick={() => {
+                if (mapRef.current) {
+                  const z = mapRef.current.getZoom() || 15;
+                  mapRef.current.setZoom(Math.min(z + 1, 20));
+                }
+              }}
               style={{
                 width: 34,
                 height: 34,
@@ -784,7 +824,12 @@ export default function GoogleMapContainer({
 
             {/* Zoom Out */}
             <button
-              onClick={() => mapRef.current && mapRef.current.setZoom((mapRef.current.getZoom() || 15) - 1)}
+              onClick={() => {
+                if (mapRef.current) {
+                  const z = mapRef.current.getZoom() || 15;
+                  mapRef.current.setZoom(Math.max(z - 1, 3));
+                }
+              }}
               style={{
                 width: 34,
                 height: 34,

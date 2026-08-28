@@ -33,15 +33,28 @@ export default function Cart() {
     activeSurcharges
   } = getCalculations();
 
+  const getCategoryLabel = (serviceType) => {
+    const s = String(serviceType || '').trim().toUpperCase();
+    if (['GROCERY', 'GROCERIES'].includes(s)) return 'Grocery';
+    if (['BAKERY', 'BAKERY & BEVERAGES', 'BEVERAGES', 'COOL_HOT', 'HOT_COOL', 'COOL & HOT', 'HOT & COOL'].includes(s)) return 'Bakery';
+    if (['VEG_FRUITS', 'FRUITS-VEGETABLES', 'FRUITS_VEGETABLES', 'VEGETABLES', 'FRUITS & VEGETABLES', 'VEG & FRUITS', 'FRUITS', 'VEG'].includes(s)) return 'Veg & Fruits';
+    if (['MEAT', 'NON-VEG', 'MEAT & SEAFOOD', 'CHICKEN', 'MUTTON', 'FISH', 'SEAFOOD'].includes(s)) return 'Meat';
+    return s;
+  };
+
+  const storeServiceTypes = ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'];
+
   // Group items by restaurant with calculated subtotal and counts
   const groupedItems = items.reduce((acc, item) => {
-    const rId = item.restaurantId || 'unknown';
+    const isStoreItem = item.serviceType && storeServiceTypes.includes(String(item.serviceType).toUpperCase());
+    const rId = isStoreItem ? 'store_jinkzo' : (item.restaurantId || 'unknown');
     if (!acc[rId]) {
       acc[rId] = {
         restaurantId: rId,
-        restaurantName: item.restaurantName || 'Unknown Restaurant',
+        restaurantName: isStoreItem ? 'Jinkzo Store' : (item.restaurantName || 'Unknown Restaurant'),
         restaurantImage: item.restaurantImage || '',
         isClosed: item.restaurantIsClosed || false,
+        isStore: isStoreItem,
         items: []
       };
     }
@@ -53,8 +66,22 @@ export default function Cart() {
     const groupSubtotal = group.items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
     const groupItemsCount = group.items.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
     const isAllVeg = group.items.every(i => i.isVeg === true);
+
+    let displayName = group.restaurantName;
+    if (group.isStore || group.restaurantId === 'store_jinkzo') {
+      const cats = Array.from(new Set(group.items.map(it => getCategoryLabel(it.serviceType)).filter(Boolean)));
+      if (cats.length === 1) {
+        displayName = `Jinkzo Store (${cats[0]})`;
+      } else if (cats.length > 1) {
+        displayName = `Jinkzo Store • ${cats.join(', ')}`;
+      } else {
+        displayName = 'Jinkzo Store';
+      }
+    }
+
     return {
       ...group,
+      displayName,
       subtotal: groupSubtotal,
       itemsCount: groupItemsCount,
       isAllVeg
@@ -173,7 +200,7 @@ export default function Cart() {
                   )}
                   <div className="flex flex-col gap-1">
                     <h3 className="font-display font-black text-sm md:text-base text-main tracking-tight uppercase">
-                      {group.restaurantName}
+                      {group.displayName || group.restaurantName}
                     </h3>
                     <div className="flex items-center gap-2">
                       {group.isAllVeg ? (

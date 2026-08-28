@@ -109,13 +109,26 @@ export default function Checkout() {
     activeSurcharges
   } = getCalculations(routeInfo?.distanceKm);
 
-  // Group items by restaurant
+  const getCategoryLabel = (serviceType) => {
+    const s = String(serviceType || '').trim().toUpperCase();
+    if (['GROCERY', 'GROCERIES'].includes(s)) return 'Grocery';
+    if (['BAKERY', 'BAKERY & BEVERAGES', 'BEVERAGES', 'COOL_HOT', 'HOT_COOL', 'COOL & HOT', 'HOT & COOL'].includes(s)) return 'Bakery';
+    if (['VEG_FRUITS', 'FRUITS-VEGETABLES', 'FRUITS_VEGETABLES', 'VEGETABLES', 'FRUITS & VEGETABLES', 'VEG & FRUITS', 'FRUITS', 'VEG'].includes(s)) return 'Veg & Fruits';
+    if (['MEAT', 'NON-VEG', 'MEAT & SEAFOOD', 'CHICKEN', 'MUTTON', 'FISH', 'SEAFOOD'].includes(s)) return 'Meat';
+    return s;
+  };
+
+  const storeServiceTypes = ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'];
+
+  // Group items by restaurant or store
   const groupedItems = items.reduce((acc, item) => {
-    const rId = item.restaurantId || 'unknown';
+    const isStoreItem = item.serviceType && storeServiceTypes.includes(String(item.serviceType).toUpperCase());
+    const rId = isStoreItem ? 'store_jinkzo' : (item.restaurantId || 'unknown');
     if (!acc[rId]) {
       acc[rId] = {
         restaurantId: rId,
-        restaurantName: item.restaurantName || 'Unknown Restaurant',
+        restaurantName: isStoreItem ? 'Jinkzo Store' : (item.restaurantName || 'Unknown Restaurant'),
+        isStore: isStoreItem,
         items: []
       };
     }
@@ -123,7 +136,25 @@ export default function Checkout() {
     return acc;
   }, {});
 
-  const groupedList = Object.values(groupedItems);
+  const groupedList = Object.values(groupedItems).map(group => {
+    if (group.isStore || group.restaurantId === 'store_jinkzo') {
+      const cats = Array.from(new Set(group.items.map(it => getCategoryLabel(it.serviceType)).filter(Boolean)));
+      let displayName = 'JINKZO STORE';
+      if (cats.length === 1) {
+        displayName = `JINKZO STORE (${cats[0].toUpperCase()})`;
+      } else if (cats.length > 1) {
+        displayName = `JINKZO STORE • ${cats.join(', ')}`;
+      }
+      return {
+        ...group,
+        displayName
+      };
+    }
+    return {
+      ...group,
+      displayName: group.restaurantName
+    };
+  });
 
   // Safeguard: Redirect to cart if empty
   if (items.length === 0) {
@@ -227,16 +258,13 @@ export default function Checkout() {
     try {
       const activeAddress = activeAddresses[selectedAddressIndex] || activeAddresses[0];
 
-      const storeServiceTypes = ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT'];
-
       const isStoreOrder = items.some(item =>
         storeServiceTypes.includes(String(item.serviceType || '').toUpperCase())
       );
 
+      const storeItem = items.find(item => item.serviceType && storeServiceTypes.includes(String(item.serviceType).toUpperCase()));
       const serviceType = isStoreOrder
-        ? String(
-            items.find(item => item.serviceType)?.serviceType || 'GROCERY'
-          ).toUpperCase()
+        ? String(storeItem?.serviceType || 'GROCERY').toUpperCase()
         : undefined;
 
       const orderPayload = {
@@ -462,7 +490,7 @@ export default function Checkout() {
               {groupedList.map((group) => (
                 <div key={group.restaurantId} className="flex flex-col gap-1.5">
                   <div className="text-[10px] uppercase tracking-wider font-extrabold text-primary">
-                    {group.restaurantName}
+                    {group.displayName || group.restaurantName}
                   </div>
                   <div className="flex flex-col gap-1 pl-1">
                     {group.items.map((i) => (

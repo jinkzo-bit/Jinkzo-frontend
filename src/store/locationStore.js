@@ -163,10 +163,13 @@ export const useLocationStore = create(
           (err) => {
             console.warn('[LocationStore] Geolocation error:', err.code, err.message);
             let permStatus = 'unavailable';
-            let errorMsg = 'Unable to determine your location.';
+            let errorMsg = 'GPS is unavailable. Please select your delivery location manually.';
             if (err.code === 1) {
               permStatus = 'denied';
-              errorMsg = 'Location permission denied. Click to select manually.';
+              errorMsg = 'Location permission is required to use GPS. Please allow location access in your browser.';
+            } else if (err.code === 3) {
+              permStatus = 'timeout';
+              errorMsg = 'Unable to get your GPS location. Please try again or select the location manually.';
             }
             set({
               isDetecting: false,
