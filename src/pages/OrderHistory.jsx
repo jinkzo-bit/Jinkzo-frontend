@@ -15,6 +15,7 @@ import {
   ClearHistoryModal,
   HistoryEmptyState
 } from '../components/history';
+import { groupCustomerOrders } from '../utils/unifiedOrder';
 
 export default function OrderHistory() {
   const { user, token } = useAuthStore();
@@ -25,8 +26,11 @@ export default function OrderHistory() {
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Group raw orders by parentOrderId into unified customer presentations
+  const unifiedOrders = React.useMemo(() => groupCustomerOrders(orders), [orders]);
+
   // Global History Filter
-  const historyFilter = useHistoryFilter(orders, {
+  const historyFilter = useHistoryFilter(unifiedOrders, {
     dateKey: 'createdAt',
     typeKey: 'orderType',
     statusKey: 'status',
@@ -332,49 +336,42 @@ export default function OrderHistory() {
       ) : (
         <div className="flex flex-col gap-4">
           {historyFilter.filteredItems.map((order) => {
-            const isStoreOrder = order.orderType === 'store' || ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT', 'STORE'].includes(String(order.serviceType || '').toUpperCase());
+            const isStoreOrder = order.orderType === 'store' || (order.sources && order.sources.length === 1 && order.sources[0].type === 'store');
+            const isUnified = order.isUnified || (order.sources && order.sources.length > 1);
             const catInfo = getOrderCategoryInfo(order);
             const isActiveOrder = !['Delivered', 'Completed', 'Rejected', 'Cancelled', 'Rider_Rejected'].includes(order.status);
-            const orderDisplayId = order.displayId || `#ORD${order._id.slice(-6).toUpperCase()}`;
-            const totalItemsCount = (order.items || []).reduce((sum, i) => sum + (i.quantity || 1), 0);
+            const orderDisplayId = order.displayId || `#ORD${String(order._id).slice(-6).toUpperCase()}`;
+            const totalItemsCount = order.totalItemCount || (order.items || []).reduce((sum, i) => sum + (i.quantity || 1), 0);
 
-            const storeCategorySummary = (() => {
-              if (!isStoreOrder || !Array.isArray(order.items) || order.items.length === 0) return null;
-              const counts = {};
-              order.items.forEach(it => {
-                let s = String(it.serviceType || 'GROCERY').trim().toUpperCase();
-                if (['BAKERY', 'BAKERY & BEVERAGES', 'BEVERAGES', 'COOL_HOT', 'HOT_COOL'].includes(s)) s = 'Bakery';
-                else if (['VEG_FRUITS', 'FRUITS-VEGETABLES', 'FRUITS_VEGETABLES', 'VEGETABLES', 'FRUITS & VEGETABLES', 'VEG & FRUITS'].includes(s)) s = 'Veg & Fruits';
-                else if (['MEAT', 'NON-VEG', 'MEAT & SEAFOOD'].includes(s)) s = 'Meat';
-                else s = 'Grocery';
-
-                counts[s] = (counts[s] || 0) + (it.quantity || 1);
-              });
-
-              return Object.entries(counts).map(([cat, count]) => `${cat} • ${count} ${count === 1 ? 'item' : 'items'}`).join(' | ');
-            })();
-
-            const storeOrRestName = order.restaurant?.name || (isStoreOrder ? 'Jinkzo Central Store' : null);
+            let headerBadge = catInfo.label;
+            let headerBadgeClass = catInfo.badgeClass;
+            if (isUnified) {
+              headerBadge = `🛍️ Combined Order (${order.sourceCount || order.sources?.length || 2} Pickups)`;
+              headerBadgeClass = 'bg-violet-50 text-primary border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800';
+            } else if (isStoreOrder) {
+              headerBadge = '🏬 Jinkzo Store';
+              headerBadgeClass = 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+            }
 
             return (
               <div key={order._id} className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4 hover:shadow-md transition-shadow">
-                {/* Row 1: Order ID, Category Badge, Restaurant/Store, Date & Status */}
+                {/* Row 1: Order ID, Category Badge, Sources, Date & Status */}
                 <div className="flex justify-between items-start border-b border-line pb-3 gap-4">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-display font-black text-xs text-primary bg-primary-light/60 px-2 py-0.5 rounded-md">
                         {orderDisplayId}
                       </span>
-                      <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${
-                        isStoreOrder ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' : catInfo.badgeClass
-                      }`}>
-                        {isStoreOrder ? '🏬 Jinkzo Store' : catInfo.label}
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${headerBadgeClass}`}>
+                        {headerBadge}
                       </span>
                     </div>
 
                     <h4 className="font-display font-bold text-base text-main mt-0.5">
                       {order.orderType === 'ride' ? (
                         'Bike Ride Hailing'
+                      ) : isUnified ? (
+                        order.sources.map(s => s.name).join(' • ')
                       ) : isStoreOrder ? (
                         `Jinkzo Store (${totalItemsCount} ${totalItemsCount === 1 ? 'item' : 'items'})`
                       ) : (
@@ -384,26 +381,32 @@ export default function OrderHistory() {
                       )}
                     </h4>
 
-                    {storeCategorySummary && (
-                      <p className="text-[11px] font-bold text-primary dark:text-primary-light">
-                        {storeCategorySummary}
-                      </p>
+                    {/* Sources breakdown pills for multi-source checkouts */}
+                    {isUnified && order.sources && order.sources.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {order.sources.map((src, sIdx) => (
+                          <span key={sIdx} className="bg-base border border-line px-2.5 py-0.5 rounded-lg text-[11px] font-bold text-main flex items-center gap-1">
+                            <span>{src.icon}</span>
+                            <span>{src.name}</span>
+                            <span className="text-primary font-extrabold">({src.itemCount} items)</span>
+                          </span>
+                        ))}
+                      </div>
                     )}
 
                     <p className="text-[11px] text-muted font-medium flex flex-wrap items-center gap-1.5 mt-0.5">
                       <Calendar className="w-3.5 h-3.5" />
                       <span>Placed on {formatDate(order.createdAt)}</span>
-                      {storeOrRestName && (
+                      {!isUnified && order.sources?.[0]?.name && (
                         <>
                           <span className="text-gray-300">•</span>
                           <span className="text-main font-bold">
-                            {storeOrRestName}
+                            {order.sources[0].name}
                           </span>
                         </>
                       )}
                     </p>
                   </div>
-
 
                   <div className="text-right flex flex-col items-end gap-1 flex-shrink-0">
                     <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
@@ -415,7 +418,7 @@ export default function OrderHistory() {
                         ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
                         : 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
                     }`}>
-                      {t('orderStatus.' + order.status.toLowerCase(), order.status)}
+                      {t('orderStatus.' + order.status.toLowerCase(), order.status?.replace(/_/g, ' '))}
                     </span>
                     <p className="text-sm font-black text-main mt-0.5">₹{(order.total != null ? order.total : 0).toFixed(2)}</p>
                   </div>

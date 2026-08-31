@@ -10,6 +10,7 @@ import RiderFeedbackModal from '../components/RiderFeedbackModal';
 import { playStatusChangeSound, playCaptainAssignedSound, playDeliveredSound } from '../utils/audio';
 import { io } from 'socket.io-client';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
+import { getUnifiedTrackingOrder } from '../utils/unifiedOrder';
 
 export default function OrderTracking() {
   const { id } = useParams();
@@ -36,25 +37,30 @@ export default function OrderTracking() {
   const prevStatusRef = useRef(null);
   const prevAgentRef = useRef(null);
 
+  // Compute presentation-layer unified tracking model
+  const unifiedOrder = React.useMemo(() => {
+    return getUnifiedTrackingOrder(order, siblingOrders);
+  }, [order, siblingOrders]);
+
   useEffect(() => {
-    if (order) {
-      if (prevStatusRef.current && prevStatusRef.current !== order.status) {
-        if (order.status === 'Delivered') {
+    if (unifiedOrder) {
+      if (prevStatusRef.current && prevStatusRef.current !== unifiedOrder.status) {
+        if (unifiedOrder.status === 'Delivered') {
           playDeliveredSound();
         } else {
           playStatusChangeSound();
         }
       }
-      if (order.deliveryAgent && !prevAgentRef.current) {
+      if (unifiedOrder.deliveryAgent && !prevAgentRef.current) {
         playCaptainAssignedSound();
       }
-      
-      prevStatusRef.current = order.status;
-      if (order.deliveryAgent) {
-        prevAgentRef.current = order.deliveryAgent;
+
+      prevStatusRef.current = unifiedOrder.status;
+      if (unifiedOrder.deliveryAgent) {
+        prevAgentRef.current = unifiedOrder.deliveryAgent;
       }
     }
-  }, [order?.status, order?.deliveryAgent]);
+  }, [unifiedOrder?.status, unifiedOrder?.deliveryAgent]);
 
   const handleSubmitReview = async (e) => {
     e.preventDefault();
@@ -169,15 +175,13 @@ export default function OrderTracking() {
           } else {
             setSiblingOrders([]);
           }
-          
-          // No longer fetching restaurant details for map geocoding — relying solely on exact coordinates from snapshot
-          
+
           // Adjust countdown based on status
           const isRide = data.orderType === 'ride';
           if (data.status === 'Placed') setCountdown(isRide ? 12 : 28);
           else if (data.status === 'Confirmed') setCountdown(isRide ? 10 : 25);
           else if (data.status === 'Preparing') setCountdown(isRide ? 8 : 20);
-          else if (data.status === 'Out for Delivery') setCountdown(isRide ? 5 : 10);
+          else if (data.status === 'Out for Delivery' || data.status === 'Out_for_Delivery') setCountdown(isRide ? 5 : 10);
           else if (data.status === 'Delivered') setCountdown(0);
         }
       } catch (err) {
@@ -188,12 +192,10 @@ export default function OrderTracking() {
     };
 
     fetchOrderDetails();
-    
-    // Poll every 60 seconds as a fallback, relying primarily on Socket.IO for real-time updates
-    const pollInterval = setInterval(fetchOrderDetails, 60000);
 
+    const pollInterval = setInterval(fetchOrderDetails, 30000);
     return () => clearInterval(pollInterval);
-  }, [id, token, restaurantAddress]);
+  }, [id, token]);
 
   // Socket.IO real-time status update subscription
   useEffect(() => {
@@ -207,13 +209,30 @@ export default function OrderTracking() {
     });
 
     socket.emit('joinOrder', id);
+    if (order?.siblingOrderIds) {
+      order.siblingOrderIds.forEach(sibId => socket.emit('joinOrder', sibId));
+    }
 
     socket.on('statusUpdated', ({ status, order: updatedOrder }) => {
       console.log('[TRACKING SOCKET] Status update received:', status);
       if (updatedOrder) {
-        setOrder(updatedOrder);
+        if (updatedOrder._id === id) {
+          setOrder(updatedOrder);
+        } else {
+          setSiblingOrders(prev => prev.map(s => s._id === updatedOrder._id ? updatedOrder : s));
+        }
       } else {
         setOrder(prev => prev ? { ...prev, status } : null);
+      }
+    });
+
+    socket.on('orderStatusChanged', (data) => {
+      if (data && data.orderId) {
+        if (data.orderId === id) {
+          setOrder(prev => prev ? { ...prev, status: data.status, ...(data.order || {}) } : null);
+        } else {
+          setSiblingOrders(prev => prev.map(s => s._id === data.orderId ? { ...s, status: data.status, ...(data.order || {}) } : s));
+        }
       }
     });
 
@@ -225,7 +244,7 @@ export default function OrderTracking() {
     return () => {
       socket.disconnect();
     };
-  }, [id, token]);
+  }, [id, token, order?.siblingOrderIds]);
 
   // Handle countdown decrement simulation
   useEffect(() => {
@@ -257,15 +276,22 @@ export default function OrderTracking() {
     );
   }
 
-  const isStore = order.orderType === 'store' || ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT', 'STORE'].includes(String(order.serviceType || '').toUpperCase());
+  const isStore = unifiedOrder.orderType === 'store' || ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT', 'STORE'].includes(String(unifiedOrder.serviceType || '').toUpperCase());
 
   // Active status timeline markers
-  const timelineSteps = order.orderType === 'ride' ? [
+  const timelineSteps = unifiedOrder.orderType === 'ride' ? [
     { label: 'Booking Placed', mappedState: 0, desc: 'Finding nearest Ride Captain' },
     { label: 'Captain Assigned', mappedState: 1, desc: 'Captain accepted your ride request' },
     { label: 'Captain at Pickup', mappedState: 2, desc: 'Captain is waiting at pickup spot' },
     { label: 'Ride in Progress', mappedState: 3, desc: 'Captain is en route to destination' },
     { label: 'Completed', mappedState: 4, desc: 'Reached destination successfully!' }
+  ] : unifiedOrder.isUnified ? [
+    { label: 'Order Placed', mappedState: 0, desc: 'Combined order placed successfully' },
+    { label: 'Confirmed', mappedState: 1, desc: 'All pickup sources confirmed' },
+    { label: 'Preparing & Packing', mappedState: 2, desc: 'Kitchens & packing stations notified' },
+    { label: 'Collecting Items', mappedState: 3, desc: 'Rider is picking up from all locations' },
+    { label: 'Out for Delivery', mappedState: 4, desc: 'Rider is en route to your address' },
+    { label: 'Delivered', mappedState: 5, desc: 'All your items delivered together!' }
   ] : isStore ? [
     { label: 'Order Placed', mappedState: 0, desc: 'Order received at Jinkzo Store' },
     { label: 'Rider Assigned', mappedState: 1, desc: 'Active rider auto-assigned for delivery' },
@@ -288,6 +314,14 @@ export default function OrderTracking() {
       if (currentStatus === 'Picked_Up') return 3;
       if (['Delivered', 'Completed'].includes(currentStatus)) return 4;
       return 0;
+    } else if (unifiedOrder.isUnified) {
+      if (currentStatus === 'Placed') return 0;
+      if (currentStatus === 'Confirmed' || currentStatus === 'Accepted') return 1;
+      if (['Preparing', 'Packing'].includes(currentStatus)) return 2;
+      if (['Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up'].includes(currentStatus)) return 3;
+      if (['Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(currentStatus)) return 4;
+      if (['Delivered', 'Completed'].includes(currentStatus)) return 5;
+      return 0;
     } else if (isStore) {
       if (currentStatus === 'Placed') return 0;
       if (['Rider_Assigned', 'Rider_Accepted'].includes(currentStatus)) return 1;
@@ -305,17 +339,14 @@ export default function OrderTracking() {
       return 0;
     }
   };
-
-
-  const activeIndex = getStepIndex(order.status, order.orderType);
-  const allOrdersInSession = [order, ...siblingOrders].sort((a, b) => String(a._id).localeCompare(String(b._id)));
+  const activeIndex = getStepIndex(unifiedOrder.status, unifiedOrder.orderType);
 
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-8 pb-32 animate-fade-in flex flex-col gap-6 w-full">
       {/* Back button */}
       <div className="flex items-center justify-between border-b border-line pb-4">
-        <Link 
-          to="/profile" 
+        <Link
+          to="/profile"
           className="flex items-center gap-1 text-xs text-muted hover:text-primary font-bold cursor-pointer transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -323,160 +354,119 @@ export default function OrderTracking() {
         </Link>
         <div className="text-right">
           <p className="text-[10px] text-muted font-bold uppercase">Order ID</p>
-          <p className="text-xs font-bold text-main font-mono">#{order._id.substr(-8).toUpperCase()}</p>
+          <p className="text-xs font-bold text-main font-mono">{unifiedOrder.displayId}</p>
         </div>
       </div>
 
       {/* Hero Tracking Status Card */}
       <div className={`rounded-3xl p-6 border shadow-2xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${
-        order.orderType === 'ride' 
-          ? 'bg-yellow-500/5 border-yellow-250' 
+        unifiedOrder.orderType === 'ride'
+          ? 'bg-yellow-500/5 border-yellow-250'
           : 'bg-surface border-line'
       }`}>
         <div>
-          {['Delivered', 'Completed'].includes(order.status) ? (
-            <h2 className={`font-display font-extrabold text-2xl ${order.orderType === 'ride' ? 'text-yellow-750' : 'text-green-700'}`}>
-              {order.orderType === 'ride' ? 'Ride Completed! 🎉' : 'Order Delivered! 🎉'}
+          {['Delivered', 'Completed'].includes(unifiedOrder.status) ? (
+            <h2 className={`font-display font-extrabold text-2xl ${unifiedOrder.orderType === 'ride' ? 'text-yellow-750' : 'text-green-700'}`}>
+              {unifiedOrder.orderType === 'ride' ? 'Ride Completed! 🎉' : 'Order Delivered! 🎉'}
             </h2>
           ) : (
             <h2 className="font-display font-extrabold text-2xl text-main leading-tight">
-              {order.orderType === 'ride' ? 'Captain arriving in' : 'Arriving in'}{' '}
-              <span className={`${order.orderType === 'ride' ? 'text-yellow-600' : 'text-primary'} font-black animate-pulse`}>
+              {unifiedOrder.orderType === 'ride' ? 'Captain arriving in' : 'Estimated Delivery in'}{' '}
+              <span className={`${unifiedOrder.orderType === 'ride' ? 'text-yellow-600' : 'text-primary'} font-black animate-pulse`}>
                 {countdown} mins
               </span>
             </h2>
           )}
           <p className="text-xs text-muted font-semibold mt-1 flex items-center gap-1.5">
             <span className={`w-2.5 h-2.5 rounded-full ${
-              ['Delivered', 'Completed'].includes(order.status) 
-                ? 'bg-green-500' 
-                : order.orderType === 'ride' 
-                ? 'bg-yellow-500 animate-ping' 
+              ['Delivered', 'Completed'].includes(unifiedOrder.status)
+                ? 'bg-green-500'
+                : unifiedOrder.orderType === 'ride'
+                ? 'bg-yellow-500 animate-ping'
                 : 'bg-primary animate-ping'
             }`} />
-            <span>Active Status: <strong className="text-main font-bold">{order.status === 'Preparing' && order.orderType === 'ride' ? t('ride.captainAtPickup', 'Captain at Pickup') : t(`orderStatus.${order.status}`, order.status)}</strong></span>
+            <span>
+              Active Status: <strong className="text-main font-bold">
+                {unifiedOrder.status === 'Preparing' && unifiedOrder.orderType === 'ride'
+                  ? t('ride.captainAtPickup', 'Captain at Pickup')
+                  : unifiedOrder.status === 'Preparing' && unifiedOrder.isUnified
+                  ? 'Your rider is collecting your items'
+                  : t(`orderStatus.${unifiedOrder.status}`, unifiedOrder.status?.replace(/_/g, ' '))}
+              </strong>
+            </span>
           </p>
         </div>
 
         {/* Re-poll indicator */}
         <div className="flex items-center gap-1.5 text-[10px] text-muted font-semibold bg-base px-3 py-1.5 rounded-xl border border-line">
-          <RefreshCw className={`w-3.5 h-3.5 animate-spin ${order.orderType === 'ride' ? 'text-yellow-600' : 'text-primary'}`} />
-          <span>Polling Live Feed</span>
+          <RefreshCw className={`w-3.5 h-3.5 animate-spin ${unifiedOrder.orderType === 'ride' ? 'text-yellow-600' : 'text-primary'}`} />
+          <span>Live Tracking Active</span>
         </div>
       </div>
 
-      {/* Sibling Orders Selector */}
-      {allOrdersInSession.length > 1 && order.orderType !== 'ride' && (
-        <div className="bg-surface border border-gray-150 rounded-3xl p-4 flex flex-col gap-2.5 shadow-2xs">
-          <span className="text-[9px] text-muted font-extrabold uppercase tracking-wider px-1">
-            Track All Segments (Placed in Same Order)
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {allOrdersInSession.map((sessionOrder) => {
-              const isCurrent = sessionOrder._id === order._id;
-              const isStoreSeg = sessionOrder.orderType === 'store' || ['GROCERY', 'BAKERY', 'VEG_FRUITS', 'MEAT', 'STORE'].includes(String(sessionOrder.serviceType || '').toUpperCase());
-              const segName = isStoreSeg ? '🏬 Jinkzo Store' : (sessionOrder.restaurant?.name || '🍽️ Restaurant');
-              return (
-                <Link
-                  key={sessionOrder._id}
-                  to={`/order-tracking/${sessionOrder._id}`}
-                  className={`px-3.5 py-2 rounded-2xl text-[11px] font-bold transition-all border flex items-center gap-2 ${
-                    isCurrent
-                      ? 'bg-primary text-white border-primary shadow-xs'
-                      : 'bg-surface text-gray-650 border-line-strong hover:bg-base/50'
-                  }`}
-                >
-                  <span className="truncate max-w-[160px]">{segName}</span>
-                  <span className={`text-[8px] px-1.5 py-0.5 rounded font-extrabold uppercase ${
-                    isCurrent
-                      ? 'bg-surface/20 text-white'
-                      : ['Delivered', 'Completed'].includes(sessionOrder.status)
-                      ? 'bg-green-50 text-green-700 border border-green-150'
-                      : 'bg-violet-50 text-primary border border-violet-150'
-                  }`}>
-                    {sessionOrder.status?.replace(/_/g, ' ')}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-
       {/* Real Google Maps tracking map */}
-      {/* For rides:
-           pickupLocation / customerLocation = pickup (where rider heads FIRST)
-           dropLocation / restaurantLocation = destination (where rider heads AFTER pickup)
-           We pass them as ridePickupLat/Lng and rideDropLat/Lng so GoogleMapContainer
-           can route correctly for each phase without confusing food-order semantics.
-      */}
-      {!['Delivered', 'Completed'].includes(order.status) && (
-        <InteractiveMap 
-          status={order.status} 
-          restaurantLat={order.orderType !== 'ride' ? order.restaurantLocation?.lat : undefined}
-          restaurantLng={order.orderType !== 'ride' ? order.restaurantLocation?.lng : undefined}
-          customerLat={order.orderType !== 'ride' ? order.customerLocation?.lat : undefined}
-          customerLng={order.orderType !== 'ride' ? order.customerLocation?.lng : undefined}
-          deliveryMethod={order.orderType === 'ride' ? 'Ride' : 'Standard'}
-          orderId={order._id}
-          isRide={order.orderType === 'ride'}
-          ridePickupLat={order.orderType === 'ride' ? (order.pickupLocation?.lat ?? order.customerLocation?.lat) : undefined}
-          ridePickupLng={order.orderType === 'ride' ? (order.pickupLocation?.lng ?? order.customerLocation?.lng) : undefined}
-          rideDropLat={order.orderType === 'ride' ? (order.dropLocation?.lat ?? order.restaurantLocation?.lat) : undefined}
-          rideDropLng={order.orderType === 'ride' ? (order.dropLocation?.lng ?? order.restaurantLocation?.lng) : undefined}
+      {!['Delivered', 'Completed'].includes(unifiedOrder.status) && (
+        <InteractiveMap
+          status={unifiedOrder.status}
+          restaurantLat={unifiedOrder.orderType !== 'ride' ? unifiedOrder.restaurantLocation?.lat : undefined}
+          restaurantLng={unifiedOrder.orderType !== 'ride' ? unifiedOrder.restaurantLocation?.lng : undefined}
+          customerLat={unifiedOrder.orderType !== 'ride' ? unifiedOrder.customerLocation?.lat : undefined}
+          customerLng={unifiedOrder.orderType !== 'ride' ? unifiedOrder.customerLocation?.lng : undefined}
+          deliveryMethod={unifiedOrder.orderType === 'ride' ? 'Ride' : 'Standard'}
+          orderId={unifiedOrder._id}
+          isRide={unifiedOrder.orderType === 'ride'}
+          ridePickupLat={unifiedOrder.orderType === 'ride' ? (unifiedOrder.pickupLocation?.lat ?? unifiedOrder.customerLocation?.lat) : undefined}
+          ridePickupLng={unifiedOrder.orderType === 'ride' ? (unifiedOrder.pickupLocation?.lng ?? unifiedOrder.customerLocation?.lng) : undefined}
+          rideDropLat={unifiedOrder.orderType === 'ride' ? (unifiedOrder.dropLocation?.lat ?? unifiedOrder.restaurantLocation?.lat) : undefined}
+          rideDropLng={unifiedOrder.orderType === 'ride' ? (unifiedOrder.dropLocation?.lng ?? unifiedOrder.restaurantLocation?.lng) : undefined}
           riderLat={riderLoc?.lat}
           riderLng={riderLoc?.lng}
         />
       )}
 
       {/* Review & Suggestion Box */}
-      {['Delivered', 'Completed'].includes(order.status) && (
+      {['Delivered', 'Completed'].includes(unifiedOrder.status) && (
         <div className="bg-surface border border-line rounded-3xl p-6 shadow-2xs flex flex-col gap-4 animate-scale-up">
           <div className="flex items-center gap-2 border-b border-line pb-3">
             <span className="text-xl">⭐️</span>
             <div>
               <h3 className="font-display font-extrabold text-base text-main">
-                {order.orderType === 'ride' ? 'Rate Your Ride Experience' : 'Rate Your Order & Delivery'}
+                {unifiedOrder.orderType === 'ride' ? 'Rate Your Ride Experience' : 'Rate Your Order & Delivery'}
               </h3>
               <p className="text-xs text-muted font-semibold mt-0.5">Your feedback helps us improve our service</p>
             </div>
           </div>
 
-          {Number(order.review?.rating) > 0 ? (
+          {Number(unifiedOrder.review?.rating) > 0 ? (
             <div className="flex flex-col gap-3.5 bg-green-50/40 border border-green-100 rounded-2xl p-5 text-green-950">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <Check className="w-5 h-5 text-green-600 bg-green-100 p-0.5 rounded-full" />
-                  <span className="text-xs font-black uppercase text-green-700">Thank you for your feedback!</span>
+                  <span className="font-bold text-sm">Review Submitted</span>
                 </div>
-                <span className="text-[10px] text-muted font-bold">
-                  {formatAppDateOnly(order.review.createdAt)}
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star
-                    key={star}
-                    className={`w-5 h-5 ${
-                      star <= order.review.rating 
-                        ? 'text-yellow-500 fill-yellow-500' 
-                        : 'text-gray-200'
-                    }`}
-                  />
-                ))}
-              </div>
-              {order.review.comment && (
-                <div className="bg-surface border border-green-100/30 p-3.5 rounded-xl text-xs font-semibold text-main leading-relaxed">
-                  <p className="text-[9px] uppercase font-extrabold tracking-wider text-gray-450 mb-1">Your Suggestions</p>
-                  "{order.review.comment}"
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`w-4 h-4 ${
+                        star <= unifiedOrder.review.rating
+                          ? 'text-yellow-500 fill-yellow-500'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  ))}
                 </div>
+              </div>
+              {unifiedOrder.review.comment && (
+                <p className="text-xs text-gray-700 italic border-t border-green-200/50 pt-2.5 mt-0.5">
+                  "{unifiedOrder.review.comment}"
+                </p>
               )}
             </div>
           ) : (
             <form onSubmit={handleSubmitReview} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-0.5">Rating</label>
+                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-0.5">Your Rating</label>
                 <div className="flex items-center gap-2">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
@@ -485,13 +475,13 @@ export default function OrderTracking() {
                       onClick={() => setRating(star)}
                       onMouseEnter={() => setHoverRating(star)}
                       onMouseLeave={() => setHoverRating(0)}
-                      className="cursor-pointer transition-transform active:scale-95 focus:outline-none"
+                      className="p-1 text-2xl transition-transform hover:scale-125 focus:outline-none cursor-pointer"
                     >
                       <Star
-                        className={`w-8 h-8 transition-colors ${
+                        className={`w-7 h-7 ${
                           star <= (hoverRating || rating)
-                            ? 'text-yellow-400 fill-yellow-400 scale-105'
-                            : 'text-gray-300 hover:text-yellow-300'
+                            ? 'text-yellow-500 fill-yellow-500'
+                            : 'text-gray-300'
                         }`}
                       />
                     </button>
@@ -507,7 +497,7 @@ export default function OrderTracking() {
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   placeholder={
-                    order.orderType === 'ride' 
+                    unifiedOrder.orderType === 'ride'
                       ? 'Tell us about the captain, vehicle, safety or suggestions...'
                       : 'How was the food taste, packaging, delivery speed, and suggestions...'
                   }
@@ -531,6 +521,109 @@ export default function OrderTracking() {
         </div>
       )}
 
+      {/* YOUR ORDER BREAKDOWN SECTION (Food & Store Multi-Source) */}
+      {unifiedOrder.orderType !== 'ride' && (
+        <div className="bg-surface rounded-3xl p-6 border border-line shadow-2xs flex flex-col gap-4">
+          <div className="flex items-center justify-between border-b border-line pb-3">
+            <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5 text-primary" />
+              <span>Your Order ({unifiedOrder.totalItemCount} {unifiedOrder.totalItemCount === 1 ? 'item' : 'items'})</span>
+            </h3>
+            {unifiedOrder.isUnified && (
+              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-violet-100 text-primary dark:bg-violet-950/40 dark:text-violet-300">
+                One Order • {unifiedOrder.sources.length} Pickups
+              </span>
+            )}
+          </div>
+
+          {/* Sources with items */}
+          <div className="flex flex-col gap-4">
+            {unifiedOrder.sources.map((source, sIdx) => (
+              <div key={sIdx} className="bg-base/70 rounded-2xl p-4 border border-line flex flex-col gap-3">
+                <div className="flex items-center justify-between border-b border-line/60 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{source.icon}</span>
+                    <div>
+                      <h4 className="font-bold text-sm text-main">{source.name}</h4>
+                      <p className="text-[10px] text-muted font-medium">{source.items.length} {source.items.length === 1 ? 'item' : 'items'}</p>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
+                    source.isPickedUp
+                      ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300'
+                      : source.isReadyForPickup
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                  }`}>
+                    {source.statusText}
+                  </span>
+                </div>
+
+                <div className="flex flex-col divide-y divide-line/40">
+                  {source.items.map((it, itIdx) => (
+                    <div key={itIdx} className="py-2 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        {it.image && (
+                          <img
+                            src={getImageUrl(it.image, 'dish')}
+                            alt={it.name}
+                            onError={(e) => handleImageError(e, 'dish')}
+                            className="w-9 h-9 rounded-lg object-cover border border-line"
+                          />
+                        )}
+                        <div className="flex flex-col">
+                          <span className="font-bold text-main">{it.name} <span className="text-primary font-black">×{it.quantity}</span></span>
+                          {(it.weight || it.unit || it.packSize) && (
+                            <span className="text-[10px] text-muted">{it.weight || it.unit || it.packSize}</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="font-bold font-mono text-main">₹{((it.price || 0) * (it.quantity || 1)).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Financial Summary */}
+          <div className="bg-base border border-line rounded-2xl p-4 flex flex-col gap-2 mt-1">
+            <div className="flex justify-between text-xs text-muted font-semibold">
+              <span>Items Total</span>
+              <span className="text-main font-bold">₹{(unifiedOrder.subtotal || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-xs text-muted font-semibold">
+              <span>Delivery Fees</span>
+              <span className="text-main font-bold">₹{(unifiedOrder.deliveryFee || 0).toFixed(2)}</span>
+            </div>
+            {unifiedOrder.platformFee > 0 && (
+              <div className="flex justify-between text-xs text-muted font-semibold">
+                <span>Platform Fee</span>
+                <span className="text-main font-bold">₹{(unifiedOrder.platformFee || 0).toFixed(2)}</span>
+              </div>
+            )}
+            {unifiedOrder.promoDiscount > 0 && (
+              <div className="flex justify-between text-xs text-green-600 font-bold">
+                <span>Promo Discount</span>
+                <span>-₹{unifiedOrder.promoDiscount.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="border-t border-line pt-2 flex justify-between items-center">
+              <span className="font-extrabold text-sm text-main uppercase">Total Payable</span>
+              <span className="font-display font-black text-lg text-primary">₹{(unifiedOrder.total || 0).toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Reassurance Notice */}
+          <div className="bg-violet-50/60 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900/40 rounded-2xl p-3.5 text-center">
+            <p className="text-xs font-bold text-primary dark:text-primary-light flex items-center justify-center gap-1.5">
+              <span>🛵</span>
+              <span>All your items will be delivered together in one single delivery.</span>
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-5 gap-8 items-start">
         {/* Left 3 cols: Status Timeline */}
         <div className="md:col-span-3 bg-surface rounded-3xl p-6 border border-line shadow-2xs flex flex-col gap-5">
@@ -539,10 +632,10 @@ export default function OrderTracking() {
           </h3>
 
           <div className="flex flex-col gap-6 relative pl-6 border-l-2 border-line">
-            {order.status !== 'Rejected' && timelineSteps.map((step, idx) => {
+            {unifiedOrder.status !== 'Rejected' && timelineSteps.map((step, idx) => {
               const isCompleted = idx < activeIndex;
               const isActive = idx === activeIndex;
-              
+
               let bulletColor = 'bg-surface border-line-strong text-gray-300';
               if (isCompleted) bulletColor = 'bg-green-600 border-green-600 text-white';
               if (isActive) bulletColor = 'bg-primary border-primary text-white ring-4 ring-violet-50';
@@ -553,10 +646,10 @@ export default function OrderTracking() {
                   <div className={`absolute -left-9.5 top-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-black transition-all ${bulletColor}`}>
                     {isCompleted ? <Check className="w-3.5 h-3.5" /> : idx + 1}
                   </div>
-                  
+
                   <h4 className={`text-sm font-bold transition-colors ${
-                    isActive 
-                      ? order.orderType === 'ride' ? 'text-yellow-600' : 'text-primary' 
+                    isActive
+                      ? unifiedOrder.orderType === 'ride' ? 'text-yellow-600' : 'text-primary'
                       : isCompleted ? 'text-green-700' : 'text-muted'
                   }`}>
                     {step.label}
@@ -572,101 +665,101 @@ export default function OrderTracking() {
 
         {/* Right 2 cols: Agent & Receipt info */}
         <div className="md:col-span-2 flex flex-col gap-6">
-          
+
           {/* Delivery Instructions */}
-          {order.instruction && (
+          {unifiedOrder.instruction && (
             <div className="bg-violet-50/50 border border-violet-100 text-violet-900 rounded-3xl p-5 flex gap-2.5 text-xs leading-relaxed font-medium">
               <FileText className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
               <div>
                 <h5 className="font-bold text-main">Your Delivery Instructions</h5>
-                <p className="mt-0.5 text-gray-655 font-semibold">{order.instruction}</p>
+                <p className="mt-0.5 text-gray-655 font-semibold">{unifiedOrder.instruction}</p>
               </div>
             </div>
           )}
 
           {/* Delivery Rider profile card */}
-          {order.deliveryAgent && (
+          {unifiedOrder.deliveryAgent && (
             <div className={`rounded-3xl p-5 border shadow-2xs flex flex-col gap-4 ${
-              order.orderType === 'ride' ? 'bg-yellow-500/[0.02] border-yellow-200' : 'bg-surface border-line'
+              unifiedOrder.orderType === 'ride' ? 'bg-yellow-500/[0.02] border-yellow-200' : 'bg-surface border-line'
             }`}>
               <h3 className="font-display font-extrabold text-sm text-gray-855 border-b border-line pb-2">
-                {order.orderType === 'ride' ? 'Your Ride Captain' : 'Your Delivery Valet'}
+                {unifiedOrder.orderType === 'ride' ? 'Your Ride Captain' : 'Your Delivery Valet'}
               </h3>
 
               <div className="flex items-center gap-3">
                 {/* Rider Photo avatar */}
-                {order.deliveryAgent.profileImage ? (
+                {unifiedOrder.deliveryAgent.profileImage ? (
                   <img
-                    src={getImageUrl(order.deliveryAgent.profileImage, 'avatar')}
-                    alt={order.deliveryAgent.name}
+                    src={getImageUrl(unifiedOrder.deliveryAgent.profileImage, 'avatar')}
+                    alt={unifiedOrder.deliveryAgent.name}
                     onError={(e) => handleImageError(e, 'avatar')}
                     className="w-12 h-12 rounded-2xl object-cover border border-line"
                   />
                 ) : (
                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-base border ${
-                    order.orderType === 'ride' 
-                      ? 'bg-yellow-100 text-yellow-800 border-yellow-250' 
+                    unifiedOrder.orderType === 'ride'
+                      ? 'bg-yellow-100 text-yellow-800 border-yellow-250'
                       : 'bg-violet-50 text-primary border-violet-100'
                   }`}>
-                    {order.deliveryAgent.name[0]}
+                    {unifiedOrder.deliveryAgent.name[0]}
                   </div>
                 )}
                 <div className="flex flex-col gap-0.5 flex-grow">
-                  <h4 className="text-sm font-bold text-gray-755">{order.deliveryAgent.name}</h4>
+                  <h4 className="text-sm font-bold text-gray-755">{unifiedOrder.deliveryAgent.name}</h4>
                   <div className="flex items-center gap-1 text-[10px] text-muted font-bold">
                     <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
-                    <span>{(order.deliveryAgent.rating || 5.0).toFixed(1)} Rating</span>
+                    <span>{(unifiedOrder.deliveryAgent.rating || 5.0).toFixed(1)} Rating</span>
                   </div>
                 </div>
               </div>
 
               {/* Call agent buttons — only show when delivery is still in progress */}
               <div className="flex flex-col gap-2">
-                {!['Delivered', 'Completed'].includes(order.status) && (
+                {!['Delivered', 'Completed'].includes(unifiedOrder.status) && (
                 <div className="flex gap-2">
-                  <a 
-                    href={`tel:${order.deliveryAgent.phone}`}
+                  <a
+                    href={`tel:${unifiedOrder.deliveryAgent.phone}`}
                     className={`flex-grow text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                      order.orderType === 'ride' 
-                        ? 'bg-yellow-400 text-black hover:bg-yellow-500' 
+                      unifiedOrder.orderType === 'ride'
+                        ? 'bg-yellow-400 text-black hover:bg-yellow-500'
                         : 'bg-primary/10 hover:bg-primary/15 text-primary'
                     }`}
                   >
                     <Phone className="w-4 h-4" />
-                    <span>Call {order.deliveryAgent.name.split(' ')[0]}</span>
+                    <span>Call {unifiedOrder.deliveryAgent.name.split(' ')[0]}</span>
                   </a>
                 </div>
                 )}
 
-                {['Delivered', 'Completed'].includes(order.status) && (
-                  order.riderReview ? (
+                {['Delivered', 'Completed'].includes(unifiedOrder.status) && (
+                  unifiedOrder.riderReview ? (
                     <div className="bg-violet-50/40 border border-violet-100/35 rounded-2xl p-3 text-[11px] font-semibold text-main flex flex-col gap-1.5 mt-1">
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-muted uppercase tracking-wider text-[9px]">Rider Rating:</span>
                         <div className="flex items-center gap-0.5">
                           {[1, 2, 3, 4, 5].map((star) => (
-                            <Star key={star} className={`w-3.5 h-3.5 ${star <= order.riderReview.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-200'}`} />
+                            <Star key={star} className={`w-3.5 h-3.5 ${star <= unifiedOrder.riderReview.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-200'}`} />
                           ))}
                         </div>
                       </div>
-                      {order.riderReview.tipAmount > 0 && (
+                      {unifiedOrder.riderReview.tipAmount > 0 && (
                         <div className="flex justify-between items-center border-t border-violet-100/35 pt-1.5 mt-0.5">
                           <span className="font-bold text-muted uppercase tracking-wider text-[9px]">Tipped:</span>
-                          <span className="font-extrabold text-primary">₹{order.riderReview.tipAmount}</span>
+                          <span className="font-extrabold text-primary">₹{unifiedOrder.riderReview.tipAmount}</span>
                         </div>
                       )}
-                      {order.riderReview.comment && (
+                      {unifiedOrder.riderReview.comment && (
                         <div className="border-t border-violet-100/35 pt-1.5 mt-0.5">
                           <span className="font-bold text-muted uppercase tracking-wider text-[9px] block mb-0.5">Comment:</span>
-                          <p className="italic text-muted">"{order.riderReview.comment}"</p>
+                          <p className="italic text-muted">"{unifiedOrder.riderReview.comment}"</p>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <button 
+                    <button
                       onClick={() => setIsRiderModalOpen(true)}
                       className={`w-full text-xs font-bold py-2.5 rounded-xl transition-all cursor-pointer shadow-xs ${
-                        order.orderType === 'ride'
+                        unifiedOrder.orderType === 'ride'
                           ? 'bg-yellow-400 hover:bg-yellow-500 text-black'
                           : 'bg-primary hover:bg-primary-hover text-white'
                       }`}
@@ -680,7 +773,7 @@ export default function OrderTracking() {
           )}
 
           {/* Live Chat Panel */}
-          {order.deliveryAgent && (
+          {unifiedOrder.deliveryAgent && (
             <div className="rounded-3xl p-5 border shadow-2xs flex flex-col gap-3 bg-surface border-line">
               <h3 className="font-display font-extrabold text-sm text-main border-b border-line pb-2 flex items-center justify-between">
                 <span>Live Chat with Rider</span>
@@ -689,8 +782,8 @@ export default function OrderTracking() {
 
               {/* Scrollable messages container */}
               <div ref={chatContainerRef} className="h-64 overflow-y-auto flex flex-col gap-3.5 pr-1.5 scrollbar-thin">
-                {order.messages && order.messages.length > 0 ? (
-                  order.messages.map((msg, idx) => {
+                {unifiedOrder.messages && unifiedOrder.messages.length > 0 ? (
+                  unifiedOrder.messages.map((msg, idx) => {
                     if (msg.sender === 'system') {
                       return (
                         <div key={idx} className="text-[10px] text-muted font-bold text-center bg-base/70 py-1.5 px-3 rounded-lg w-max mx-auto max-w-[85%] border border-line">
@@ -701,13 +794,13 @@ export default function OrderTracking() {
 
                     const isMe = msg.sender === 'customer';
                     return (
-                      <div 
-                        key={idx} 
+                      <div
+                        key={idx}
                         className={`flex flex-col gap-1 max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
                       >
                         <div className={`px-3.5 py-2 rounded-2xl text-xs font-semibold leading-relaxed ${
-                          isMe 
-                            ? 'bg-primary text-white rounded-tr-none shadow-3xs' 
+                          isMe
+                            ? 'bg-primary text-white rounded-tr-none shadow-3xs'
                             : 'bg-gray-100 text-main rounded-tl-none border border-gray-150'
                         }`}>
                           {msg.text}
@@ -749,19 +842,19 @@ export default function OrderTracking() {
 
           {/* Secure Safe Badge */}
           <div className={`rounded-3xl p-4 flex gap-2.5 ${
-            order.orderType === 'ride' 
-              ? 'bg-yellow-50/40 border border-yellow-200/50 text-yellow-900' 
+            unifiedOrder.orderType === 'ride'
+              ? 'bg-yellow-50/40 border border-yellow-200/50 text-yellow-900'
               : 'bg-sky-50/50 border border-sky-100 text-sky-800'
           }`}>
-            <Shield className={`w-5 h-5 flex-shrink-0 mt-0.5 ${order.orderType === 'ride' ? 'text-yellow-700' : 'text-sky-700'}`} />
+            <Shield className={`w-5 h-5 flex-shrink-0 mt-0.5 ${unifiedOrder.orderType === 'ride' ? 'text-yellow-700' : 'text-sky-700'}`} />
             <div>
               <h5 className="font-bold text-xs">
-                {order.orderType === 'ride' ? 'Ride Shield Protection' : 'Assurance Protection'}
+                {unifiedOrder.orderType === 'ride' ? 'Ride Shield Protection' : 'Assurance Protection'}
               </h5>
               <p className="text-[9px] mt-0.5 leading-relaxed font-semibold">
-                {order.orderType === 'ride' 
+                {unifiedOrder.orderType === 'ride'
                   ? 'Your ride and packages are protected with instant insurance cover. Call customer care for ride safety guidelines.'
-                  : 'Your food is covered under our premium safety policy. Call support at any point for dispatch details.'
+                  : 'Your delivery is covered under our premium safety policy. Call support at any point for dispatch details.'
                 }
               </p>
             </div>
@@ -773,8 +866,8 @@ export default function OrderTracking() {
       <RiderFeedbackModal
         isOpen={isRiderModalOpen}
         onClose={() => setIsRiderModalOpen(false)}
-        orderId={order._id}
-        deliveryAgent={order.deliveryAgent}
+        orderId={unifiedOrder._id}
+        deliveryAgent={unifiedOrder.deliveryAgent}
         token={token}
         onFeedbackSubmit={(updatedOrder) => setOrder(updatedOrder)}
       />
