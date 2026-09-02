@@ -89,6 +89,12 @@ export const useAuthStore = create((set, get) => ({
         const data = await res.json();
         const currentToken = get().token || localStorage.getItem(ACCESS_KEY) || sessionToken;
         set({ user: data, token: currentToken, isAuthenticated: true, error: null });
+
+        // Register Web Push notification token
+        try {
+          const { setupWebNotifications } = await import('../services/webNotificationService');
+          setupWebNotifications(currentToken, data).catch(() => {});
+        } catch (e) {}
       } else if (res.status === 401 || res.status === 403) {
         get().logout();
       } else {
@@ -125,6 +131,12 @@ export const useAuthStore = create((set, get) => ({
       } catch (e) {
         console.error('Failed to fetch favourites on login:', e);
       }
+
+      // Register Web Push notification token
+      try {
+        const { setupWebNotifications } = await import('../services/webNotificationService');
+        setupWebNotifications(data.token, data.user).catch(() => {});
+      } catch (e) {}
 
       return { success: true };
     } catch (err) {
@@ -179,6 +191,12 @@ export const useAuthStore = create((set, get) => ({
         console.error('Failed to fetch favourites on register:', e);
       }
 
+      // Register Web Push notification token
+      try {
+        const { setupWebNotifications } = await import('../services/webNotificationService');
+        setupWebNotifications(data.token, data.user).catch(() => {});
+      } catch (e) {}
+
       return { success: true };
     } catch (err) {
       set({ error: err.message });
@@ -190,8 +208,15 @@ export const useAuthStore = create((set, get) => ({
 
   // ── Logout ──────────────────────────────────────────────────────────────────
   logout: async () => {
+    const token = get().token || localStorage.getItem(ACCESS_KEY);
+
+    // Unregister Web Push device token
     try {
-      const token = get().token;
+      const { unregisterWebNotifications } = await import('../services/webNotificationService');
+      unregisterWebNotifications(token).catch(() => {});
+    } catch (e) {}
+
+    try {
       const refreshToken = localStorage.getItem(REFRESH_KEY);
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
