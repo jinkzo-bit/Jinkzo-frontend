@@ -7,6 +7,7 @@ import { useCartStore } from '../store/cartStore';
 import { useTranslation } from '../store/languageStore';
 import { getRoute } from '../services/routingService';
 import LocationPickerModal from '../components/LocationPickerModal';
+import { formatCurrency } from '../utils/orderUtils';
 
 export default function RideBooking() {
   const { user, token } = useAuthStore();
@@ -692,7 +693,7 @@ export default function RideBooking() {
             {/* Total invoice block */}
             <div className="flex justify-between items-center text-sm font-bold text-main">
               <span>{t('checkout.totalPayable', 'Total to Pay')}</span>
-              <span className="text-primary text-base font-black">₹{fare.toFixed(2)}</span>
+              <span className="text-primary text-base font-black">{formatCurrency(fare)}</span>
             </div>
 
             {errorMsg && (

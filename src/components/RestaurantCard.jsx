@@ -5,6 +5,7 @@ import { useFavoriteStore } from '../store/favoriteStore';
 import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { checkRestaurantOpenStatus } from '../utils/timingUtils';
+import { formatRating } from '../utils/orderUtils';
 
 export default function RestaurantCard({ restaurant, isLoading }) {
   const { t } = useTranslation();
@@ -122,7 +123,7 @@ export default function RestaurantCard({ restaurant, isLoading }) {
           {/* Rating Pill */}
           <div className="flex items-center gap-0.5 bg-green-50 text-green-700 font-bold px-1.5 py-0.5 rounded-lg text-xs">
             <Star className="w-3.5 h-3.5 fill-green-700 stroke-green-700" />
-            <span>{numRating.toFixed(1)}</span>
+            <span>{formatRating(numRating)}</span>
           </div>
 
           <div className="flex items-center gap-1">

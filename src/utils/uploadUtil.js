@@ -30,29 +30,26 @@ export const getBackendOrigin = () => {
     return import.meta.env.VITE_BACKEND_URL.replace(/\/+$/, '');
   }
 
-  // 2. Absolute API_BASE (e.g., https://api.jinkzo.com/api or http://10.169.207.97:5000/api)
+  // 2. Absolute API_BASE (e.g., https://api.jinkzo.com/api)
   if (API_BASE && (API_BASE.startsWith('http://') || API_BASE.startsWith('https://'))) {
     try {
       const parsed = new URL(API_BASE);
-      return parsed.origin;
+      if (
+        typeof window !== 'undefined' &&
+        parsed.origin !== window.location.origin &&
+        !parsed.hostname.includes('localhost') &&
+        !parsed.hostname.includes('127.0.0.1')
+      ) {
+        return parsed.origin;
+      }
     } catch (e) {
-      // ignore and continue
+      // ignore
     }
   }
 
-  // 3. Browser environment resolution
-  if (typeof window !== 'undefined') {
-    const { protocol, hostname, port, origin } = window.location;
-    // In local development where Vite dev server runs on 5173/5174/3000
-    // and backend Express server runs on port 5000 on the host
-    if (port === '5173' || port === '5174' || port === '3000') {
-      return `${protocol}//${hostname}:5000`;
-    }
-    // In production build or custom reverse proxy, use current window origin
-    return origin;
-  }
-
-  return 'http://localhost:5000';
+  // 3. In local dev (Vite proxy active) or single-origin deployments,
+  // return empty string so assets resolve relative to window.location.origin
+  return '';
 };
 
 /**
@@ -61,9 +58,9 @@ export const getBackendOrigin = () => {
  * 1. Empty/null/undefined/file:// -> returns default fallback
  * 2. Blobs & Data URLs (from file picker previews) -> returns unchanged
  * 3. Absolute External URLs (https://..., http://...) -> returns unchanged directly
- * 4. Localhost upload paths -> converts to device-reachable backend origin
+ * 4. Localhost / IP upload paths -> strips local host and converts to relative /uploads/... path
  * 5. Frontend public assets (/assets/...) -> returns unchanged
- * 6. Local uploads (/uploads/..., uploads/..., or bare filenames) -> prepends backend origin
+ * 6. Local uploads (/uploads/..., uploads/..., or bare filenames) -> returns relative /uploads/... path
  *
  * @param {string} url - The raw image path or URL
  * @param {string} type - 'food' | 'restaurant' | 'banner' | 'category' | 'avatar' | 'default'
@@ -101,18 +98,17 @@ export const getImageUrl = (url, type = 'default') => {
     return trimmed.substring(httpIdx);
   }
 
-  // 3. Stored localhost / 127.0.0.1 upload paths (e.g. http://localhost:5000/uploads/... or http://127.0.0.1:5000/uploads/...)
-  // Dynamically normalize to current device-accessible backend origin so other mobile phones can load it
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/uploads\//i.test(trimmed)) {
-    const backendOrigin = getBackendOrigin();
-    const relativePath = trimmed.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, '');
-    return `${backendOrigin}${relativePath}`;
+  const backendOrigin = getBackendOrigin();
+
+  // 3. Stored localhost / 127.0.0.1 / IP upload paths (e.g. http://localhost:5000/uploads/... or http://10.x.x.x:5000/uploads/...)
+  // Dynamically normalize to relative /uploads/... path so mobile devices fetch via Vite proxy
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+)(:\d+)?\/uploads\//i.test(trimmed)) {
+    const relativePath = trimmed.replace(/^https?:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+)(:\d+)?/i, '');
+    return backendOrigin ? `${backendOrigin}${relativePath}` : relativePath;
   }
 
   // 4. Absolute External HTTPS / HTTP URLs (https://images.unsplash.com/..., https://res.cloudinary.com/..., etc.)
-  // Preserve valid external URLs unchanged
   if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
-    // If it's a localhost/127.0.0.1 URL that is NOT an /uploads/ path, return fallback
     if (trimmed.startsWith('http://localhost') || trimmed.startsWith('http://127.0.0.1')) {
       return fallback;
     }
@@ -125,25 +121,24 @@ export const getImageUrl = (url, type = 'default') => {
   }
 
   // 6. Backend uploaded images (/uploads/... or uploads/...)
-  const backendOrigin = getBackendOrigin();
   if (trimmed.startsWith('/uploads/')) {
-    return `${backendOrigin}${trimmed}`;
+    return backendOrigin ? `${backendOrigin}${trimmed}` : trimmed;
   }
   if (trimmed.startsWith('uploads/')) {
-    return `${backendOrigin}/${trimmed}`;
+    return backendOrigin ? `${backendOrigin}/${trimmed}` : `/${trimmed}`;
   }
 
   // 7. Bare uploaded filenames (e.g. img-1781293812-123.jpg or image-123.jpg)
   if (trimmed.startsWith('img-') || trimmed.startsWith('image-')) {
-    return `${backendOrigin}/uploads/${trimmed}`;
+    return backendOrigin ? `${backendOrigin}/uploads/${trimmed}` : `/uploads/${trimmed}`;
   }
 
   // 8. General relative path
   if (trimmed.startsWith('/')) {
-    return `${backendOrigin}${trimmed}`;
+    return backendOrigin ? `${backendOrigin}${trimmed}` : trimmed;
   }
 
-  return `${backendOrigin}/uploads/${trimmed}`;
+  return backendOrigin ? `${backendOrigin}/uploads/${trimmed}` : `/uploads/${trimmed}`;
 };
 
 /**
@@ -185,12 +180,12 @@ const validateImageFile = (file) => {
  * @param {File} file - The file object to upload
  * @returns {Promise<string>} The URL of the uploaded image
  */
-export const uploadFileToBackend = async (file) => {
+export const uploadFileToBackend = async (file, customToken = null) => {
   validateImageFile(file);
 
   const authState = useAuthStore.getState();
-  const token = authState.token;
-  if (!token && !authState.isAuthenticated) {
+  const token = customToken || authState.token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+  if (!token) {
     throw new Error('You must be logged in to upload images.');
   }
 

@@ -180,3 +180,26 @@ body {
 * {
   border-color: var(--color-line);
 }
+
+/* Service Card Heading Outline — Subtle, crisp black border */
+.service-title-outline {
+  -webkit-text-stroke: 0.75px #111111;
+  paint-order: stroke fill;
+  text-shadow:
+    -0.5px -0.5px 0 #111111,
+     0.5px -0.5px 0 #111111,
+    -0.5px  0.5px 0 #111111,
+     0.5px  0.5px 0 #111111;
+}
+
+@media (min-width: 768px) {
+  .service-title-outline {
+    -webkit-text-stroke: 1px #111111;
+    text-shadow:
+      -0.65px -0.65px 0 #111111,
+       0.65px -0.65px 0 #111111,
+      -0.65px  0.65px 0 #111111,
+       0.65px  0.65px 0 #111111;
+  }
+}
+

@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => ({
   // ── Development server proxy ───────────────────────────
   // In dev, forward /api/* to the backend so you never hit CORS issues
   server: {
+    host: '0.0.0.0',
     port: 5173,
     proxy: {
       '/api': {

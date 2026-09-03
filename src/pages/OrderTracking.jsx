@@ -1,12 +1,25 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Phone, Star, Shield, ArrowLeft, RefreshCw, Calendar, ShoppingBag, Check, Send, FileText } from 'lucide-react';
+import { Phone, Star, Shield, ArrowLeft, RefreshCw, Calendar, ShoppingBag, Check, Send, FileText, ShieldAlert } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from '../store/languageStore';
 import InteractiveMap from '../components/InteractiveMap';
 import { formatAppDateOnly, formatAppTimeOnly } from '../utils/dateUtils';
 import RiderFeedbackModal from '../components/RiderFeedbackModal';
+import RestaurantFeedbackModal from '../components/RestaurantFeedbackModal';
+import StoreFeedbackModal from '../components/StoreFeedbackModal';
+import CancelOrderModal from '../components/CancelOrderModal';
+import { 
+  getContributingFoodRestaurants, 
+  getContributingStoreSources, 
+  getCustomerCancellationEligibility,
+  getDeliveryFeeBreakdown,
+  getOrderDeliveredAt,
+  formatCurrency,
+  formatDistance,
+  formatRating
+} from '../utils/orderUtils';
 import { playStatusChangeSound, playCaptainAssignedSound, playDeliveredSound } from '../utils/audio';
 import { io } from 'socket.io-client';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
@@ -23,6 +36,9 @@ export default function OrderTracking() {
   const [riderLoc, setRiderLoc] = useState(null); // Socket GPS stream
   const [gpsStatus, setGpsStatus] = useState('locating'); // 'live' | 'locating' | 'unavailable'
 
+  // Cancellation modal state
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+
   // Review states
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
@@ -33,6 +49,14 @@ export default function OrderTracking() {
   // Rider review modal states
   const [isRiderModalOpen, setIsRiderModalOpen] = useState(false);
   const autoOpenTriggered = useRef(false);
+
+  // Restaurant review modal states
+  const [isRestaurantModalOpen, setIsRestaurantModalOpen] = useState(false);
+  const [selectedRestaurantForReview, setSelectedRestaurantForReview] = useState(null);
+
+  // Store review modal states (Grocery, Meat, Veg & Fruits, Bakery)
+  const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
+  const [selectedStoreForReview, setSelectedStoreForReview] = useState(null);
 
   const prevStatusRef = useRef(null);
   const prevAgentRef = useRef(null);
@@ -136,67 +160,93 @@ export default function OrderTracking() {
   };
 
   // Active polling function
-  useEffect(() => {
-    const fetchOrderDetails = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/orders/${id}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setOrder(data);
-
-          // Auto-open rider review modal if delivered and not yet reviewed
-          if (data.status === 'Delivered' && !(Number(data.riderReview?.rating) > 0) && !autoOpenTriggered.current) {
-            autoOpenTriggered.current = true;
-            setIsRiderModalOpen(true);
-          }
-
-          // Fetch Sibling orders if present in multi-restaurant checkout
-          if (data.siblingOrderIds && data.siblingOrderIds.length > 0) {
-            try {
-              const sibsPromises = data.siblingOrderIds.map(sibId =>
-                fetch(`${API_BASE}/orders/${sibId}`, {
-                  headers: { 'Authorization': `Bearer ${token}` }
-                }).then(r => r.json())
-              );
-              const sibsData = await Promise.all(sibsPromises);
-              setSiblingOrders(sibsData.filter(o => o && o._id));
-            } catch (sibErr) {
-              console.error('Error fetching sibling orders:', sibErr);
-            }
-          } else {
-            setSiblingOrders([]);
-          }
-          
-          // No longer fetching restaurant details for map geocoding — relying solely on exact coordinates from snapshot
-          
-          // Adjust countdown based on status
-          const isRide = data.orderType === 'ride';
-          if (data.status === 'Placed') setCountdown(isRide ? 12 : 28);
-          else if (data.status === 'Confirmed') setCountdown(isRide ? 10 : 25);
-          else if (data.status === 'Preparing') setCountdown(isRide ? 8 : 20);
-          else if (data.status === 'Out for Delivery') setCountdown(isRide ? 5 : 10);
-          else if (data.status === 'Delivered') setCountdown(0);
+  const fetchOrderDetails = React.useCallback(async () => {
+    if (!id || !token) return;
+    try {
+      const res = await fetch(`${API_BASE}/orders/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
-      } catch (err) {
-        console.error('Fetch tracking order error:', err);
-      } finally {
-        setIsLoading(false);
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setOrder(data);
+
+        // Auto-open rider review modal if delivered and not yet reviewed
+        if (data.status === 'Delivered' && !(Number(data.riderReview?.rating) > 0) && !autoOpenTriggered.current) {
+          autoOpenTriggered.current = true;
+          setIsRiderModalOpen(true);
+        }
+
+        // Fetch Sibling orders if present in multi-restaurant checkout
+        if (data.siblingOrderIds && data.siblingOrderIds.length > 0) {
+          try {
+            const sibsPromises = data.siblingOrderIds.map(sibId =>
+              fetch(`${API_BASE}/orders/${sibId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              }).then(r => r.json())
+            );
+            const sibsData = await Promise.all(sibsPromises);
+            setSiblingOrders(sibsData.filter(o => o && o._id));
+          } catch (sibErr) {
+            console.error('Error fetching sibling orders:', sibErr);
+          }
+        } else {
+          setSiblingOrders([]);
+        }
+        
+        // Adjust countdown based on status
+        const isRide = data.orderType === 'ride';
+        if (data.status === 'Placed') setCountdown(isRide ? 12 : 28);
+        else if (data.status === 'Confirmed') setCountdown(isRide ? 10 : 25);
+        else if (data.status === 'Preparing') setCountdown(isRide ? 8 : 20);
+        else if (data.status === 'Out for Delivery') setCountdown(isRide ? 5 : 10);
+        else if (data.status === 'Delivered') setCountdown(0);
+      }
+    } catch (err) {
+      console.error('Fetch tracking order error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id, token]);
+
+  // Dynamic pickup progress calculation helper
+  const pickupProgress = order ? {
+    activeStops: (order.pickupStops || []).filter(s => s.status !== 'Rejected' && s.status !== 'Cancelled'),
+    totalActive: (order.pickupStops || []).filter(s => s.status !== 'Rejected' && s.status !== 'Cancelled').length,
+    collectedCount: (order.pickupStops || []).filter(s => s.status !== 'Rejected' && s.status !== 'Cancelled' && s.status === 'Collected').length,
+    allCollected: (order.pickupStops || []).filter(s => s.status !== 'Rejected' && s.status !== 'Cancelled').length > 0 &&
+                  (order.pickupStops || []).filter(s => s.status !== 'Rejected' && s.status !== 'Cancelled' && s.status === 'Collected').length ===
+                  (order.pickupStops || []).filter(s => s.status !== 'Rejected' && s.status !== 'Cancelled').length
+  } : { activeStops: [], totalActive: 0, collectedCount: 0, allCollected: false };
+
+  useEffect(() => {
+    fetchOrderDetails();
+  }, [fetchOrderDetails]);
+
+  // Fallback revalidation: Poll every 10 seconds ONLY while order is active
+  useEffect(() => {
+    if (!order || ['Delivered', 'Completed', 'Cancelled', 'Rejected'].includes(order.status)) return;
+    const pollInterval = setInterval(fetchOrderDetails, 10000);
+    return () => clearInterval(pollInterval);
+  }, [order?.status, fetchOrderDetails]);
+
+  // Re-fetch latest order data on window focus / tab visibility change
+  useEffect(() => {
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        fetchOrderDetails();
       }
     };
+    window.addEventListener('visibilitychange', handleFocus);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('visibilitychange', handleFocus);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [fetchOrderDetails]);
 
-    fetchOrderDetails();
-    
-    // Poll every 60 seconds as a fallback, relying primarily on Socket.IO for real-time updates
-    const pollInterval = setInterval(fetchOrderDetails, 60000);
-
-    return () => clearInterval(pollInterval);
-  }, [id, token, restaurantAddress]);
-
-  // Socket.IO real-time status update subscription
+  // Socket.IO real-time status & pickupStops update subscription
   useEffect(() => {
     if (!id || !token) return;
 
@@ -207,16 +257,34 @@ export default function OrderTracking() {
       transports: ['websocket', 'polling']
     });
 
-    socket.emit('joinOrder', id);
+    const joinRooms = () => {
+      socket.emit('joinOrder', id);
+      socket.emit('join', `order_${id}`);
+      socket.emit('join', `order:${id}`);
+    };
 
-    socket.on('statusUpdated', ({ status, order: updatedOrder }) => {
-      console.log('[TRACKING SOCKET] Status update received:', status);
-      if (updatedOrder) {
-        setOrder(updatedOrder);
-      } else {
-        setOrder(prev => prev ? { ...prev, status } : null);
+    joinRooms();
+
+    const handleOrderUpdate = (data) => {
+      console.log('[TRACKING SOCKET] Order update received:', data);
+      if (!data) return;
+      if (data.order && typeof data.order === 'object') {
+        setOrder(data.order);
+      } else if (data.orderId && String(data.orderId) === String(id)) {
+        setOrder(prev => {
+          if (!prev) return null;
+          const updated = { ...prev };
+          if (data.status) updated.status = data.status;
+          if (data.pickupStops) updated.pickupStops = data.pickupStops;
+          return updated;
+        });
       }
-    });
+    };
+
+    socket.on('statusUpdated', handleOrderUpdate);
+    socket.on('pickupStopUpdated', handleOrderUpdate);
+    socket.on('orderUpdated', handleOrderUpdate);
+    socket.on('orderStatusChanged', handleOrderUpdate);
 
     socket.on('locationUpdated', ({ lat, lng, status }) => {
       console.log('[TRACKING SOCKET] Live rider location update:', lat, lng);
@@ -228,10 +296,15 @@ export default function OrderTracking() {
       }
     });
 
+    socket.on('connect', () => {
+      joinRooms();
+      fetchOrderDetails();
+    });
+
     return () => {
       socket.disconnect();
     };
-  }, [id, token]);
+  }, [id, token, fetchOrderDetails]);
 
   // Handle countdown decrement simulation
   useEffect(() => {
@@ -265,6 +338,7 @@ export default function OrderTracking() {
 
   const isCatalogOrder = !order.restaurantId && Array.isArray(order.supplierDeliveries) && order.supplierDeliveries.length > 0;
   const isMixedOrder = order.restaurantId && Array.isArray(order.supplierDeliveries) && order.supplierDeliveries.length > 0;
+  const cancelEligibility = getCustomerCancellationEligibility(order);
 
   const timelineSteps = order.orderType === 'ride' ? [
     { label: 'Booking Placed', mappedState: 0, desc: 'Finding nearest Ride Captain' },
@@ -289,39 +363,37 @@ export default function OrderTracking() {
         ? 'Delivery partner is heading to the store'
         : 'Accepted & being prepared'
     },
-    { label: 'Collecting Items', mappedState: 2, desc: 'Rider is collecting your order from pickup locations' },
-    { label: 'Out for Delivery', mappedState: 3, desc: 'Rider is driving to you' },
-    { label: 'Delivered', mappedState: 4, desc: isCatalogOrder ? 'Enjoy your items!' : 'Enjoy your meal!' }
+    {
+      label: 'Out for Delivery',
+      mappedState: 2,
+      desc: isCatalogOrder ? 'Order has been picked up from store' : 'Food picked up & on the way'
+    },
+    {
+      label: 'Delivered',
+      mappedState: 3,
+      desc: isCatalogOrder ? 'Delivered safely to customer' : 'Enjoy your meal!'
+    }
   ];
 
-  const getStepIndex = (currentStatus, type) => {
-    if (type === 'ride') {
-      if (currentStatus === 'Placed') return 0;
-      if (['Confirmed', 'Rider_Assigned', 'Rider_Accepted'].includes(currentStatus)) return 1;
-      if (currentStatus === 'Rider_At_Pickup') return 2;
-      if (currentStatus === 'Picked_Up') return 3;
-      if (['Delivered', 'Completed'].includes(currentStatus)) return 4;
-      return 0;
-    } else {
-      // Food / Catalog / Mixed — UNIFIED
-      if (currentStatus === 'Placed') return 0;
-      if (currentStatus === 'Confirmed' || currentStatus === 'Accepted' || currentStatus === 'Preparing') return 1;
-      if (['Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up'].includes(currentStatus)) return 2;
-      if (['Out for Delivery', 'Out_for_Delivery', 'Rider_At_Customer'].includes(currentStatus)) return 3;
-      if (currentStatus === 'Delivered' || currentStatus === 'Completed') return 4;
-      return 0;
-    }
-  };
+  // Map order.status into step index
+  let activeIndex = 0;
+  if (order.status === 'Placed') activeIndex = 0;
+  else if (['Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned'].includes(order.status)) activeIndex = 1;
+  else if (['Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer'].includes(order.status)) activeIndex = 2;
+  else if (['Delivered', 'Completed'].includes(order.status)) activeIndex = 3;
 
-  const activeIndex = getStepIndex(order.status, order.orderType);
-  const allOrdersInSession = [order, ...siblingOrders].sort((a, b) => String(a._id).localeCompare(String(b._id)));
+  // Active status color badge
+  const isPending = ['Placed', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer'].includes(order.status);
+
+  // Group all orders placed in this checkout session
+  const allOrdersInSession = [order, ...siblingOrders];
 
   return (
-    <div className="max-w-4xl mx-auto px-4 md:px-8 pb-32 animate-fade-in flex flex-col gap-6 w-full">
-      {/* Back button */}
-      <div className="flex items-center justify-between border-b border-line pb-4">
+    <div className="max-w-4xl mx-auto px-4 md:px-6 pb-28 pt-4 flex flex-col gap-6 animate-fade-in w-full">
+      {/* Top Bar Navigation */}
+      <div className="flex items-center justify-between">
         <Link 
-          to="/profile" 
+          to="/order-history" 
           className="flex items-center gap-1 text-xs text-muted hover:text-primary font-bold cursor-pointer transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -364,10 +436,31 @@ export default function OrderTracking() {
           </p>
         </div>
 
-        {/* Re-poll indicator */}
-        <div className="flex items-center gap-1.5 text-[10px] text-muted font-semibold bg-base px-3 py-1.5 rounded-xl border border-line">
-          <RefreshCw className={`w-3.5 h-3.5 animate-spin ${order.orderType === 'ride' ? 'text-yellow-600' : 'text-primary'}`} />
-          <span>Polling Live Feed</span>
+        {/* Actions & Live Feed Bar */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {!['Delivered', 'Completed', 'Cancelled', 'Rejected'].includes(order.status) && (
+            <div className="flex items-center gap-1.5 text-[10px] text-muted font-semibold bg-base px-3 py-1.5 rounded-xl border border-line">
+              <RefreshCw className={`w-3.5 h-3.5 animate-spin ${order.orderType === 'ride' ? 'text-yellow-600' : 'text-primary'}`} />
+              <span>Polling Live Feed</span>
+            </div>
+          )}
+
+          {/* Customer Cancellation Action */}
+          {!['Delivered', 'Completed', 'Cancelled', 'Rejected'].includes(order.status) && (
+            cancelEligibility.canCancelAnything ? (
+              <button
+                onClick={() => setIsCancelModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs font-extrabold text-red-600 bg-red-50 hover:bg-red-100 border border-red-300 px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+              >
+                <ShieldAlert className="w-4 h-4 text-red-500" />
+                <span>{order.orderType === 'ride' ? 'Cancel Ride' : 'Cancel Order'}</span>
+              </button>
+            ) : (
+              <span className="text-[10px] text-muted font-bold bg-base/80 border border-line px-2.5 py-1.5 rounded-xl">
+                Cancellation unavailable
+              </span>
+            )
+          )}
         </div>
       </div>
 
@@ -442,201 +535,515 @@ export default function OrderTracking() {
         />
       )}
 
-      {/* Review & Suggestion Box */}
+      {/* ── YOUR FEEDBACK / RATINGS SECTION ── */}
       {['Delivered', 'Completed'].includes(order.status) && (
-        <div className="bg-surface border border-line rounded-3xl p-6 shadow-2xs flex flex-col gap-4 animate-scale-up">
-          <div className="flex items-center gap-2 border-b border-line pb-3">
-            <span className="text-xl">⭐️</span>
-            <div>
-              <h3 className="font-display font-extrabold text-base text-main">
-                {order.orderType === 'ride' ? 'Rate Your Ride Experience' : 'Rate Your Order & Delivery'}
-              </h3>
-              <p className="text-xs text-muted font-semibold mt-0.5">Your feedback helps us improve our service</p>
+        <div className="bg-surface border border-line rounded-3xl p-6 shadow-2xs flex flex-col gap-5 animate-scale-up">
+          <div className="flex items-center justify-between border-b border-line pb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">⭐️</span>
+              <div>
+                <h3 className="font-display font-extrabold text-base text-main">
+                  Your Feedback & Ratings
+                </h3>
+                <p className="text-xs text-muted font-medium mt-0.5">
+                  Thank you for helping us maintain high quality standards
+                </p>
+              </div>
             </div>
           </div>
 
-          {Number(order.review?.rating) > 0 ? (
-            <div className="flex flex-col gap-3.5 bg-green-50/40 border border-green-100 rounded-2xl p-5 text-green-950">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Check className="w-5 h-5 text-green-600 bg-green-100 p-0.5 rounded-full" />
-                  <span className="text-xs font-black uppercase text-green-700">Thank you for your feedback!</span>
-                </div>
-                <span className="text-[10px] text-muted font-bold">
-                  {formatAppDateOnly(order.review.createdAt)}
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star
-                    key={star}
-                    className={`w-5 h-5 ${
-                      star <= order.review.rating 
-                        ? 'text-yellow-500 fill-yellow-500' 
-                        : 'text-gray-200'
-                    }`}
-                  />
-                ))}
-              </div>
-              {order.review.comment && (
-                <div className="bg-surface border border-green-100/30 p-3.5 rounded-xl text-xs font-semibold text-main leading-relaxed">
-                  <p className="text-[9px] uppercase font-extrabold tracking-wider text-gray-450 mb-1">Your Suggestions</p>
-                  "{order.review.comment}"
-                </div>
-              )}
-            </div>
-          ) : (
-            <form onSubmit={handleSubmitReview} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-0.5">Rating</label>
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setRating(star)}
-                      onMouseEnter={() => setHoverRating(star)}
-                      onMouseLeave={() => setHoverRating(0)}
-                      className="cursor-pointer transition-transform active:scale-95 focus:outline-none"
-                    >
-                      <Star
-                        className={`w-8 h-8 transition-colors ${
-                          star <= (hoverRating || rating)
-                            ? 'text-yellow-400 fill-yellow-400 scale-105'
-                            : 'text-gray-300 hover:text-yellow-300'
-                        }`}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 1. DELIVERY RIDER RATING */}
+            {order.deliveryAgent && order.deliveryAgent.name && (
+              <div className="bg-base border border-line rounded-2xl p-4 flex flex-col justify-between gap-3">
+                <div className="flex flex-col gap-2">
+                  <span className="text-[10px] uppercase font-extrabold text-muted tracking-wider">
+                    {order.orderType === 'ride' ? 'Ride Captain' : 'Delivery Rider'}
+                  </span>
+
+                  <div className="flex items-center gap-3">
+                    {order.deliveryAgent.profileImage ? (
+                      <img
+                        src={getImageUrl(order.deliveryAgent.profileImage, 'avatar')}
+                        alt={order.deliveryAgent.name}
+                        onError={(e) => handleImageError(e, 'avatar')}
+                        className="w-11 h-11 rounded-xl object-cover border border-line"
                       />
-                    </button>
-                  ))}
+                    ) : (
+                      <div className="w-11 h-11 rounded-xl bg-violet-100 dark:bg-violet-950/50 text-primary font-black text-base flex items-center justify-center border border-violet-200">
+                        {order.deliveryAgent.name ? order.deliveryAgent.name[0].toUpperCase() : 'R'}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col">
+                      <h4 className="font-bold text-sm text-main">{order.deliveryAgent.name}</h4>
+                      {order.deliveryAgent.rating != null && (
+                        <span className="text-[10px] text-yellow-500 font-bold">
+                          ★ {formatRating(order.deliveryAgent.rating)} Current Rating
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
+                {order.riderReview && Number(order.riderReview.rating) > 0 ? (
+                  <div className="bg-green-50/50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl p-3 flex flex-col gap-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold uppercase text-green-800 dark:text-green-300">
+                        Your Rating:
+                      </span>
+                      <div className="flex items-center gap-0.5">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star
+                            key={star}
+                            className={`w-3.5 h-3.5 ${
+                              star <= order.riderReview.rating
+                                ? 'text-yellow-500 fill-yellow-500'
+                                : 'text-gray-200'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {order.riderReview.comment && (
+                      <p className="text-muted italic text-[11px]">
+                        "{order.riderReview.comment}"
+                      </p>
+                    )}
+
+                    {order.riderReview.tipAmount > 0 && (
+                      <span className="text-[10px] font-bold text-green-700 dark:text-green-400">
+                        Tip: ₹{order.riderReview.tipAmount}
+                      </span>
+                    )}
+
+                    <span className="text-[10px] font-bold text-green-700 dark:text-green-400 flex items-center gap-1 mt-0.5">
+                      <Check className="w-3 h-3" /> Feedback submitted
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsRiderModalOpen(true)}
+                    className="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold py-2.5 rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                    <span>Rate & Tip Rider</span>
+                  </button>
+                )}
               </div>
+            )}
 
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="reviewComment" className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-0.5">Suggestions & Comments</label>
-                <textarea
-                  id="reviewComment"
-                  rows={3}
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder={
-                    order.orderType === 'ride' 
-                      ? 'Tell us about the captain, vehicle, safety or suggestions...'
-                      : 'How was the food taste, packaging, delivery speed, and suggestions...'
-                  }
-                  className="bg-base border border-line-strong focus:border-primary focus:bg-surface rounded-2xl px-4 py-3 text-xs text-main outline-none resize-none leading-relaxed transition-all"
-                />
+            {/* 2. RESTAURANT(S) RATINGS */}
+            {order.orderType !== 'ride' && getContributingFoodRestaurants(order).length > 0 && (
+              <div className="flex flex-col gap-3">
+                {getContributingFoodRestaurants(order).map((rest) => {
+                  const restReview = Array.isArray(order.restaurantReviews)
+                    ? order.restaurantReviews.find((r) => String(r.restaurantId) === String(rest.id))
+                    : (order.review && (!order.restaurantId || String(order.restaurantId) === String(rest.id)) ? order.review : null);
+
+                  return (
+                    <div key={rest.id} className="bg-base border border-line rounded-2xl p-4 flex flex-col justify-between gap-3">
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[10px] uppercase font-extrabold text-muted tracking-wider">
+                          Restaurant Food & Packaging
+                        </span>
+
+                        <div className="flex items-center gap-3">
+                          {rest.image ? (
+                            <img
+                              src={getImageUrl(rest.image, 'restaurant')}
+                              alt={rest.name}
+                              onError={(e) => handleImageError(e, 'restaurant')}
+                              className="w-11 h-11 rounded-xl object-cover border border-line"
+                            />
+                          ) : (
+                            <div className="w-11 h-11 rounded-xl bg-primary text-white font-black text-base flex items-center justify-center">
+                              🍽️
+                            </div>
+                          )}
+
+                          <div className="flex flex-col">
+                            <h4 className="font-bold text-sm text-main">{rest.name}</h4>
+                            <span className="text-[10px] text-muted font-medium">Food Partner</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {restReview && Number(restReview.rating) > 0 ? (
+                        <div className="bg-green-50/50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl p-3 flex flex-col gap-1.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase text-green-800 dark:text-green-300">
+                              Your Rating:
+                            </span>
+                            <div className="flex items-center gap-0.5">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`w-3.5 h-3.5 ${
+                                    star <= restReview.rating
+                                      ? 'text-yellow-500 fill-yellow-500'
+                                      : 'text-gray-200'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+
+                          {restReview.comment && (
+                            <p className="text-muted italic text-[11px]">
+                              "{restReview.comment}"
+                            </p>
+                          )}
+
+                          <span className="text-[10px] font-bold text-green-700 dark:text-green-400 flex items-center gap-1 mt-0.5">
+                            <Check className="w-3 h-3" /> Feedback submitted
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setSelectedRestaurantForReview(rest);
+                            setIsRestaurantModalOpen(true);
+                          }}
+                          className="w-full bg-violet-50 hover:bg-violet-100 text-primary border border-violet-200 text-xs font-bold py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                          <span>Rate Restaurant</span>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+            )}
 
-              {reviewError && (
-                <p className="text-xs font-bold text-red-500">{reviewError}</p>
-              )}
+            {/* 3. STORE / SUPPLIER(S) RATINGS (Grocery, Meat, Veg & Fruits, Bakery) */}
+            {order.orderType !== 'ride' && getContributingStoreSources(order).length > 0 && (
+              <div className="flex flex-col gap-3">
+                {getContributingStoreSources(order).map((src) => {
+                  const storeReview = Array.isArray(order.storeReviews)
+                    ? order.storeReviews.find((r) => String(r.sourceId) === String(src.sourceId) && r.serviceType === src.serviceType)
+                    : null;
 
-              <button
-                type="submit"
-                disabled={rating === 0 || isSubmittingReview}
-                className="bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-6 rounded-2xl cursor-pointer shadow-md disabled:opacity-50 transition-all w-full md:w-max md:self-end"
-              >
-                {isSubmittingReview ? 'Submitting Review...' : 'Submit Feedback'}
-              </button>
-            </form>
-          )}
+                  return (
+                    <div key={`${src.sourceId}_${src.serviceType}`} className="bg-base border border-line rounded-2xl p-4 flex flex-col justify-between gap-3">
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[10px] uppercase font-extrabold text-muted tracking-wider">
+                          {src.serviceLabel} Fulfillment & Quality
+                        </span>
+
+                        <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 flex items-center justify-center font-bold text-base border border-emerald-200">
+                            🏪
+                          </div>
+
+                          <div className="flex flex-col">
+                            <h4 className="font-bold text-sm text-main">{src.sourceName}</h4>
+                            <span className="text-[10px] text-muted font-medium">{src.serviceLabel} Partner</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {storeReview && Number(storeReview.rating) > 0 ? (
+                        <div className="bg-green-50/50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl p-3 flex flex-col gap-1.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase text-green-800 dark:text-green-300">
+                              Your Rating:
+                            </span>
+                            <div className="flex items-center gap-0.5">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`w-3.5 h-3.5 ${
+                                    star <= storeReview.rating
+                                      ? 'text-yellow-500 fill-yellow-500'
+                                      : 'text-gray-200'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+
+                          {storeReview.comment && (
+                            <p className="text-muted italic text-[11px]">
+                              "{storeReview.comment}"
+                            </p>
+                          )}
+
+                          <span className="text-[10px] font-bold text-green-700 dark:text-green-400 flex items-center gap-1 mt-0.5">
+                            <Check className="w-3 h-3" /> Feedback submitted
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setSelectedStoreForReview(src);
+                            setIsStoreModalOpen(true);
+                          }}
+                          className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                          <span>Rate {src.serviceLabel}</span>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-8 items-start">
-        {/* Left 3 cols: Status Timeline */}
-        <div className="md:col-span-3 bg-surface rounded-3xl p-6 border border-line shadow-2xs flex flex-col gap-5">
-          <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">
-            Delivery Timeline
-          </h3>
+        {/* Left 3 cols: Status Timeline (ACTIVE ORDERS ONLY) or Completed Order Summary */}
+        {!['Delivered', 'Completed'].includes(order.status) ? (
+          <div className="md:col-span-3 bg-surface rounded-3xl p-6 border border-line shadow-2xs flex flex-col gap-5">
+            <div className="flex justify-between items-center border-b border-line pb-3 gap-2 flex-wrap">
+              <h3 className="font-display font-extrabold text-base text-main">
+                Delivery Timeline
+              </h3>
+              {cancelEligibility.canCancelAnything && (
+                <button
+                  onClick={() => setIsCancelModalOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-extrabold text-red-600 bg-red-50 hover:bg-red-100 border border-red-300 px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                >
+                  <ShieldAlert className="w-4 h-4 text-red-500" />
+                  <span>{order.orderType === 'ride' ? 'Cancel Ride' : 'Cancel Order'}</span>
+                </button>
+              )}
+            </div>
 
-          <div className="flex flex-col gap-6 relative pl-6 border-l-2 border-line">
-            {order.status !== 'Rejected' && timelineSteps.map((step, idx) => {
-              const isCompleted = idx < activeIndex;
-              const isActive = idx === activeIndex;
-              
-              let bulletColor = 'bg-surface border-line-strong text-gray-300';
-              if (isCompleted) bulletColor = 'bg-green-600 border-green-600 text-white';
-              if (isActive) bulletColor = 'bg-primary border-primary text-white ring-4 ring-violet-50';
+            <div className="flex flex-col gap-6 relative pl-6 border-l-2 border-line">
+              {order.status !== 'Rejected' && timelineSteps.map((step, idx) => {
+                const isCompleted = idx < activeIndex;
+                const isActive = idx === activeIndex;
+                
+                let bulletColor = 'bg-surface border-line-strong text-gray-300';
+                if (isCompleted) bulletColor = 'bg-green-600 border-green-600 text-white';
+                if (isActive) bulletColor = 'bg-primary border-primary text-white ring-4 ring-violet-50';
 
-              return (
-                <div key={idx} className="relative flex flex-col gap-0.5">
-                  {/* Timeline Bullet */}
-                  <div className={`absolute -left-9.5 top-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-black transition-all ${bulletColor}`}>
-                    {isCompleted ? <Check className="w-3.5 h-3.5" /> : idx + 1}
-                  </div>
-                  
-                  <h4 className={`text-sm font-bold transition-colors flex items-center gap-2 flex-wrap ${
-                    isActive 
-                      ? order.orderType === 'ride' ? 'text-yellow-600' : 'text-primary' 
-                      : isCompleted ? 'text-green-700' : 'text-muted'
-                  }`}>
-                    <span>{step.label}</span>
+                return (
+                  <div key={idx} className="relative flex flex-col gap-0.5">
+                    {/* Timeline Bullet */}
+                    <div className={`absolute -left-9.5 top-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-black transition-all ${bulletColor}`}>
+                      {isCompleted ? <Check className="w-3.5 h-3.5" /> : idx + 1}
+                    </div>
+                    
+                    <h4 className={`text-sm font-bold transition-colors flex items-center gap-2 flex-wrap ${
+                      isActive 
+                        ? order.orderType === 'ride' ? 'text-yellow-600' : 'text-primary' 
+                        : isCompleted ? 'text-green-700' : 'text-muted'
+                    }`}>
+                      <span>{step.label}</span>
+                      {step.mappedState === 2 && Array.isArray(order.pickupStops) && order.pickupStops.length > 0 && (
+                        <span className="text-[10px] font-extrabold text-primary bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
+                          {pickupProgress.collectedCount}/{pickupProgress.totalActive} Collected
+                        </span>
+                      )}
+                    </h4>
+                    <p className="text-xs text-muted leading-relaxed font-semibold">
+                      {step.mappedState === 2 && pickupProgress.allCollected && !['Out_for_Delivery', 'Out for Delivery', 'Delivered', 'Completed'].includes(order.status)
+                        ? '3/3 Collected — All pickup items collected — Rider will start delivery shortly'
+                        : step.desc}
+                    </p>
+
+                    {/* Multi-stop pickup sources progress breakdown */}
                     {step.mappedState === 2 && Array.isArray(order.pickupStops) && order.pickupStops.length > 0 && (
-                      <span className="text-[10px] font-extrabold text-primary bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
-                        {order.pickupStops.filter(s => s.status === 'Collected').length}/{order.pickupStops.length} Collected
-                      </span>
-                    )}
-                  </h4>
-                  <p className="text-xs text-muted leading-relaxed font-semibold">
-                    {step.desc}
-                  </p>
+                      <div className="mt-2 flex flex-col gap-1.5 bg-base/80 border border-line rounded-2xl p-3">
+                        <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">
+                          Pickup Sources ({order.pickupStops.filter(s => s.status !== 'Rejected' && s.status !== 'Cancelled' && s.status === 'Collected').length} of {order.pickupStops.filter(s => s.status !== 'Rejected' && s.status !== 'Cancelled').length} Completed)
+                        </span>
+                        <div className="flex flex-col gap-1.5 mt-0.5">
+                          {order.pickupStops.map((stop, sIdx) => {
+                            const isSupplier = stop.sourceType === 'supplier';
+                            const isCollected = stop.status === 'Collected';
+                            const isArrived = stop.status === 'Rider_Arrived';
+                            const isStopRejected = stop.status === 'Rejected' || stop.status === 'Cancelled';
+                            const isReady = stop.status === 'Ready' || (isSupplier && stop.status !== 'Collected' && !isArrived && !isStopRejected);
 
-                  {/* Multi-stop pickup sources progress breakdown */}
-                  {step.mappedState === 2 && Array.isArray(order.pickupStops) && order.pickupStops.length > 0 && (
-                    <div className="mt-2 flex flex-col gap-1.5 bg-base/80 border border-line rounded-2xl p-3">
-                      <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">
-                        Pickup Sources ({order.pickupStops.filter(s => s.status === 'Collected').length} of {order.pickupStops.length} Completed)
-                      </span>
-                      <div className="flex flex-col gap-1.5 mt-0.5">
-                        {order.pickupStops.map((stop, sIdx) => {
-                          const isCollected = stop.status === 'Collected';
-                          const isArrived = stop.status === 'Rider_Arrived';
-                          const isReady = stop.status === 'Ready';
-                          return (
-                            <div
-                              key={stop._id || stop.stopId || sIdx}
-                              className={`flex items-center justify-between p-2 rounded-xl border text-xs ${
-                                isCollected
-                                  ? 'bg-green-50/70 border-green-200 text-green-900'
-                                  : isArrived || isReady
-                                  ? 'bg-violet-50/70 border-violet-200 text-violet-950'
-                                  : 'bg-surface border-line text-main'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-sm flex-shrink-0">
-                                  {isCollected ? '✅' : stop.sourceType === 'restaurant' ? '🍽️' : '🏪'}
-                                </span>
-                                <div className="flex flex-col min-w-0">
-                                  <span className={`font-bold truncate ${isCollected ? 'line-through text-green-800' : 'text-main'}`}>
-                                    {stop.sourceName}
+                            const statusLabel = isStopRejected ? 'Cancelled' :
+                              isCollected ? 'Collected ✓' :
+                              isArrived ? (isSupplier ? 'Rider Reached Store' : 'Rider Reached Restaurant') :
+                              isReady ? 'Ready for Pickup' :
+                              stop.status === 'Preparing' ? 'Preparing' :
+                              'Waiting for Restaurant';
+
+                            const statusClass = isStopRejected ? 'bg-red-100 text-red-800' :
+                              isCollected ? 'bg-green-100 text-green-800' :
+                              isArrived ? 'bg-violet-100 text-violet-800' :
+                              isReady ? 'bg-emerald-100 text-emerald-800' :
+                              'bg-yellow-100 text-yellow-800';
+
+                            return (
+                              <div
+                                key={stop._id || stop.stopId || sIdx}
+                                className={`flex items-center justify-between p-2 rounded-xl border text-xs ${
+                                  isStopRejected
+                                    ? 'bg-red-50/60 border-red-200 text-red-800 opacity-80'
+                                    : isCollected
+                                    ? 'bg-green-50/70 border-green-200 text-green-900'
+                                    : isArrived || isReady
+                                    ? 'bg-violet-50/70 border-violet-200 text-violet-950'
+                                    : 'bg-surface border-line text-main'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-sm flex-shrink-0">
+                                    {isStopRejected ? '❌' : isCollected ? '✅' : isSupplier ? '🏪' : '🍽️'}
                                   </span>
-                                  {stop.address && (
-                                    <span className="text-[10px] text-muted truncate">{stop.address}</span>
-                                  )}
+                                  <div className="flex flex-col min-w-0">
+                                    <span className={`font-bold truncate ${isStopRejected ? 'line-through text-red-700' : isCollected ? 'line-through text-green-800' : 'text-main'}`}>
+                                      {stop.sourceName}
+                                    </span>
+                                    {stop.address && (
+                                      <span className="text-[10px] text-muted truncate">{stop.address}</span>
+                                    )}
+                                  </div>
                                 </div>
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md capitalize flex-shrink-0 ${statusClass}`}>
+                                  {statusLabel}
+                                </span>
                               </div>
-                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md capitalize flex-shrink-0 ${
-                                isCollected ? 'bg-green-100 text-green-800' :
-                                isArrived ? 'bg-violet-100 text-violet-800' :
-                                isReady ? 'bg-emerald-100 text-emerald-800' :
-                                stop.status === 'Preparing' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-gray-100 text-gray-600'
-                              }`}>
-                                {stop.status}
-                              </span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          /* COMPLETED ORDER DETAILS (NO TIMELINE / NO MAP) */
+          <div className="md:col-span-3 bg-surface rounded-3xl p-6 border border-line shadow-2xs flex flex-col gap-5">
+            <div className="flex justify-between items-center border-b border-line pb-3">
+              <div>
+                <h3 className="font-display font-extrabold text-base text-main">
+                  Completed Order Summary
+                </h3>
+                <p className="text-xs text-muted font-medium mt-0.5">
+                  Delivered on {getOrderDeliveredAt(order) ? formatAppDateOnly(getOrderDeliveredAt(order)) : 'Delivery completed'}
+                </p>
+              </div>
+              <span className="bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400 font-extrabold text-xs px-3 py-1 rounded-full">
+                Delivered
+              </span>
+            </div>
+
+            {/* Order Items Table */}
+            {order.orderType !== 'ride' && Array.isArray(order.items) && order.items.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <span className="text-[10px] uppercase font-extrabold text-muted tracking-wider">
+                  Ordered Items ({order.items.length})
+                </span>
+                <div className="divide-y divide-line border border-line rounded-2xl overflow-hidden">
+                  {order.items.map((item, idx) => (
+                    <div key={idx} className="p-3.5 flex justify-between items-center bg-base/20 text-xs">
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-bold ${item.isCancelled ? 'line-through text-red-600' : 'text-main'}`}>
+                            {item.name}
+                          </span>
+                          {item.isCancelled && (
+                            <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 bg-red-50 text-red-600 border border-red-200 rounded">
+                              Cancelled
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-primary font-semibold">
+                          From: {item.sourceName || item.supplierName || (order.restaurant?.name || 'Restaurant')}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className={`font-bold ${item.isCancelled ? 'line-through text-red-500' : 'text-main'}`}>
+                          {formatCurrency((Number(item.price) || 0) * (Number(item.quantity) || 1))}
+                        </span>
+                        <span className="text-[10px] text-muted block">Qty: {item.quantity || 1}</span>
                       </div>
                     </div>
-                  )}
+                  ))}
                 </div>
-              );
-            })}
+              </div>
+            )}
+
+            {/* Delivery Address & Bill */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-base p-4 rounded-2xl border border-line flex flex-col gap-1 text-xs">
+                <span className="text-[10px] font-extrabold uppercase text-muted tracking-wider">Delivery Destination</span>
+                <span className="font-bold text-main">{order.customerName || order.user?.name || 'Customer'}</span>
+                <p className="text-muted leading-relaxed font-medium">
+                  {order.customerLocation?.formattedAddress || order.address?.street || 'Delivery Address'}
+                </p>
+              </div>
+
+              <div className="bg-base p-4 rounded-2xl border border-line flex flex-col gap-2.5 text-xs">
+                <span className="text-[10px] font-extrabold uppercase text-primary tracking-wider border-b border-line pb-1">
+                  DELIVERY & OTHER CHARGES
+                </span>
+                
+                {(() => {
+                  const db = getDeliveryFeeBreakdown(order);
+                  return (
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex justify-between text-muted font-medium">
+                        <span>Items Subtotal</span>
+                        <span className="font-bold text-main">{formatCurrency(order.subtotal)}</span>
+                      </div>
+
+                      {db.lines.map(line => (
+                        <div key={line.sequence} className="flex justify-between text-muted text-[11px]">
+                          <span className="truncate pr-1">{line.label}</span>
+                          <span className="font-bold text-main shrink-0">+{formatCurrency(line.amount)}</span>
+                        </div>
+                      ))}
+
+                      {db.rainFee > 0 && (
+                        <div className="flex justify-between text-muted text-[11px]">
+                          <span>🌧️ Rain Surcharge</span>
+                          <span className="font-bold text-main">+{formatCurrency(db.rainFee)}</span>
+                        </div>
+                      )}
+
+                      {db.surgeFee > 0 && (
+                        <div className="flex justify-between text-muted text-[11px]">
+                          <span>⚡ Demand / Surge Fee</span>
+                          <span className="font-bold text-main">+{formatCurrency(db.surgeFee)}</span>
+                        </div>
+                      )}
+
+                      <div className="border-t border-line/60 pt-1 flex justify-between text-muted font-bold text-xs">
+                        <span>Total Delivery Fees</span>
+                        <span className="font-black text-main">{formatCurrency(db.totalDeliveryFees)}</span>
+                      </div>
+
+                      {db.platformFee > 0 && (
+                        <div className="flex justify-between text-muted text-xs">
+                          <span>Platform Fee</span>
+                          <span className="font-bold text-main">+{formatCurrency(db.platformFee)}</span>
+                        </div>
+                      )}
+
+                      {db.discount > 0 && (
+                        <div className="flex justify-between text-green-600 font-bold text-xs">
+                          <span>Coupon Discount</span>
+                          <span>-{formatCurrency(db.discount)}</span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-between font-black text-sm text-main border-t border-line pt-2 mt-0.5">
+                        <span>TOTAL PAYABLE</span>
+                        <span className="text-primary">{formatCurrency(db.totalPayable)}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Right 2 cols: Agent & Receipt info */}
         <div className="md:col-span-2 flex flex-col gap-6">
@@ -683,7 +1090,7 @@ export default function OrderTracking() {
                   <h4 className="text-sm font-bold text-gray-755">{order.deliveryAgent.name}</h4>
                   <div className="flex items-center gap-1 text-[10px] text-muted font-bold">
                     <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
-                    <span>{(order.deliveryAgent.rating || 5.0).toFixed(1)} Rating</span>
+                    <span>{formatRating(order.deliveryAgent.rating, { fallback: '5.0' })} Rating</span>
                   </div>
                 </div>
               </div>
@@ -747,8 +1154,8 @@ export default function OrderTracking() {
             </div>
           )}
 
-          {/* Live Chat Panel */}
-          {order.deliveryAgent && (
+          {/* Live Chat Panel (ACTIVE ORDERS ONLY) */}
+          {order.deliveryAgent && !['Delivered', 'Completed', 'Cancelled', 'Rejected'].includes(order.status) && (
             <div className="rounded-3xl p-5 border shadow-2xs flex flex-col gap-3 bg-surface border-line">
               <h3 className="font-display font-extrabold text-sm text-main border-b border-line pb-2 flex items-center justify-between">
                 <span>Live Chat with Rider</span>
@@ -844,7 +1251,92 @@ export default function OrderTracking() {
         orderId={order._id}
         deliveryAgent={order.deliveryAgent}
         token={token}
+        isRide={order.orderType === 'ride'}
         onFeedbackSubmit={(updatedOrder) => setOrder(updatedOrder)}
+        onProceedToRestaurant={
+          order.orderType !== 'ride' && getContributingFoodRestaurants(order).some(rest => {
+            const isRated = Array.isArray(order.restaurantReviews)
+              ? order.restaurantReviews.some(r => String(r.restaurantId) === String(rest.id))
+              : (order.review && (!order.restaurantId || String(order.restaurantId) === String(rest.id)));
+            return !isRated;
+          }) ? () => {
+            const firstUnrated = getContributingFoodRestaurants(order).find(rest => {
+              const isRated = Array.isArray(order.restaurantReviews)
+                ? order.restaurantReviews.some(r => String(r.restaurantId) === String(rest.id))
+                : (order.review && (!order.restaurantId || String(order.restaurantId) === String(rest.id)));
+              return !isRated;
+            });
+            if (firstUnrated) {
+              setSelectedRestaurantForReview(firstUnrated);
+              setIsRestaurantModalOpen(true);
+            }
+          } : (
+            order.orderType !== 'ride' && getContributingStoreSources(order).some(src => {
+              const isRated = Array.isArray(order.storeReviews) && order.storeReviews.some(r =>
+                String(r.sourceId) === String(src.sourceId) && r.serviceType === src.serviceType
+              );
+              return !isRated;
+            }) ? () => {
+              const firstUnratedStore = getContributingStoreSources(order).find(src => {
+                const isRated = Array.isArray(order.storeReviews) && order.storeReviews.some(r =>
+                  String(r.sourceId) === String(src.sourceId) && r.serviceType === src.serviceType
+                );
+                return !isRated;
+              });
+              if (firstUnratedStore) {
+                setSelectedStoreForReview(firstUnratedStore);
+                setIsStoreModalOpen(true);
+              }
+            } : null
+          )
+        }
+      />
+
+      <RestaurantFeedbackModal
+        isOpen={isRestaurantModalOpen}
+        onClose={() => {
+          setIsRestaurantModalOpen(false);
+          setSelectedRestaurantForReview(null);
+        }}
+        order={order}
+        restaurant={selectedRestaurantForReview}
+        token={token}
+        onFeedbackSubmit={(updatedOrder) => {
+          setOrder(updatedOrder);
+        }}
+        onSkip={() => {
+          setIsRestaurantModalOpen(false);
+          setSelectedRestaurantForReview(null);
+        }}
+      />
+
+      <StoreFeedbackModal
+        isOpen={isStoreModalOpen}
+        onClose={() => {
+          setIsStoreModalOpen(false);
+          setSelectedStoreForReview(null);
+        }}
+        order={order}
+        source={selectedStoreForReview}
+        token={token}
+        onFeedbackSubmit={(updatedOrder) => {
+          setOrder(updatedOrder);
+        }}
+        onSkip={() => {
+          setIsStoreModalOpen(false);
+          setSelectedStoreForReview(null);
+        }}
+      />
+
+      <CancelOrderModal
+        isOpen={isCancelModalOpen}
+        onClose={() => setIsCancelModalOpen(false)}
+        order={order}
+        token={token}
+        onCancelSuccess={(updatedOrder) => {
+          setOrder(updatedOrder);
+          fetchOrderDetails();
+        }}
       />
     </div>
   );

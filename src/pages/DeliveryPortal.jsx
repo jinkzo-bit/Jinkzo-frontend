@@ -6,6 +6,7 @@ import InteractiveMap from '../components/InteractiveMap';
 import { useAuthStore } from '../store/authStore';
 import { io } from 'socket.io-client';
 import { formatAppTimeOnly } from '../utils/dateUtils';
+import { formatCurrency } from '../utils/orderUtils';
 
 export default function DeliveryPortal() {
   const { user, token } = useAuthStore();
@@ -330,7 +331,7 @@ export default function DeliveryPortal() {
                     </div>
 
                     <div className="flex justify-between items-center border-t border-line pt-2 text-[10px] font-bold text-muted">
-                      <span>Total: ₹{order.total.toFixed(2)}</span>
+                      <span>Total: {formatCurrency(order.total ?? order.fare)}</span>
                       <span className="text-primary flex items-center gap-0.5">
                         Manage <ChevronRight className="w-3 h-3" />
                       </span>
@@ -500,7 +501,7 @@ export default function DeliveryPortal() {
                 {/* Total */}
                 <div className="border-t border-line pt-3 flex justify-between items-center text-xs font-black text-main">
                   <span>Grand Total to Collect</span>
-                  <span className="text-primary text-sm">₹{selectedOrder.total.toFixed(2)}</span>
+                  <span className="text-primary text-sm">{formatCurrency(selectedOrder.total ?? selectedOrder.fare)}</span>
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] font-extrabold text-muted uppercase tracking-wider mt-1 px-1">

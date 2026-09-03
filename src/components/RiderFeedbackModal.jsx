@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Star, Sparkles, AlertCircle } from 'lucide-react';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 
-export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryAgent, token, onFeedbackSubmit }) {
+export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryAgent, token, onFeedbackSubmit, onProceedToRestaurant, isRide }) {
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [selectedTip, setSelectedTip] = useState(null);
@@ -17,6 +17,7 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
   // Payment gateway state
   const [showPaymentGateway, setShowPaymentGateway] = useState(false);
   const [pendingTipAmount, setPendingTipAmount] = useState(0);
+  const updatedOrderRef = React.useRef(null);
 
   // Reset form state every time the modal opens (e.g. different order from Profile page)
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
       setErrorMessage('');
       setShowPaymentGateway(false);
       setPendingTipAmount(0);
+      updatedOrderRef.current = null;
     }
   }, [isOpen]);
 
@@ -78,17 +80,23 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
         body: JSON.stringify({
           rating,
           comment,
-          tipAmount
+          tipAmount: isRide ? 0 : tipAmount
         })
       });
 
       if (res.ok) {
         const updatedOrder = await res.json();
+        updatedOrderRef.current = updatedOrder;
         setSubmitSuccess(true);
-        setTimeout(() => {
+        if (onFeedbackSubmit) {
           onFeedbackSubmit(updatedOrder);
-          onClose();
-        }, 1800);
+        }
+        // If no onProceedToRestaurant, auto close in 1.8s
+        if (!onProceedToRestaurant) {
+          setTimeout(() => {
+            onClose();
+          }, 1800);
+        }
       } else {
         const errData = await res.json();
         setErrorMessage(errData.message || 'Failed to submit feedback.');
@@ -133,17 +141,44 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
           )}
 
           {submitSuccess ? (
-            <div className="p-10 flex flex-col items-center justify-center text-center gap-4 animate-fade-in">
-              <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center border-2 border-green-500 animate-bounce">
-                <Sparkles className="w-10 h-10 text-green-600 fill-green-50/50" />
+            <div className="p-8 sm:p-10 flex flex-col items-center justify-center text-center gap-4 animate-fade-in">
+              <div className="w-18 h-18 bg-green-50 rounded-full flex items-center justify-center border-2 border-green-500 animate-bounce">
+                <Sparkles className="w-9 h-9 text-green-600 fill-green-50/50" />
               </div>
               <h3 className="font-display font-extrabold text-xl text-main">Feedback Submitted!</h3>
               <p className="text-xs text-muted font-semibold max-w-xs leading-relaxed">
-                {pendingTipAmount > 0 
-                  ? `Thank you! ₹${pendingTipAmount} tip has been credited to ${agentName}'s wallet.`
-                  : `Thank you for sharing your experience with ${agentName}!`
-                }
+                Thank you for sharing your experience with <strong>{agentName}</strong>!
               </p>
+
+              {onProceedToRestaurant ? (
+                <div className="flex items-center gap-2 w-full max-w-xs mt-3">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="flex-1 bg-base hover:bg-gray-100 text-main text-xs font-bold py-3 rounded-xl border border-line cursor-pointer transition-colors"
+                  >
+                    Done
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onProceedToRestaurant();
+                    }}
+                    className="flex-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3 rounded-xl cursor-pointer shadow-sm transition-colors"
+                  >
+                    Rate Restaurant
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full max-w-xs bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3 rounded-xl cursor-pointer shadow-sm transition-colors mt-2"
+                >
+                  Done
+                </button>
+              )}
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col">
@@ -164,7 +199,7 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
                 <div>
                   <h3 className="font-display font-extrabold text-base text-main">{agentName}</h3>
                   <p className="text-[10px] text-muted font-extrabold uppercase mt-0.5 tracking-wider">
-                    How was your delivery?
+                    {isRide ? 'How was your ride?' : 'How was your delivery?'}
                   </p>
                 </div>
               </div>
@@ -173,7 +208,7 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
                 {/* Star Rating Section */}
                 <div className="flex flex-col items-center gap-2">
                   <span className="text-[10px] uppercase font-extrabold tracking-wider text-gray-450">
-                    Rate your Rider
+                    {isRide ? 'Rate your Ride Captain' : 'Rate your Rider'}
                   </span>
                   <div className="flex items-center gap-1.5">
                     {[1, 2, 3, 4, 5].map((star) => (
@@ -201,14 +236,14 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
                 {/* Compliments Comment box */}
                 <div className="flex flex-col gap-1.5 border-t border-line pt-4">
                   <label htmlFor="riderComment" className="text-[10px] uppercase font-extrabold tracking-wider text-muted">
-                    Rider feedback comment (optional)
+                    {isRide ? 'Tell us about your ride experience (optional)' : 'Rider feedback comment (optional)'}
                   </label>
                   <textarea
                     id="riderComment"
                     rows={2}
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
-                    placeholder="Tell us what went well, e.g. Polite behavior, on-time delivery..."
+                    placeholder={isRide ? "Safe driving, polite behaviour, on-time pickup, comfortable ride..." : "Tell us what went well, e.g. Polite behavior, on-time delivery..."}
                     className="bg-base border border-line-strong focus:border-primary focus:bg-surface rounded-xl px-3 py-2.5 text-xs text-main outline-none resize-none leading-relaxed transition-all"
                   />
                 </div>
@@ -228,14 +263,14 @@ export default function RiderFeedbackModal({ isOpen, onClose, orderId, deliveryA
                     onClick={onClose}
                     className="flex-1 bg-gray-100 hover:skeleton text-gray-650 text-xs font-bold py-3.5 rounded-xl transition-all cursor-pointer"
                   >
-                    Cancel
+                    {isRide ? 'Skip' : 'Cancel'}
                   </button>
                   <button
                     type="submit"
                     disabled={rating === 0 || isSubmitting}
                     className="flex-[2] bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isSubmitting ? 'Submitting...' : getTipAmount() > 0 ? `Pay ₹${getTipAmount()} & Submit` : 'Submit Feedback'}
+                    {isSubmitting ? 'Submitting...' : (!isRide && getTipAmount() > 0) ? `Pay ₹${getTipAmount()} & Submit` : 'Submit Feedback'}
                   </button>
                 </div>
               </div>

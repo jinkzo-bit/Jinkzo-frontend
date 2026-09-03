@@ -22,9 +22,10 @@ import { useThemeStore } from '../store/themeStore';
 import { useLocationStore } from '../store/locationStore';
 import { useTranslation } from '../store/languageStore';
 import LocationPickerModal from './LocationPickerModal';
+import { registerWebPush, setupForegroundNotificationListener } from '../services/firebaseMessaging';
 
 export default function Navbar() {
-  const { user, logout } = useAuthStore();
+  const { user, token, logout } = useAuthStore();
   const cartItems = useCartStore((state) => state.items);
   const { isDarkMode, toggleTheme } = useThemeStore();
   const { lat, lng, address: storeAddress, isDetecting, detectGpsLocation, setLocation: setStoreLocation } = useLocationStore();
@@ -77,6 +78,40 @@ export default function Navbar() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Synchronize FCM Web Push token for customer and listen for foreground pushes
+  useEffect(() => {
+    if (!user) {
+      console.log('[FCM-DIAGNOSTIC] Stage 2 (Navbar): No authenticated user, skipping web push sync');
+      return;
+    }
+
+    const activeToken = token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token') || 'cookie-auth-active';
+    console.log('[FCM-DIAGNOSTIC] Stage 2 (Navbar): Triggering web push sync for user:', user.email, 'role:', user.role);
+
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      registerWebPush(activeToken, user).catch((err) => {
+        console.warn('[FCM-DIAGNOSTIC] Stage 2 (Navbar): registerWebPush error:', err);
+      });
+    } else {
+      console.log('[FCM-DIAGNOSTIC] Stage 2 (Navbar): Notification permission is not granted yet:', typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
+    }
+
+    let unsubscribe = () => {};
+    setupForegroundNotificationListener((payload) => {
+      console.log('[Navbar] Foreground FCM notification received:', payload);
+      const title = payload.notification?.title || payload.data?.title || 'Notification';
+      const body = payload.notification?.body || payload.data?.body || '';
+      setUnreadNotifications(prev => [
+        { id: Date.now(), title, desc: body, time: 'Just now' },
+        ...prev
+      ]);
+    }).then(unsub => {
+      if (typeof unsub === 'function') unsubscribe = unsub;
+    });
+
+    return () => unsubscribe();
+  }, [user, token]);
 
   const handleSearch = (e) => {
     e.preventDefault();

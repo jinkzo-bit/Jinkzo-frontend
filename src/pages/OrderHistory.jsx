@@ -1,12 +1,17 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ClipboardList, ShoppingBag, Calendar, Star, Sparkles } from 'lucide-react';
+import { ClipboardList, ShoppingBag, Calendar, Star, Sparkles, ShieldAlert } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { useTranslation } from '../store/languageStore';
 import RiderFeedbackModal from '../components/RiderFeedbackModal';
+import RestaurantFeedbackModal from '../components/RestaurantFeedbackModal';
+import StoreFeedbackModal from '../components/StoreFeedbackModal';
+import OrderDetailsModal from '../components/OrderDetailsModal';
+import CancelOrderModal from '../components/CancelOrderModal';
 import { formatAppDate } from '../utils/dateUtils';
+import { getContributingFoodRestaurants, getContributingStoreSources, getCustomerCancellationEligibility, formatCurrency } from '../utils/orderUtils';
 import {
   useHistoryFilter,
   HistoryFilterToolbar,
@@ -23,6 +28,19 @@ export default function OrderHistory() {
 
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedDetailsOrder, setSelectedDetailsOrder] = useState(null);
+  const [selectedCancelOrder, setSelectedCancelOrder] = useState(null);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [selectedReviewOrder, setSelectedReviewOrder] = useState(null);
+  const [isRiderModalOpen, setIsRiderModalOpen] = useState(false);
+
+  // Restaurant review states
+  const [selectedRestaurantReview, setSelectedRestaurantReview] = useState(null);
+  const [isRestaurantModalOpen, setIsRestaurantModalOpen] = useState(false);
+
+  // Store review states (Grocery, Meat, Veg & Fruits, Bakery)
+  const [selectedStoreReview, setSelectedStoreReview] = useState(null);
+  const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
 
   // Global History Filter
   const historyFilter = useHistoryFilter(orders, {
@@ -56,36 +74,33 @@ export default function OrderHistory() {
     });
   };
 
-  // Rider review modal states
-  const [selectedReviewOrder, setSelectedReviewOrder] = useState(null);
-  const [isRiderModalOpen, setIsRiderModalOpen] = useState(false);
+
+  const fetchOrderHistory = React.useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/orders`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setOrders(data);
+      }
+    } catch (err) {
+      console.error('Fetch order history error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
 
   useEffect(() => {
     if (!token) {
       navigate('/login');
       return;
     }
-
-    const fetchOrderHistory = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/orders`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setOrders(data);
-        }
-      } catch (err) {
-        console.error('Fetch order history error:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchOrderHistory();
-  }, [token, navigate]);
+  }, [token, navigate, fetchOrderHistory]);
 
   // Safeguard: Wait for redirect
   if (!user) {
@@ -254,7 +269,15 @@ export default function OrderHistory() {
                       <>
                         <span className="text-gray-300">•</span>
                         <span className="text-primary font-extrabold bg-primary-light/50 px-2 py-0.5 rounded-md">
-                          Delivered by: {order.restaurant.name}
+                          From: {order.restaurant.name}
+                        </span>
+                      </>
+                    )}
+                    {['Delivered', 'Completed'].includes(order.status) && (order.deliveryAgent?.name || order.deliveryAgentName) && (
+                      <>
+                        <span className="text-gray-300">•</span>
+                        <span className="text-emerald-700 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                          Delivered by: {order.deliveryAgent?.name || order.deliveryAgentName}
                         </span>
                       </>
                     )}
@@ -271,9 +294,11 @@ export default function OrderHistory() {
                       ? 'bg-red-100 text-red-700'
                       : 'bg-blue-100 text-blue-700'
                   }`}>
-                    {t('orderStatus.' + order.status.toLowerCase(), order.status)}
+                    {order.status === 'Placed' && order.orderType === 'food'
+                      ? 'Awaiting Restaurant Confirmation'
+                      : t('orderStatus.' + order.status.toLowerCase(), order.status)}
                   </span>
-                  <p className="text-xs font-bold text-main mt-0.5">₹{(order.total != null ? order.total : 0).toFixed(2)}</p>
+                  <p className="text-xs font-bold text-main mt-0.5">{formatCurrency(order.total ?? order.fare)}</p>
                 </div>
               </div>
 
@@ -299,11 +324,10 @@ export default function OrderHistory() {
                 </p>
 
                 <div className="flex items-center gap-2">
-                  {order.status === 'Delivered' && Number(order.riderReview?.rating) > 0 && (
-                    <div className="flex items-center gap-1 text-[10px] text-green-700 font-bold bg-green-50 px-2.5 py-1 rounded-xl border border-green-200 mr-1">
-                      {order.riderReview.tipAmount > 0 && (
-                        <span>Tipped ₹{order.riderReview.tipAmount} •&nbsp;</span>
-                      )}
+                  {/* Compact Rider rating badge */}
+                  {['Delivered', 'Completed'].includes(order.status) && Number(order.riderReview?.rating) > 0 && (
+                    <div className="flex items-center gap-1 text-[10px] text-green-700 font-bold bg-green-50 px-2 py-1 rounded-xl border border-green-200">
+                      <span>{order.orderType === 'ride' ? 'Captain:' : 'Rider:'}</span>
                       <span className="flex items-center">
                         {order.riderReview.rating}
                         <Star className="w-3 h-3 text-yellow-500 fill-yellow-500 ml-0.5" />
@@ -311,25 +335,136 @@ export default function OrderHistory() {
                     </div>
                   )}
 
-                  {order.status === 'Delivered' && !(Number(order.riderReview?.rating) > 0) && order.deliveryAgent && (
+                  {/* Compact Restaurant rating badge */}
+                  {order.status === 'Delivered' && order.orderType !== 'ride' && getContributingFoodRestaurants(order).length > 0 && (
+                    (() => {
+                      const foodRests = getContributingFoodRestaurants(order);
+                      const allRated = foodRests.every(rest => 
+                        Array.isArray(order.restaurantReviews)
+                          ? order.restaurantReviews.some(r => String(r.restaurantId) === String(rest.id))
+                          : (order.review && (!order.restaurantId || String(order.restaurantId) === String(rest.id)))
+                      );
+                      const firstUnrated = foodRests.find(rest => 
+                        !(Array.isArray(order.restaurantReviews)
+                          ? order.restaurantReviews.some(r => String(r.restaurantId) === String(rest.id))
+                          : (order.review && (!order.restaurantId || String(order.restaurantId) === String(rest.id))))
+                      );
+
+                      if (allRated) {
+                        return (
+                          <div className="flex items-center gap-1 text-[10px] text-green-700 font-bold bg-green-50 px-2 py-1 rounded-xl border border-green-200">
+                            <span>Food: Rated ✓</span>
+                          </div>
+                        );
+                      } else if (firstUnrated) {
+                        return (
+                          <button
+                            onClick={() => {
+                              setSelectedRestaurantReview({ order, restaurant: firstUnrated });
+                              setIsRestaurantModalOpen(true);
+                            }}
+                            className="bg-violet-50 hover:bg-violet-100 text-primary font-bold text-xs px-2.5 py-1 rounded-xl transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                            <span>Rate Food</span>
+                          </button>
+                        );
+                      }
+                      return null;
+                    })()
+                  )}
+
+                  {/* Compact Store / Supplier rating badge */}
+                  {order.status === 'Delivered' && order.orderType !== 'ride' && getContributingStoreSources(order).length > 0 && (
+                    (() => {
+                      const storeSources = getContributingStoreSources(order);
+                      const allRated = storeSources.every(src => 
+                        Array.isArray(order.storeReviews) && order.storeReviews.some(r => 
+                          String(r.sourceId) === String(src.sourceId) && r.serviceType === src.serviceType
+                        )
+                      );
+                      const firstUnrated = storeSources.find(src => 
+                        !(Array.isArray(order.storeReviews) && order.storeReviews.some(r => 
+                          String(r.sourceId) === String(src.sourceId) && r.serviceType === src.serviceType
+                        ))
+                      );
+
+                      if (allRated) {
+                        return (
+                          <div className="flex items-center gap-1 text-[10px] text-green-700 font-bold bg-green-50 px-2 py-1 rounded-xl border border-green-200">
+                            <span>Stores: Rated ✓</span>
+                          </div>
+                        );
+                      } else if (firstUnrated) {
+                        return (
+                          <button
+                            onClick={() => {
+                              setSelectedStoreReview({ order, source: firstUnrated });
+                              setIsStoreModalOpen(true);
+                            }}
+                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs px-2.5 py-1 rounded-xl transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                            <span>Rate {firstUnrated.serviceLabel}</span>
+                          </button>
+                        );
+                      }
+                      return null;
+                    })()
+                  )}
+
+                  {['Delivered', 'Completed'].includes(order.status) && !(Number(order.riderReview?.rating) > 0) && order.deliveryAgent && (
                     <button
                       onClick={() => {
                         setSelectedReviewOrder(order);
                         setIsRiderModalOpen(true);
                       }}
-                      className="bg-violet-50 hover:bg-violet-100 text-primary font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
+                      className="bg-violet-50 hover:bg-violet-100 text-primary font-bold text-xs px-2.5 py-1 rounded-xl transition-colors cursor-pointer"
                     >
-                      Rate & Tip Rider
+                      {order.orderType === 'ride' ? 'Rate Captain' : 'Rate Rider'}
                     </button>
                   )}
 
-                  {/* Active tracking or View details link */}
-                  <Link
-                    to={`/order-tracking/${order._id}`}
-                    className="bg-primary-light text-primary hover:bg-violet-100 font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
-                  >
-                    {order.status === 'Delivered' ? t('common.viewDetails', 'View details') : t('common.trackLive', 'Track Live')}
-                  </Link>
+                  {/* Active tracking or View details button */}
+                  {!['Delivered', 'Completed', 'Rejected', 'Cancelled', 'Rider_Rejected'].includes(order.status) && (
+                    <>
+                      {getCustomerCancellationEligibility(order).canCancelAnything && (
+                        <button
+                          onClick={() => {
+                            setSelectedCancelOrder(order);
+                            setIsCancelModalOpen(true);
+                          }}
+                          className="border border-red-300 text-red-600 bg-red-50 hover:bg-red-100 font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95"
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
+                          <span>{order.orderType === 'ride' ? 'Cancel Ride' : 'Cancel Order'}</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => setSelectedDetailsOrder(order)}
+                        className="bg-base text-main border border-line hover:bg-gray-100 font-bold text-xs px-3.5 py-2.5 rounded-xl transition-colors cursor-pointer"
+                      >
+                        {t('common.viewDetails', 'View details')}
+                      </button>
+
+                      <Link
+                        to={`/order-tracking/${order._id}`}
+                        className="bg-primary-light text-primary hover:bg-violet-100 font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
+                      >
+                        {t('common.trackLive', 'Track Live')}
+                      </Link>
+                    </>
+                  )}
+
+                  {['Delivered', 'Completed', 'Rejected', 'Cancelled', 'Rider_Rejected'].includes(order.status) && (
+                    <button
+                      onClick={() => setSelectedDetailsOrder(order)}
+                      className="bg-primary-light text-primary hover:bg-violet-100 font-bold text-xs px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
+                    >
+                      {t('common.viewDetails', 'View details')}
+                    </button>
+                  )}
 
                   {order.orderType !== 'ride' && (
                     <button
@@ -346,6 +481,47 @@ export default function OrderHistory() {
         </div>
       )}
 
+      {/* ── UNIFIED ORDER DETAILS MODAL ─── */}
+      <OrderDetailsModal
+        isOpen={Boolean(selectedDetailsOrder)}
+        onClose={() => setSelectedDetailsOrder(null)}
+        order={selectedDetailsOrder}
+        role="customer"
+        token={token}
+        onReorder={handleReorder}
+        onOrderUpdated={fetchOrderHistory}
+        onRateRider={(ord) => {
+          setSelectedReviewOrder(ord);
+          setIsRiderModalOpen(true);
+        }}
+        onRateRestaurant={(ord, rest) => {
+          setSelectedRestaurantReview({ order: ord, restaurant: rest });
+          setIsRestaurantModalOpen(true);
+        }}
+        onRateStore={(ord, src) => {
+          setSelectedStoreReview({ order: ord, source: src });
+          setIsStoreModalOpen(true);
+        }}
+      />
+
+      {/* ── CUSTOMER CANCEL ORDER MODAL ─── */}
+      <CancelOrderModal
+        isOpen={isCancelModalOpen}
+        onClose={() => {
+          setIsCancelModalOpen(false);
+          setSelectedCancelOrder(null);
+        }}
+        order={selectedCancelOrder}
+        token={token}
+        onCancelSuccess={(updatedOrder) => {
+          fetchOrderHistory();
+          if (selectedDetailsOrder && selectedDetailsOrder._id === updatedOrder._id) {
+            setSelectedDetailsOrder(updatedOrder);
+          }
+          showToast('Order updated successfully', 'success');
+        }}
+      />
+
       {selectedReviewOrder && (
         <RiderFeedbackModal
           isOpen={isRiderModalOpen}
@@ -356,8 +532,97 @@ export default function OrderHistory() {
           orderId={selectedReviewOrder._id}
           deliveryAgent={selectedReviewOrder.deliveryAgent}
           token={token}
+          isRide={selectedReviewOrder.orderType === 'ride'}
           onFeedbackSubmit={(updatedOrder) => {
-            setOrders(prev => prev.map(o => o._id === updatedOrder._id ? { ...o, riderReview: updatedOrder.riderReview } : o));
+            setOrders(prev => prev.map(o => o._id === updatedOrder._id ? updatedOrder : o));
+            if (selectedDetailsOrder && selectedDetailsOrder._id === updatedOrder._id) {
+              setSelectedDetailsOrder(updatedOrder);
+            }
+          }}
+          onProceedToRestaurant={
+            selectedReviewOrder.orderType !== 'ride' && getContributingFoodRestaurants(selectedReviewOrder).some(rest => {
+              const isRated = Array.isArray(selectedReviewOrder.restaurantReviews)
+                ? selectedReviewOrder.restaurantReviews.some(r => String(r.restaurantId) === String(rest.id))
+                : (selectedReviewOrder.review && (!selectedReviewOrder.restaurantId || String(selectedReviewOrder.restaurantId) === String(rest.id)));
+              return !isRated;
+            }) ? () => {
+              const firstUnrated = getContributingFoodRestaurants(selectedReviewOrder).find(rest => {
+                const isRated = Array.isArray(selectedReviewOrder.restaurantReviews)
+                  ? selectedReviewOrder.restaurantReviews.some(r => String(r.restaurantId) === String(rest.id))
+                  : (selectedReviewOrder.review && (!selectedReviewOrder.restaurantId || String(selectedReviewOrder.restaurantId) === String(rest.id)));
+                return !isRated;
+              });
+              if (firstUnrated) {
+                setSelectedRestaurantReview({ order: selectedReviewOrder, restaurant: firstUnrated });
+                setIsRestaurantModalOpen(true);
+              }
+            } : (
+              selectedReviewOrder.orderType !== 'ride' && getContributingStoreSources(selectedReviewOrder).some(src => {
+                const isRated = Array.isArray(selectedReviewOrder.storeReviews) && selectedReviewOrder.storeReviews.some(r =>
+                  String(r.sourceId) === String(src.sourceId) && r.serviceType === src.serviceType
+                );
+                return !isRated;
+              }) ? () => {
+                const firstUnratedStore = getContributingStoreSources(selectedReviewOrder).find(src => {
+                  const isRated = Array.isArray(selectedReviewOrder.storeReviews) && selectedReviewOrder.storeReviews.some(r =>
+                    String(r.sourceId) === String(src.sourceId) && r.serviceType === src.serviceType
+                  );
+                  return !isRated;
+                });
+                if (firstUnratedStore) {
+                  setSelectedStoreReview({ order: selectedReviewOrder, source: firstUnratedStore });
+                  setIsStoreModalOpen(true);
+                }
+              } : null
+            )
+          }
+        />
+      )}
+
+      {/* ── RESTAURANT FEEDBACK MODAL ─── */}
+      {selectedRestaurantReview && (
+        <RestaurantFeedbackModal
+          isOpen={isRestaurantModalOpen}
+          onClose={() => {
+            setIsRestaurantModalOpen(false);
+            setSelectedRestaurantReview(null);
+          }}
+          order={selectedRestaurantReview.order}
+          restaurant={selectedRestaurantReview.restaurant}
+          token={token}
+          onFeedbackSubmit={(updatedOrder) => {
+            setOrders(prev => prev.map(o => o._id === updatedOrder._id ? updatedOrder : o));
+            if (selectedDetailsOrder && selectedDetailsOrder._id === updatedOrder._id) {
+              setSelectedDetailsOrder(updatedOrder);
+            }
+          }}
+          onSkip={() => {
+            setIsRestaurantModalOpen(false);
+            setSelectedRestaurantReview(null);
+          }}
+        />
+      )}
+
+      {/* ── STORE FEEDBACK MODAL (Grocery, Meat, Veg & Fruits, Bakery) ─── */}
+      {selectedStoreReview && (
+        <StoreFeedbackModal
+          isOpen={isStoreModalOpen}
+          onClose={() => {
+            setIsStoreModalOpen(false);
+            setSelectedStoreReview(null);
+          }}
+          order={selectedStoreReview.order}
+          source={selectedStoreReview.source}
+          token={token}
+          onFeedbackSubmit={(updatedOrder) => {
+            setOrders(prev => prev.map(o => o._id === updatedOrder._id ? updatedOrder : o));
+            if (selectedDetailsOrder && selectedDetailsOrder._id === updatedOrder._id) {
+              setSelectedDetailsOrder(updatedOrder);
+            }
+          }}
+          onSkip={() => {
+            setIsStoreModalOpen(false);
+            setSelectedStoreReview(null);
           }}
         />
       )}

@@ -3,7 +3,7 @@ import {
   Boxes, Plus, Search, Filter, RefreshCw, Pencil, Trash2,
   MapPin, Phone, CheckCircle2, XCircle, AlertCircle, Eye, EyeOff,
   Store, ShoppingCart, Beef, Apple, Croissant, Wheat, Package,
-  ExternalLink, Check, X, ShieldAlert, Sparkles, Building2, Navigation
+  ExternalLink, Check, X, ShieldAlert, Sparkles, Building2, Navigation, Star
 } from 'lucide-react';
 import { API_BASE } from '../../config/api';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../../utils/uploadUtil';
@@ -882,6 +882,7 @@ export default function SuppliersAndItemsTab({ token }) {
                   <th className="py-2.5 px-3">Supplier Name</th>
                   <th className="py-2.5 px-3">Mobile Number</th>
                   <th className="py-2.5 px-3">Address & Location</th>
+                  <th className="py-2.5 px-3 text-center">Rating</th>
                   <th className="py-2.5 px-3 text-center">Linked Items</th>
                   <th className="py-2.5 px-3 text-center">Status</th>
                   <th className="py-2.5 px-3 text-right">Actions</th>
@@ -932,6 +933,20 @@ export default function SuppliersAndItemsTab({ token }) {
                             )}
                           </div>
                         </div>
+                      </td>
+
+                      <td className="py-3 px-3 text-center">
+                        {sup.ratingCount > 0 ? (
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-yellow-50 text-yellow-700 border border-yellow-200">
+                            <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
+                            <span>{Number(sup.rating).toFixed(1)}</span>
+                            <span className="text-[9px] text-muted">({sup.ratingCount})</span>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-base border border-line text-muted">
+                            New
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-3 px-3 text-center">

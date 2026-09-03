@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { API_BASE } from '../config/api';
+import { registerWebPush, unregisterWebPush } from '../services/firebaseMessaging';
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
 const ACCESS_KEY  = 'qb-auth-token';
@@ -8,18 +9,51 @@ const REFRESH_KEY = 'qb-refresh-token';
 
 // ── Safe JSON Response Parser ────────────────────────────────────────────────
 const safeJson = async (res) => {
+  let data = null;
   const contentType = res.headers?.get ? (res.headers.get('content-type') || '') : '';
   if (contentType.includes('application/json')) {
     try {
-      return await res.json();
+      data = await res.json();
     } catch (e) {
       console.warn('[AuthStore] JSON parse exception:', e);
     }
   }
-  const text = await res.text().catch(() => '');
+
+  if (data && typeof data === 'object') {
+    if (!res.ok || data.success === false) {
+      let formattedMsg = data.message;
+      if (res.status === 400) {
+        formattedMsg = data.message || 'Please check the entered details.';
+      } else if (res.status === 401) {
+        formattedMsg = 'Invalid email/mobile or password.';
+      } else if (res.status === 403) {
+        if (data.code === 'ACCOUNT_BLOCKED') {
+          formattedMsg = data.message || 'Your account has been suspended by the administrator.';
+        } else if (data.code === 'ROLE_MISMATCH') {
+          formattedMsg = 'This account cannot sign in through the selected access channel.';
+        } else {
+          formattedMsg = data.message || 'Access denied for this account.';
+        }
+      } else if (res.status >= 500) {
+        formattedMsg = 'Something went wrong on the server. Please try again.';
+      }
+      return {
+        ...data,
+        success: false,
+        message: formattedMsg,
+      };
+    }
+    return data;
+  }
+
+  let fallbackMessage = 'Something went wrong on the server. Please try again.';
+  if (res.status === 400) fallbackMessage = 'Please check the entered details.';
+  else if (res.status === 401) fallbackMessage = 'Invalid email/mobile or password.';
+  else if (res.status === 403) fallbackMessage = 'This account cannot sign in through the selected access channel.';
+
   return {
     success: false,
-    message: text || `Server returned HTTP ${res.status || 'Error'} (${res.statusText || 'No status text'})`
+    message: fallbackMessage,
   };
 };
 
@@ -58,31 +92,53 @@ export const useAuthStore = create((set, get) => ({
 
   // ── Session initialisation on page load ────────────────────────────────────
   initialize: async () => {
-    const sessionToken = localStorage.getItem(ACCESS_KEY);
-    if (!sessionToken) {
-      set({ user: null, token: null, isAuthenticated: false, loading: false });
-      return;
-    }
+    const sessionToken = localStorage.getItem(ACCESS_KEY) || localStorage.getItem('token');
+    console.log('[FCM-DIAGNOSTIC] Stage 1 (authStore.initialize started):', {
+      hasSessionToken: !!sessionToken,
+      hasAccessKey: !!localStorage.getItem(ACCESS_KEY),
+      hasTokenKey: !!localStorage.getItem('token')
+    });
 
     set({ loading: true });
     try {
+      const headers = {};
+      if (sessionToken && sessionToken !== 'cookie-auth-active') {
+        headers['Authorization'] = `Bearer ${sessionToken}`;
+      }
+
       let res = await fetch(`${API_BASE}/auth/me`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
+        headers,
+        credentials: 'include',
       });
 
       if (res.status === 401) {
+        console.log('[FCM-DIAGNOSTIC] /auth/me returned 401, trying silent token refresh...');
         const newToken = await get().refreshAccessToken();
         if (newToken) {
           res = await fetch(`${API_BASE}/auth/me`, {
             headers: { Authorization: `Bearer ${newToken}` },
+            credentials: 'include',
           });
         }
       }
 
+      console.log('[FCM-DIAGNOSTIC] /auth/me HTTP status:', res.status);
+
       if (res.ok) {
         const data = await safeJson(res);
-        const currentToken = get().token || sessionToken;
+        const currentToken = get().token || sessionToken || 'cookie-auth-active';
         set({ user: data, token: currentToken, isAuthenticated: true, error: null });
+        console.log('[FCM-DIAGNOSTIC] Stage 1: User session verified via /auth/me:', {
+          email: data?.email,
+          role: data?.role,
+          id: data?._id
+        });
+        console.log('[FCM-DIAGNOSTIC] Stage 1: Calling registerWebPush from initialize()...');
+        try {
+          await registerWebPush(currentToken, data);
+        } catch (pushErr) {
+          console.warn('[FCM-DIAGNOSTIC] registerWebPush error in initialize:', pushErr);
+        }
       } else if (res.status === 401 || res.status === 403) {
         get().logout();
       } else {
@@ -97,13 +153,15 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // ── Email + Password Login ──────────────────────────────────────────────────
-  login: async (email, password) => {
+  login: async (email, password, role) => {
     set({ loading: true, error: null });
     try {
+      const payload = { email: (email || '').trim(), password };
+      if (role) payload.role = role;
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(payload),
       });
 
       const data = await safeJson(res);
@@ -111,12 +169,23 @@ export const useAuthStore = create((set, get) => ({
         throw new Error(data.message || 'Login failed');
       }
 
+      console.log('[FCM-DIAGNOSTIC] Stage 1 (authStore.login): Login succeeded for:', data.user?.email, 'role:', data.user?.role);
+      const activeToken = data.token || localStorage.getItem(ACCESS_KEY) || localStorage.getItem('token');
       if (data.token) {
         localStorage.setItem(ACCESS_KEY, data.token);
         localStorage.setItem('token', data.token);
       }
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
+
+      if (activeToken && data.user) {
+        console.log('[FCM-DIAGNOSTIC] Stage 1 (authStore.login): Calling registerWebPush before login resolves...');
+        try {
+          await registerWebPush(activeToken, data.user);
+        } catch (pushErr) {
+          console.warn('[FCM-DIAGNOSTIC] registerWebPush error in login:', pushErr);
+        }
+      }
 
       try {
         const { useFavoriteStore } = await import('./favoriteStore');
@@ -167,12 +236,21 @@ export const useAuthStore = create((set, get) => ({
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || 'Registration failed');
 
+      const activeToken = data.token || localStorage.getItem(ACCESS_KEY) || localStorage.getItem('token');
       if (data.token) {
         localStorage.setItem(ACCESS_KEY, data.token);
         localStorage.setItem('token', data.token);
       }
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
+
+      if (activeToken && data.user) {
+        try {
+          await registerWebPush(activeToken, data.user);
+        } catch (pushErr) {
+          console.warn('[AuthStore] Web push registration notice on register:', pushErr);
+        }
+      }
 
       try {
         const { useFavoriteStore } = await import('./favoriteStore');
@@ -194,6 +272,7 @@ export const useAuthStore = create((set, get) => ({
   logout: async () => {
     try {
       const token = get().token;
+      unregisterWebPush(token).catch(() => {});
       const refreshToken = localStorage.getItem(REFRESH_KEY);
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -373,12 +452,21 @@ export const useAuthStore = create((set, get) => ({
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || 'OTP verification failed.');
+      const activeToken = data.token || localStorage.getItem(ACCESS_KEY) || localStorage.getItem('token');
       if (data.token) {
         localStorage.setItem(ACCESS_KEY, data.token);
         localStorage.setItem('token', data.token);
       }
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
+
+      if (activeToken && data.user) {
+        try {
+          await registerWebPush(activeToken, data.user);
+        } catch (pushErr) {
+          console.warn('[AuthStore] Web push registration notice on OTP verify:', pushErr);
+        }
+      }
       return { success: true };
     } catch (err) {
       set({ error: err.message });

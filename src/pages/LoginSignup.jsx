@@ -153,7 +153,7 @@ export default function LoginSignup() {
     e.preventDefault();
     setFormError('');
     if (!email || !password) return setFormError('Please enter email and password.');
-    const res = await login(email, password);
+    const res = await login(email, password, role);
     if (!res.success) setFormError(res.message);
   };
 

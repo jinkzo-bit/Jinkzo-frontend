@@ -26,7 +26,7 @@ export const normalizeCategory = (cat, service) => {
 };
 
 // ── Reliable source classification helper ──────────────────────────────────────
-export const getCartItemSource = (item) => {
+export const getCartItemSource = (item, globalRestaurant = null) => {
   const normCat = normalizeCategory(item.category, item.service);
   const isCatalog =
     item.itemModel === 'CatalogItem' ||
@@ -61,11 +61,11 @@ export const getCartItemSource = (item) => {
   }
 
   // Food / Restaurant
-  const rId = item.restaurantId ? String(item.restaurantId) : 'restaurant_default';
-  const rName = item.restaurantName || (item.restaurant && item.restaurant.name) || 'RESTAURANT';
-  const rAddr = item.restaurantAddress || item.restaurant?.address || '';
-  const rLat = item.restaurantLatitude ?? item.restaurant?.lat ?? null;
-  const rLng = item.restaurantLongitude ?? item.restaurant?.lng ?? null;
+  const rId = item.restaurantId ? String(item.restaurantId) : (globalRestaurant?._id ? String(globalRestaurant._id) : 'restaurant_default');
+  const rName = item.restaurantName || (item.restaurant && item.restaurant.name) || (globalRestaurant && globalRestaurant.name) || 'Restaurant';
+  const rAddr = item.restaurantAddress || item.restaurant?.address || (globalRestaurant && globalRestaurant.address) || '';
+  const rLat = item.restaurantLatitude ?? item.restaurant?.lat ?? (globalRestaurant && globalRestaurant.lat) ?? null;
+  const rLng = item.restaurantLongitude ?? item.restaurant?.lng ?? (globalRestaurant && globalRestaurant.lng) ?? null;
 
   return {
     sourceType: 'restaurant',
@@ -79,8 +79,8 @@ export const getCartItemSource = (item) => {
     address: rAddr,
     latitude: rLat,
     longitude: rLng,
-    image: item.restaurantImage || (item.restaurant && (item.restaurant.image || item.restaurant.logo)) || '',
-    isClosed: item.restaurantIsClosed || false
+    image: item.restaurantImage || (item.restaurant && (item.restaurant.image || item.restaurant.logo)) || (globalRestaurant && (globalRestaurant.image || globalRestaurant.logo)) || '',
+    isClosed: item.restaurantIsClosed || (globalRestaurant && globalRestaurant.isClosed) || false
   };
 };
 
@@ -112,7 +112,7 @@ export default function Cart() {
 
   // Group items by authoritative source: restaurant:${restaurantId} or supplier:${supplierId}
   const groupedItems = items.reduce((acc, item) => {
-    const source = getCartItemSource(item);
+    const source = getCartItemSource(item, restaurant);
     const key = source.sourceKey;
     if (!acc[key]) {
       acc[key] = {
@@ -271,8 +271,9 @@ export default function Cart() {
                     </span>
                     {/* 2. RELATED RESTAURANT / SUPPLIER */}
                     <div className="flex items-center gap-2">
-                      <h3 className="font-display font-black text-sm md:text-base text-main tracking-tight uppercase truncate">
-                        {group.sourceName}
+                      <h3 className="font-display font-black text-sm md:text-base tracking-tight uppercase truncate">
+                        <span className="text-gray-600 dark:text-gray-300 font-bold">From: </span>
+                        <span className="text-gray-900 dark:text-white font-extrabold">{group.sourceName}</span>
                       </h3>
                       {group.sourceType === 'restaurant' && (
                         group.isAllVeg ? (
@@ -316,23 +317,24 @@ export default function Cart() {
                         className="w-16 h-16 md:w-18 md:h-18 object-cover rounded-2xl bg-base flex-shrink-0 border border-line"
                       />
                       <div className="flex flex-col gap-0.5">
-                        <h4 className="font-display font-bold text-sm md:text-base text-main line-clamp-1">
+                        <h4 className="font-display font-bold text-sm md:text-base text-gray-900 dark:text-white line-clamp-1">
                           {item.name}
                         </h4>
-                        <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-gray-600 dark:text-gray-300">
+                            Qty: {item.quantity}
+                          </span>
                           {item.unit ? (
                             <span className="text-[10px] font-extrabold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
                               {item.unit}
                             </span>
-                          ) : (
-                            <p className="text-[11px] text-muted font-medium">Serves 1</p>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </div>
 
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                      <span className="text-xs md:text-sm font-bold text-main">
+                      <span className="text-xs md:text-sm font-bold text-gray-900 dark:text-white">
                         ₹{item.price} × {item.quantity} = ₹{item.price * item.quantity}
                       </span>
                       <div className="flex items-center bg-base border border-line-strong rounded-xl overflow-hidden h-8">
@@ -342,7 +344,7 @@ export default function Cart() {
                         >
                           <Minus className="w-3 h-3" />
                         </button>
-                        <span className="px-2 text-xs font-bold text-main min-w-[20px] text-center">{item.quantity}</span>
+                        <span className="px-2 text-xs font-bold text-gray-900 dark:text-white min-w-[20px] text-center">{item.quantity}</span>
                         <button
                           onClick={() => updateQuantity(item.menuItemId, item.quantity + 1, item.unit)}
                           className="px-2.5 hover:bg-gray-100 text-muted hover:text-main font-bold transition-colors cursor-pointer"
@@ -353,16 +355,6 @@ export default function Cart() {
                     </div>
                   </div>
                 ))}
-              </div>
-
-              {/* Card Footer: Item Total */}
-              <div className="border-t border-dashed border-line pt-3 flex items-center justify-between">
-                <span className="text-xs md:text-sm text-muted font-medium">
-                  Item Total ({group.sourceName})
-                </span>
-                <span className="text-sm md:text-base font-bold text-primary">
-                  ₹{group.subtotal}
-                </span>
               </div>
             </div>
           ))}

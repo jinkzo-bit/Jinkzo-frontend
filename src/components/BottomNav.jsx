@@ -19,6 +19,7 @@ import {
   Clock,
   ShieldCheck,
   Pencil,
+  Star,
 } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useTranslation } from '../store/languageStore';
@@ -147,6 +148,7 @@ export default function BottomNav() {
       { id: 'wallet', label: 'Earnings', icon: DollarSign },
       { id: 'history', label: 'Runs Log', icon: Clock },
       { id: 'kyc', label: 'KYC Verify', icon: ShieldCheck },
+      { id: 'reviews', label: 'Reviews', icon: Star },
       { id: 'profile', label: 'My Profile', icon: Pencil },
     ];
 

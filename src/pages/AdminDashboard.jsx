@@ -7,13 +7,27 @@ import {
   XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare,
   AlertCircle, ChevronLeft, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2,
   Pencil, Plus, UserCircle, Activity, FileText, Star, TrendingUp, Search, Menu, Filter, Info, Shield, RefreshCw,
-  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical, Save, Sparkles, Utensils, Boxes, ExternalLink
+  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical, Save, Sparkles, Utensils, Boxes, ExternalLink, Palette
 } from 'lucide-react';
 import InteractiveMap from '../components/InteractiveMap';
 import SuppliersAndItemsTab from '../components/admin/SuppliersAndItemsTab';
+import CategoryCardsTab from '../components/admin/CategoryCardsTab';
+import CategoryDesigner from '../components/admin/CategoryDesigner';
+import BannerDesignsTab from '../components/admin/BannerDesignsTab';
+import BannerDesigner from '../components/admin/BannerDesigner';
+import HomeHeroBannersTab from '../components/admin/HomeHeroBannersTab';
+import HomeHeroBannerDesigner from '../components/admin/HomeHeroBannerDesigner';
+import HomeBackgroundTab from '../components/admin/HomeBackgroundTab';
+import HomeDesignDashboard from '../components/admin/HomeDesignDashboard';
+import EarningsAndSettlementsTab from '../components/admin/EarningsAndSettlementsTab';
+import RiderRejectionsTab from '../components/admin/RiderRejectionsTab';
+import AssignRiderModal from '../components/admin/AssignRiderModal';
+import OrderDetailsModal from '../components/OrderDetailsModal';
+import { DEFAULT_CATEGORY_DESIGNS } from '../utils/categoryDesignDefaults';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
-import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
+import { formatAppDate, formatAppDateOnly, formatAppDateTime } from '../utils/dateUtils';
+import { getOrderFinancialBreakdown, formatCurrency, formatDistance, formatRating, getOrderPlacedAt, getOrderDeliveredAt } from '../utils/orderUtils';
 import ImageUploadInput from '../components/common/ImageUploadInput';
 import {
   DEFAULT_OPENING_HOURS,
@@ -32,6 +46,8 @@ import {
 } from '../components/history';
 
 const defaultPlatformSettings = {
+  restaurantCommissionEnabled: true,
+  restaurantCommissionPercentage: 15,
   allSectionsMaxItems: 10,
   sectionChangeFee: 15,
   foodBaseItemLimit: 4,
@@ -100,9 +116,25 @@ const defaultPlatformSettings = {
 
 const normalizeSettings = (incoming) => {
   if (!incoming) return { ...defaultPlatformSettings };
+
+  const enabled = incoming.restaurantCommissionEnabled !== undefined 
+    ? Boolean(incoming.restaurantCommissionEnabled) 
+    : (defaultPlatformSettings.restaurantCommissionEnabled ?? true);
+
+  const rawPercentage = incoming.restaurantCommissionPercentage !== undefined 
+    ? incoming.restaurantCommissionPercentage 
+    : incoming.commissionPercent;
+
+  const parsedPercentage = Number.isFinite(Number(rawPercentage))
+    ? Number(rawPercentage)
+    : (defaultPlatformSettings.restaurantCommissionPercentage ?? 15);
+
   return {
     ...defaultPlatformSettings,
     ...incoming,
+    restaurantCommissionEnabled: enabled,
+    restaurantCommissionPercentage: parsedPercentage,
+    commissionPercent: parsedPercentage,
     foodDeliveryPricing: {
       ...defaultPlatformSettings.foodDeliveryPricing,
       ...(incoming.foodDeliveryPricing || {})
@@ -142,11 +174,13 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
 
   const [activeSubTab, setActiveSubTab] = useState('analytics'); // 'analytics', 'kyc', 'users', 'withdrawals', 'complaints', 'coupons', 'settings'
+  const [selectedDetailsOrder, setSelectedDetailsOrder] = useState(null);
 
   // States
   const [metrics, setMetrics] = useState(null);
   const [platformSettings, setPlatformSettings] = useState(defaultPlatformSettings);
   const [settingsForm, setSettingsForm] = useState(defaultPlatformSettings);
+  const [isSettingsSaving, setIsSettingsSaving] = useState(false);
   const settingsInitializedRef = useRef(false);
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(true);
   const [restaurantsList, setRestaurantsList] = useState([]);
@@ -202,6 +236,23 @@ export default function AdminDashboard() {
   const [adminHoursSuccess, setAdminHoursSuccess] = useState('');
   const [adminHoursError, setAdminHoursError] = useState('');
 
+  // Rider Rejections State
+  const [pendingRejectionsCount, setPendingRejectionsCount] = useState(0);
+
+  const fetchRejectionsCount = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/rider-rejections`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPendingRejectionsCount(Number(data.pendingCount || 0));
+      }
+    } catch (err) {
+      console.error('Error fetching rider rejections count:', err);
+    }
+  };
+
   // Payout Approvals
   const [withdrawals, setWithdrawals] = useState([]);
   const [isWithdrawalsLoading, setIsWithdrawalsLoading] = useState(true);
@@ -225,6 +276,10 @@ export default function AdminDashboard() {
   // Orders history
   const [allOrders, setAllOrders] = useState([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState(true);
+  const [riderAssignmentFilter, setRiderAssignmentFilter] = useState('all'); // 'all', 'assigned', 'waiting', 'rejected'
+  const [assignRiderOrder, setAssignRiderOrder] = useState(null);
+  const [isReassigning, setIsReassigning] = useState(false);
+  const [reassignError, setReassignError] = useState('');
 
   // Banners Management
   const [banners, setBanners] = useState([]);
@@ -323,8 +378,56 @@ export default function AdminDashboard() {
   const [isCategoryServicesLoading, setIsCategoryServicesLoading] = useState(false);
   const [categoryServiceToggleLoading, setCategoryServiceToggleLoading] = useState({});
 
-  // Platform Settings updating state
-  const [isSettingsSaving, setIsSettingsSaving] = useState(false);
+  // Category Design State (Home Category Designer)
+  const [adminCategoryDesigns, setAdminCategoryDesigns] = useState(DEFAULT_CATEGORY_DESIGNS);
+  const [isAdminCategoryDesignsLoading, setIsAdminCategoryDesignsLoading] = useState(false);
+  const [selectedDesignCategory, setSelectedDesignCategory] = useState('food');
+
+  const fetchCategoryDesigns = async () => {
+    try {
+      setIsAdminCategoryDesignsLoading(true);
+      const res = await fetch(`${API_BASE}/admin/category-designs`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object') {
+          setAdminCategoryDesigns(data);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching admin category designs:', err);
+    } finally {
+      setIsAdminCategoryDesignsLoading(false);
+    }
+  };
+
+  // Promo Banner Design State
+  const [bannerDesigns, setBannerDesigns] = useState({});
+  const [isBannerDesignsLoading, setIsBannerDesignsLoading] = useState(false);
+  const [selectedDesignBannerId, setSelectedDesignBannerId] = useState(null);
+
+  // Home Hero Banner State
+  const [selectedHeroBannerId, setSelectedHeroBannerId] = useState(null);
+
+  const fetchBannerDesigns = async () => {
+    try {
+      setIsBannerDesignsLoading(true);
+      const res = await fetch(`${API_BASE}/admin/banner-designs`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object') {
+          setBannerDesigns(data);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching admin banner designs:', err);
+    } finally {
+      setIsBannerDesignsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!token || user?.role !== 'admin') {
@@ -341,6 +444,9 @@ export default function AdminDashboard() {
     fetchBanners();
     fetchCategories();
     fetchCategoryServices();
+    fetchCategoryDesigns();
+    fetchBannerDesigns();
+    fetchRejectionsCount();
 
     const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
     const socket = io(socketHost, {
@@ -351,6 +457,15 @@ export default function AdminDashboard() {
 
     socket.on('connect', () => {
       socket.emit('join', 'admin_room');
+      socket.emit('join', 'admin');
+    });
+
+    socket.on('riderRejectionCreated', () => {
+      fetchRejectionsCount();
+    });
+
+    socket.on('riderRejectionUpdated', () => {
+      fetchRejectionsCount();
     });
 
     socket.on('orderStatusChanged', (data) => {
@@ -454,6 +569,74 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error(err);
       alert('Error assigning captain');
+    }
+  };
+
+  const handleOpenAssignRiderModal = (order) => {
+    setAssignRiderOrder(order);
+    setReassignError('');
+  };
+
+  const handleConfirmReassignRider = async (targetRider) => {
+    if (!assignRiderOrder || !targetRider) return;
+    setIsReassigning(true);
+    setReassignError('');
+    try {
+      const res = await fetch(`${API_BASE}/admin/orders/${assignRiderOrder._id}/rejection-action`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          action: 'reassign',
+          targetRiderId: targetRider._id
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to reassign rider.');
+      }
+
+      setAllOrders(prev => prev.map(o => o._id === assignRiderOrder._id ? data.order : o));
+      if (selectedDetailsOrder && selectedDetailsOrder._id === assignRiderOrder._id) {
+        setSelectedDetailsOrder(data.order);
+      }
+      setAssignRiderOrder(null);
+      fetchRejectionsCount();
+    } catch (err) {
+      console.error('Error reassigning rider:', err);
+      setReassignError(err.message || 'Error reassigning rider.');
+    } finally {
+      setIsReassigning(false);
+    }
+  };
+
+  const handleMarkRejectionHandled = async (order) => {
+    if (!order) return;
+    try {
+      const res = await fetch(`${API_BASE}/admin/orders/${order._id}/rejection-action`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          action: 'mark_handled'
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setAllOrders(prev => prev.map(o => o._id === order._id ? data.order : o));
+        if (selectedDetailsOrder && selectedDetailsOrder._id === order._id) {
+          setSelectedDetailsOrder(data.order);
+        }
+        fetchRejectionsCount();
+      }
+    } catch (err) {
+      console.error('Error marking rejection handled:', err);
     }
   };
 
@@ -803,11 +986,13 @@ export default function AdminDashboard() {
     let upi = 0;
     let card = 0;
     let cod = 0;
-    const restaurantOrders = allOrders.filter(o => String(o.restaurantId) === String(restaurantId));
+    const restaurantOrders = allOrders.filter(o => String(o.restaurantId) === String(restaurantId) || (o.items && o.items.some(i => String(i.restaurantId) === String(restaurantId))));
     const dateFilteredOrders = getOrdersByDateForAnalytics(restaurantOrders);
 
     dateFilteredOrders.forEach(order => {
-      const amount = (order.total || 0) * 0.85; // 85% is net earnings for restaurant
+      const fin = getOrderFinancialBreakdown(order);
+      const rItem = fin.restaurant.byRestaurant.find(r => String(r.restaurantId) === String(restaurantId));
+      const amount = rItem ? rItem.restaurantPayable : fin.restaurant.restaurantPayable;
       const method = order.paymentDetails?.method || 'COD';
       if (method === 'UPI') upi += amount;
       else if (method === 'Card') card += amount;
@@ -1429,10 +1614,25 @@ export default function AdminDashboard() {
   const ongoingOrdersCount = dateFilteredOrders.filter(o => ['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status)).length;
   const completedOrdersCount = dateFilteredOrders.filter(o => ['Delivered', 'Completed', 'Rejected', 'Cancelled', 'Rider_Rejected'].includes(o.status)).length;
 
+  const pendingRejectionOrdersCount = allOrders.filter(o => o.hasRiderRejection && (o.riderRejections || []).some(r => r.status === 'Pending_Admin_Review')).length;
+
   const filteredOrders = dateFilteredOrders.filter(o => {
-    if (orderPipelineTab === 'new') return o.status === 'Placed';
-    if (orderPipelineTab === 'ongoing') return ['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status);
-    if (orderPipelineTab === 'completed') return ['Delivered', 'Completed', 'Rejected', 'Cancelled'].includes(o.status);
+    // 1. Pipeline subtab filter
+    if (orderPipelineTab === 'new' && o.status !== 'Placed') return false;
+    if (orderPipelineTab === 'ongoing' && !['Accepted', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer', 'Confirmed', 'Out for Delivery'].includes(o.status)) return false;
+    if (orderPipelineTab === 'completed' && !['Delivered', 'Completed', 'Rejected', 'Cancelled'].includes(o.status)) return false;
+
+    // 2. Rider Assignment filter
+    if (riderAssignmentFilter === 'assigned') {
+      return Boolean(o.deliveryAgent && (o.deliveryAgent.id || o.deliveryAgent.phone));
+    }
+    if (riderAssignmentFilter === 'waiting') {
+      return (!o.deliveryAgent || !o.deliveryAgent.phone) && !['Delivered', 'Completed', 'Cancelled'].includes(o.status);
+    }
+    if (riderAssignmentFilter === 'rejected') {
+      return Boolean(o.hasRiderRejection && (o.riderRejections || []).some(r => r.status === 'Pending_Admin_Review'));
+    }
+
     return true;
   });
 
@@ -1478,7 +1678,7 @@ export default function AdminDashboard() {
           <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col justify-between min-h-[105px]">
             <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Gross Platform Sales</span>
             <div className="flex justify-between items-end mt-2">
-              <span className="text-xl font-black text-main">₹{metrics.totalSales.toFixed(2)}</span>
+              <span className="text-xl font-black text-main">{formatCurrency(metrics.totalSales)}</span>
               <span className="p-1 bg-green-50 text-green-600 rounded-md text-[9px] font-bold">
                 100% Volume
               </span>
@@ -1487,7 +1687,7 @@ export default function AdminDashboard() {
           <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col justify-between min-h-[105px]">
             <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Platform Net Commission</span>
             <div className="flex justify-between items-end mt-2">
-              <span className="text-xl font-black text-primary">₹{metrics.platformRevenue.toFixed(2)}</span>
+              <span className="text-xl font-black text-primary">{formatCurrency(metrics.platformRevenue)}</span>
               <span className="p-1 bg-violet-50 text-primary rounded-md text-[9px] font-bold">
                 {platformSettings.commissionPercent}% Fee
               </span>
@@ -1521,19 +1721,22 @@ export default function AdminDashboard() {
         <div className="lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex flex-col gap-1">
           {[
             { id: 'analytics', label: 'Ecosystem Analytics', icon: DollarSign },
+            { id: 'earnings_settlements', label: 'Earnings & Settlements', icon: Sparkles },
             { id: 'suppliers_items', label: 'Suppliers & Items', icon: Boxes },
-            { id: 'categories', label: 'Categories', icon: Layers, badge: categoriesList.length },
+            { id: 'home_design', label: 'Home Design', icon: Sparkles },
+            { id: 'categories', label: 'Categories & Hours', icon: Layers, badge: categoriesList.length },
             { id: 'kyc', label: 'KYC Document Approvals', icon: ShieldCheck, badge: pendingKyc.length },
             { id: 'users', label: 'User Directory Manager', icon: Users, badge: allUsers.length },
-            { id: 'orders', label: 'All Orders History', icon: ShoppingBag, badge: allOrders.length },
+            { id: 'orders', label: 'All Orders History', icon: ShoppingBag, badge: allOrders.length, rejectionBadge: pendingRejectionOrdersCount },
+            { id: 'rider_rejections', label: 'Rider Rejections', icon: XCircle, badge: pendingRejectionsCount },
             { id: 'withdrawals', label: 'Wallet Cashouts', icon: CheckCircle, badge: withdrawals.filter(w => w.status === 'Pending').length },
             { id: 'complaints', label: 'Complaints Resolution', icon: MessageSquare, badge: complaints.filter(c => c.status === 'Open').length },
             { id: 'coupons', label: 'Platform Coupons', icon: Tag, badge: coupons.length },
-            { id: 'banners', label: 'Promo Banners', icon: ImagePlus, badge: banners.length },
+            { id: 'banners', label: 'Promo Banners (Legacy)', icon: ImagePlus, badge: banners.length },
             { id: 'settings', label: 'Operational Parameters', icon: Settings }
           ].map(tab => {
             const Icon = tab.icon;
-            const active = activeSubTab === tab.id;
+            const active = activeSubTab === tab.id || (tab.id === 'home_design' && ['home_design', 'home_hero_banners', 'home_background', 'category_cards'].includes(activeSubTab));
             return (
               <button
                 key={tab.id}
@@ -1548,13 +1751,20 @@ export default function AdminDashboard() {
                   <Icon className="w-4 h-4" />
                   <span>{tab.label}</span>
                 </div>
-                {tab.badge !== undefined && tab.badge > 0 && (
-                  <span className={`text-[9px] px-1.8 py-0.5 rounded-full font-black ${
-                    active ? 'bg-surface text-primary' : 'bg-primary text-white animate-pulse'
-                  }`}>
-                    {tab.badge}
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {tab.id === 'orders' && tab.rejectionBadge > 0 && (
+                    <span className="text-[9px] px-1.8 py-0.5 rounded-full font-black bg-red-500 text-white animate-pulse">
+                      ⚠ {tab.rejectionBadge}
+                    </span>
+                  )}
+                  {tab.badge !== undefined && tab.badge > 0 && (
+                    <span className={`text-[9px] px-1.8 py-0.5 rounded-full font-black ${
+                      active ? 'bg-surface text-primary' : 'bg-primary text-white animate-pulse'
+                    }`}>
+                      {tab.badge}
+                    </span>
+                  )}
+                </div>
               </button>
             );
           })}
@@ -1563,9 +1773,109 @@ export default function AdminDashboard() {
         {/* Right Side: Tab Contents Body */}
         <div className="lg:col-span-3">
 
+          {/* RIDER REJECTIONS TAB */}
+          {activeSubTab === 'rider_rejections' && (
+            <RiderRejectionsTab token={token} onViewOrder={setSelectedDetailsOrder} />
+          )}
+
+          {/* EARNINGS & SETTLEMENTS TAB */}
+          {activeSubTab === 'earnings_settlements' && (
+            <EarningsAndSettlementsTab token={token} />
+          )}
+
           {/* SUPPLIERS & ITEMS TAB */}
           {activeSubTab === 'suppliers_items' && (
             <SuppliersAndItemsTab token={token} />
+          )}
+
+          {/* UNIFIED HOME DESIGN DASHBOARD TAB */}
+          {activeSubTab === 'home_design' && (
+            <HomeDesignDashboard
+              token={token}
+              categoryDesigns={adminCategoryDesigns}
+              isCategoryDesignsLoading={isAdminCategoryDesignsLoading}
+              onRefreshCategoryDesigns={fetchCategoryDesigns}
+              initialSubTab="overview"
+              onOpenHeroDesigner={(heroId) => {
+                setSelectedHeroBannerId(heroId);
+                setActiveSubTab('home_hero_banner_designer');
+              }}
+              onOpenCategoryDesigner={(catKey) => {
+                setSelectedDesignCategory(catKey);
+                setActiveSubTab('category_designer');
+              }}
+            />
+          )}
+
+          {/* HOME HERO BANNERS TAB (Backwards Compatibility Route Target) */}
+          {activeSubTab === 'home_hero_banners' && (
+            <HomeDesignDashboard
+              token={token}
+              categoryDesigns={adminCategoryDesigns}
+              isCategoryDesignsLoading={isAdminCategoryDesignsLoading}
+              onRefreshCategoryDesigns={fetchCategoryDesigns}
+              initialSubTab="hero_banners"
+              onOpenHeroDesigner={(heroId) => {
+                setSelectedHeroBannerId(heroId);
+                setActiveSubTab('home_hero_banner_designer');
+              }}
+              onOpenCategoryDesigner={(catKey) => {
+                setSelectedDesignCategory(catKey);
+                setActiveSubTab('category_designer');
+              }}
+            />
+          )}
+
+          {/* HOME HERO BANNER DESIGNER STUDIO TAB */}
+          {activeSubTab === 'home_hero_banner_designer' && selectedHeroBannerId && (
+            <HomeHeroBannerDesigner
+              bannerId={selectedHeroBannerId}
+              token={token}
+              onBackToList={() => setActiveSubTab('home_design')}
+              onSwitchBanner={(heroId) => setSelectedHeroBannerId(heroId)}
+            />
+          )}
+
+          {/* HOME BACKGROUND MANAGEMENT TAB (Backwards Compatibility Route Target) */}
+          {activeSubTab === 'home_background' && (
+            <HomeDesignDashboard
+              token={token}
+              categoryDesigns={adminCategoryDesigns}
+              isCategoryDesignsLoading={isAdminCategoryDesignsLoading}
+              onRefreshCategoryDesigns={fetchCategoryDesigns}
+              initialSubTab="home_background"
+            />
+          )}
+
+          {/* HOME CATEGORY CARDS LIST TAB (Backwards Compatibility Route Target) */}
+          {activeSubTab === 'category_cards' && (
+            <HomeDesignDashboard
+              token={token}
+              categoryDesigns={adminCategoryDesigns}
+              isCategoryDesignsLoading={isAdminCategoryDesignsLoading}
+              onRefreshCategoryDesigns={fetchCategoryDesigns}
+              initialSubTab="category_cards"
+              onOpenCategoryDesigner={(catKey) => {
+                setSelectedDesignCategory(catKey);
+                setActiveSubTab('category_designer');
+              }}
+            />
+          )}
+
+          {/* HOME CATEGORY DESIGNER TAB */}
+          {activeSubTab === 'category_designer' && (
+            <CategoryDesigner
+              categoryKey={selectedDesignCategory}
+              token={token}
+              initialDesigns={adminCategoryDesigns}
+              onBackToList={() => setActiveSubTab('category_cards')}
+              onDesignUpdated={(catKey, updatedDoc) => {
+                setAdminCategoryDesigns((prev) => ({
+                  ...prev,
+                  [catKey]: updatedDoc
+                }));
+              }}
+            />
           )}
 
           {/* ECOSYSTEM ANALYTICS TAB */}
@@ -1650,31 +1960,39 @@ export default function AdminDashboard() {
               {/* Graphical Layout & Metrics Explanation */}
               <div className="bg-surface border border-line rounded-3xl p-6 shadow-2xs flex flex-col gap-4">
                 <h4 className="font-display font-extrabold text-sm text-main">Revenue Distribution Model</h4>
-                <div className="flex flex-col gap-3.5 mt-2">
-                  <div>
-                    <div className="flex justify-between text-xs font-bold text-muted mb-1">
-                      <span>Restaurateurs Payout (85% Split)</span>
-                      <span>₹{(metrics?.totalSales * (1 - platformSettings.commissionPercent / 100) || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-violet-500 rounded-full" style={{ width: '85%' }} />
-                    </div>
-                  </div>
+                {(() => {
+                  const effectiveRate = platformSettings?.restaurantCommissionEnabled !== false
+                    ? Number(platformSettings?.restaurantCommissionPercentage ?? platformSettings?.commissionPercent ?? 15)
+                    : 0;
+                  const restSplitPct = Math.max(0, 100 - effectiveRate);
+                  return (
+                    <div className="flex flex-col gap-3.5 mt-2">
+                      <div>
+                        <div className="flex justify-between text-xs font-bold text-muted mb-1">
+                          <span>Restaurants Payout ({Number(restSplitPct).toFixed(0)}%)</span>
+                          <span>{formatCurrency((Number(metrics?.totalSales) || 0) * (restSplitPct / 100))}</span>
+                        </div>
+                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-violet-500 rounded-full" style={{ width: `${restSplitPct}%` }} />
+                        </div>
+                      </div>
 
-                  <div>
-                    <div className="flex justify-between text-xs font-bold text-muted mb-1">
-                      <span>Platform Commission Earned (15% Split)</span>
-                      <span>₹{metrics?.platformRevenue.toFixed(2)}</span>
+                      <div>
+                        <div className="flex justify-between text-xs font-bold text-muted mb-1">
+                          <span>Platform Commission Earned ({Number(effectiveRate).toFixed(0)}%)</span>
+                          <span>{formatCurrency((Number(metrics?.totalSales) || 0) * (effectiveRate / 100))}</span>
+                        </div>
+                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-primary rounded-full" style={{ width: `${effectiveRate}%` }} />
+                        </div>
+                      </div>
                     </div>
-                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-primary rounded-full" style={{ width: '15%' }} />
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 <div className="bg-violet-50/20 border border-violet-100 p-4 rounded-2xl text-xs font-semibold text-muted mt-2 leading-relaxed">
                   <span className="text-primary font-bold">Billing Architecture: </span>
-                  Jinkzo processes digital payment collections and disperses funds daily. Platform splits commissions seamlessly across all active food ordering channels based on configured system parameters.
+                  Restaurant commission is calculated according to the configured platform commission rate. Set the rate to 0% when no restaurant commission applies.
                 </div>
               </div>
 
@@ -1822,10 +2140,10 @@ export default function AdminDashboard() {
                                   </div>
                                 </div>
                               </td>
-                              <td className="py-3.5 px-2">₹{earnings.upi.toFixed(2)}</td>
-                              <td className="py-3.5 px-2">₹{earnings.card.toFixed(2)}</td>
-                              <td className="py-3.5 px-2">₹{earnings.cod.toFixed(2)}</td>
-                              <td className="py-3.5 px-2 text-right text-primary font-black">₹{earnings.total.toFixed(2)}</td>
+                              <td className="py-3.5 px-2">{formatCurrency(earnings.upi)}</td>
+                              <td className="py-3.5 px-2">{formatCurrency(earnings.card)}</td>
+                              <td className="py-3.5 px-2">{formatCurrency(earnings.cod)}</td>
+                              <td className="py-3.5 px-2 text-right text-primary font-black">{formatCurrency(earnings.total)}</td>
                             </tr>
                           );
                         })
@@ -2234,19 +2552,19 @@ export default function AdminDashboard() {
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold text-main bg-base p-3 rounded-2xl border border-line/30">
                               <div className="flex flex-col">
                                 <span className="text-[9px] uppercase text-muted font-extrabold">UPI</span>
-                                <span className="text-main">₹{getRestaurantIncomeBreakdown(u.restaurantId).upi.toFixed(2)}</span>
+                                <span className="text-main">{formatCurrency(getRestaurantIncomeBreakdown(u.restaurantId).upi)}</span>
                               </div>
                               <div className="flex flex-col">
                                 <span className="text-[9px] uppercase text-muted font-extrabold">Card</span>
-                                <span className="text-main">₹{getRestaurantIncomeBreakdown(u.restaurantId).card.toFixed(2)}</span>
+                                <span className="text-main">{formatCurrency(getRestaurantIncomeBreakdown(u.restaurantId).card)}</span>
                               </div>
                               <div className="flex flex-col">
                                 <span className="text-[9px] uppercase text-muted font-extrabold">COD</span>
-                                <span className="text-main">₹{getRestaurantIncomeBreakdown(u.restaurantId).cod.toFixed(2)}</span>
+                                <span className="text-main">{formatCurrency(getRestaurantIncomeBreakdown(u.restaurantId).cod)}</span>
                               </div>
                               <div className="flex flex-col border-l border-line-strong/60 pl-2 text-primary">
                                 <span className="text-[9px] uppercase font-extrabold">Total Added</span>
-                                <span className="font-extrabold">₹{getRestaurantIncomeBreakdown(u.restaurantId).total.toFixed(2)}</span>
+                                <span className="font-extrabold">{formatCurrency(getRestaurantIncomeBreakdown(u.restaurantId).total)}</span>
                               </div>
                             </div>
                           </div>
@@ -2318,6 +2636,40 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
+              {/* Rider Assignment Filter Toolbar */}
+              <div className="flex items-center gap-2 flex-wrap text-xs pb-1">
+                <span className="text-[10px] uppercase font-extrabold text-muted">Rider Assignment:</span>
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'assigned', label: 'Assigned' },
+                  { id: 'waiting', label: 'Waiting for Rider' },
+                  { id: 'rejected', label: 'Rider Rejected / Action Required', badge: pendingRejectionOrdersCount, alert: true }
+                ].map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => setRiderAssignmentFilter(f.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                      riderAssignmentFilter === f.id
+                        ? f.alert
+                          ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                          : 'bg-primary text-white border-primary shadow-xs'
+                        : f.alert && f.badge > 0
+                        ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 font-black'
+                        : 'bg-base border-line text-muted hover:bg-surface hover:text-main'
+                    }`}
+                  >
+                    <span>{f.label}</span>
+                    {f.badge !== undefined && f.badge > 0 && (
+                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black ${
+                        riderAssignmentFilter === f.id ? 'bg-white text-red-600' : 'bg-red-600 text-white'
+                      }`}>
+                        {f.badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
               {isOrdersLoading ? (
                 <div className="h-48 bg-surface border border-line rounded-3xl animate-pulse" />
               ) : (
@@ -2340,7 +2692,7 @@ export default function AdminDashboard() {
                             <div className="flex justify-between items-start pb-2 border-b border-red-100/50">
                               <div>
                                 <span className="font-mono text-[10px] font-bold text-red-600 uppercase">#{String(order._id || '').slice(-8)}</span>
-                                <span className="text-[10px] font-bold text-muted ml-2">Total: ₹{order.total.toFixed(2)}</span>
+                                <span className="text-[10px] font-bold text-muted ml-2">Total: {formatCurrency(order.total)}</span>
                               </div>
                               <span className="text-[9px] font-black px-2 py-0.5 rounded uppercase border bg-red-50 border-red-200 text-red-700">Ready for Pickup</span>
                             </div>
@@ -2364,7 +2716,7 @@ export default function AdminDashboard() {
                                 {order.items.map((item, idx) => (
                                   <div key={idx} className="flex justify-between text-[10px] font-bold text-main pl-1">
                                     <span>x{item.quantity} {item.name}</span>
-                                    <span className="text-muted font-medium">₹{item.price * item.quantity}</span>
+                                    <span className="text-muted font-medium">{formatCurrency((Number(item.price) || 0) * (Number(item.quantity) || 1))}</span>
                                   </div>
                                 ))}
                               </div>
@@ -2413,7 +2765,7 @@ export default function AdminDashboard() {
                             <div className="flex justify-between items-start pb-2 border-b border-yellow-100/50">
                               <div>
                                 <span className="font-mono text-[10px] font-bold text-yellow-600 uppercase">#{String(order._id || '').slice(-8)}</span>
-                                <span className="text-[10px] font-bold text-muted ml-2">Total: ₹{order.total.toFixed(2)}</span>
+                                <span className="text-[10px] font-bold text-muted ml-2">Total: {formatCurrency(order.total ?? order.fare)}</span>
                               </div>
                               <span className="text-[9px] font-black px-2 py-0.5 rounded uppercase border bg-yellow-50 border-yellow-200 text-yellow-700">Needs Captain</span>
                             </div>
@@ -2476,7 +2828,15 @@ export default function AdminDashboard() {
                           </span>
                           <span className="font-mono text-[10px] font-bold text-muted">#{String(order._id || '').slice(-8).toUpperCase()}</span>
                           <span className="text-gray-300">•</span>
-                          <span className="text-muted font-semibold">{order.createdAt ? formatAppDate(order.createdAt) : ''}</span>
+                          <span className="text-muted font-semibold">Placed: {formatAppDate(getOrderPlacedAt(order))}</span>
+                          {['Delivered', 'Completed'].includes(order.status) && (
+                            <>
+                              <span className="text-gray-300">•</span>
+                              <span className="font-bold text-green-700">
+                                Delivered: {getOrderDeliveredAt(order) ? formatAppDate(getOrderDeliveredAt(order)) : 'Delivery time unavailable'}
+                              </span>
+                            </>
+                          )}
                         </div>
                         <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
                           ['Delivered', 'Completed'].includes(order.status) ? 'bg-green-50 border-green-200 text-green-700' :
@@ -2486,6 +2846,55 @@ export default function AdminDashboard() {
                           {order.status}
                         </span>
                       </div>
+
+                      {/* PROMINENT RIDER REJECTION BANNER */}
+                      {order.hasRiderRejection && (() => {
+                        const pendingRej = (order.riderRejections || []).slice().reverse().find(r => r.status === 'Pending_Admin_Review') || (order.riderRejections || []).slice().reverse()[0];
+                        if (!pendingRej) return null;
+                        const isPending = pendingRej.status === 'Pending_Admin_Review';
+
+                        return (
+                          <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                            isPending ? 'bg-red-50/90 border-red-200 text-red-900 shadow-2xs' : 'bg-gray-50 border-gray-200 text-gray-700'
+                          }`}>
+                            <div className="flex items-start gap-3">
+                              <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${isPending ? 'text-red-600 animate-pulse' : 'text-gray-500'}`} />
+                              <div className="flex flex-col gap-1 text-xs">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                    isPending ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-800'
+                                  }`}>
+                                    {isPending ? '⚠ Rider Rejected — Admin Action Required' : `Rider Rejection (${pendingRej.status})`}
+                                  </span>
+                                  <span className="text-[10px] text-muted font-bold">
+                                    Rejected: {formatAppDateTime(pendingRej.rejectedAt)}
+                                  </span>
+                                </div>
+                                <div className="text-xs font-semibold mt-0.5">
+                                  <span className="font-extrabold text-main">Rejected By:</span> {pendingRej.riderName || 'Rider'}
+                                  <span className="mx-2 text-gray-300">•</span>
+                                  <span className="font-extrabold text-main">Reason:</span> <span className="text-red-700 font-bold">{pendingRej.reasonText || pendingRej.reasonCode}</span>
+                                  {pendingRej.note && (
+                                    <span className="italic text-muted block text-[11px] mt-0.5">Note: "{pendingRej.note}"</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            {isPending && (
+                              <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenAssignRiderModal(order)}
+                                  className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-black rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <UserCheck className="w-4 h-4" />
+                                  <span>Assign Rider</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Customer, Restaurant, and Delivery Partner Details */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-semibold text-muted">
@@ -2520,8 +2929,8 @@ export default function AdminDashboard() {
                             <>
                               <span className="font-bold text-main">{order.deliveryAgent.name}</span>
                               <span className="text-[10px] text-muted font-medium">{order.deliveryAgent.phone}</span>
-                              {order.deliveryAgent.rating != null && Number.isFinite(Number(order.deliveryAgent.rating)) && (
-                                <span className="text-[9px] text-yellow-500 font-bold">★ {Number(order.deliveryAgent.rating).toFixed(1)}</span>
+                              {order.deliveryAgent.rating != null && (
+                                <span className="text-[9px] text-yellow-500 font-bold">★ {formatRating(order.deliveryAgent.rating)}</span>
                               )}
                             </>
                           ) : (
@@ -2560,27 +2969,116 @@ export default function AdminDashboard() {
                         </div>
                       )}
 
-                      {/* Review details */}
-                      {Number(order.review?.rating) > 0 && (
-                        <div className="bg-green-50/20 border border-green-100 rounded-2xl p-4 text-xs font-semibold text-green-955 flex flex-col gap-1.5">
-                          <div className="flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <span
-                                key={star}
-                                className={`text-sm ${
-                                  star <= order.review.rating ? 'text-yellow-500' : 'text-gray-300'
-                                }`}
-                              >
-                                ★
-                              </span>
-                            ))}
-                            <span className="text-[9px] text-green-700 font-bold bg-green-100/50 px-1.5 py-0.5 rounded-md ml-1.5 uppercase">Customer Rated</span>
-                          </div>
-                          {order.review.comment && (
-                            <p className="text-[11px] text-gray-650 italic bg-surface/70 p-2.5 rounded-xl border border-green-100/10">
-                              "{order.review.comment}"
-                            </p>
+                      {/* Customer Ratings / Feedback details for Admin */}
+                      {((order.riderReview && Number(order.riderReview.rating) > 0) || (Array.isArray(order.restaurantReviews) && order.restaurantReviews.length > 0) || (Array.isArray(order.storeReviews) && order.storeReviews.length > 0) || (Number(order.review?.rating) > 0)) && (
+                        <div className="flex flex-col gap-2 my-1">
+                          {/* Rider Review */}
+                          {order.riderReview && Number(order.riderReview.rating) > 0 && (
+                            <div className="bg-blue-50/30 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 rounded-xl p-3 text-xs flex flex-col gap-1">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[9px] font-black uppercase text-blue-700 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/50 px-1.5 py-0.5 rounded">
+                                    Rider Review
+                                  </span>
+                                  {order.deliveryAgent?.name && (
+                                    <span className="text-[11px] font-bold text-main">
+                                      {order.deliveryAgent.name}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-0.5">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <span
+                                      key={star}
+                                      className={`text-xs ${star <= order.riderReview.rating ? 'text-yellow-500' : 'text-gray-300'}`}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                  {order.riderReview.tipAmount > 0 && (
+                                    <span className="text-[10px] font-bold text-green-600 ml-1">
+                                      (Tip: ₹{order.riderReview.tipAmount})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              {order.riderReview.comment && (
+                                <p className="text-[11px] text-muted italic bg-surface/70 p-2 rounded-lg border border-line/40">
+                                  "{order.riderReview.comment}"
+                                </p>
+                              )}
+                            </div>
                           )}
+
+                          {/* Restaurant Review(s) */}
+                          {(Array.isArray(order.restaurantReviews) && order.restaurantReviews.length > 0 ? order.restaurantReviews : (Number(order.review?.rating) > 0 ? [{ ...order.review, restaurantName: order.restaurant?.name || 'Restaurant' }] : [])).map((rRev, rIdx) => (
+                            <div key={rIdx} className="bg-emerald-50/30 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl p-3 text-xs flex flex-col gap-1">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-400 bg-emerald-100/50 dark:bg-emerald-900/50 px-1.5 py-0.5 rounded">
+                                    Restaurant Review
+                                  </span>
+                                  <span className="text-[11px] font-bold text-main">
+                                    {rRev.restaurantName || order.restaurant?.name || 'Restaurant'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-0.5">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <span
+                                      key={star}
+                                      className={`text-xs ${star <= rRev.rating ? 'text-yellow-500' : 'text-gray-300'}`}
+                                    >
+                                      ★
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              {rRev.comment && (
+                                <p className="text-[11px] text-muted italic bg-surface/70 p-2 rounded-lg border border-line/40">
+                                  "{rRev.comment}"
+                                </p>
+                              )}
+                            </div>
+                          ))}
+
+                          {/* Store / Supplier Review(s) (Grocery, Meat, Veg & Fruits, Bakery) */}
+                          {Array.isArray(order.storeReviews) && order.storeReviews.length > 0 && order.storeReviews.map((sRev, sIdx) => {
+                            const serviceLabel = sRev.serviceType === 'grocery' ? 'Grocery'
+                              : sRev.serviceType === 'meat' ? 'Meat'
+                              : sRev.serviceType === 'veg_fruits' ? 'Veg & Fruits'
+                              : sRev.serviceType === 'bakery_beverages' ? 'Bakery'
+                              : 'Store';
+
+                            return (
+                              <div key={sIdx} className="bg-amber-50/30 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 rounded-xl p-3 text-xs flex flex-col gap-1">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[9px] font-black uppercase text-amber-700 dark:text-amber-400 bg-amber-100/50 dark:bg-amber-900/50 px-1.5 py-0.5 rounded">
+                                      {serviceLabel} Review
+                                    </span>
+                                    <span className="text-[11px] font-bold text-main">
+                                      {sRev.sourceName || 'Store'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-0.5">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <span
+                                        key={star}
+                                        className={`text-xs ${star <= sRev.rating ? 'text-yellow-500' : 'text-gray-300'}`}
+                                      >
+                                        ★
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                                {sRev.comment && (
+                                  <p className="text-[11px] text-muted italic bg-surface/70 p-2 rounded-lg border border-line/40">
+                                    "{sRev.comment}"
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
 
@@ -2592,7 +3090,24 @@ export default function AdminDashboard() {
                             {order.paymentDetails?.method || order.paymentMethod || 'COD'} • <span className={(order.paymentDetails?.status || 'Pending') === 'Paid' ? 'text-green-600' : 'text-violet-500'}>{order.paymentDetails?.status || 'Pending'}</span>
                           </span>
                         </div>
-                        <div className="flex items-center gap-4 ml-auto">
+                        <div className="flex items-center gap-3 ml-auto flex-wrap">
+                          {order.hasRiderRejection && (order.riderRejections || []).some(r => r.status === 'Pending_Admin_Review') && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAssignRiderModal(order)}
+                              className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl text-[11px] shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                            >
+                              <UserCheck className="w-3.5 h-3.5" />
+                              Assign Rider
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setSelectedDetailsOrder(order)}
+                            className="px-3.5 py-1.5 bg-base hover:bg-surface text-main font-bold rounded-xl text-[11px] border border-line shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-primary" />
+                            View Details
+                          </button>
                           {!['Delivered', 'Completed', 'Cancelled'].includes(order.status) && (
                             <button
                               onClick={() => handleUpdateOrderStatus(order._id, 'Delivered')}
@@ -2604,7 +3119,7 @@ export default function AdminDashboard() {
                           )}
                           <div className="text-right">
                             <span className="text-[9px] text-muted font-extrabold uppercase">Total Bill</span>
-                            <p className="text-base font-black text-gray-805">₹{Number(order.total || 0).toFixed(2)}</p>
+                            <p className="text-base font-black text-gray-805">{formatCurrency(order.total ?? order.fare)}</p>
                           </div>
                         </div>
                       </div>
@@ -2925,6 +3440,146 @@ export default function AdminDashboard() {
                       <div className="text-[11px] text-muted leading-relaxed bg-base p-3 rounded-xl border border-line">
                         Charged when a customer shifts or adds items across distinct marketplace sections.
                       </div>
+                    </div>
+                  </div>
+
+                  {/* RESTAURANT COMMISSION CONFIGURATION */}
+                  <div className="bg-surface border border-line p-6 rounded-3xl shadow-2xs flex flex-col gap-5">
+                    <div className="flex items-center justify-between border-b border-line pb-3">
+                      <div>
+                        <h4 className="font-display font-extrabold text-base text-primary flex items-center gap-2">
+                          <Percent className="w-5 h-5 text-primary" />
+                          RESTAURANT COMMISSION CONFIGURATION
+                        </h4>
+                        <p className="text-xs text-muted font-medium mt-1 leading-relaxed">
+                          Configure platform commission charged on eligible restaurant food sales. Set to 0% when no commission applies.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleSaveSettings(e)}
+                        disabled={isSettingsSaving}
+                        className="bg-primary/10 hover:bg-primary text-primary hover:text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                      >
+                        <Save className="w-3.5 h-3.5" /> Save
+                      </button>
+                    </div>
+
+                    {/* Enable / Disable Switch */}
+                    <div className="flex items-center justify-between bg-base p-4 rounded-2xl border border-line">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs font-bold text-main">Enable Restaurant Commission</span>
+                        <span className="text-[10px] text-muted font-medium">
+                          When disabled (OFF), effective commission is 0% and restaurants receive 100% of food sales.
+                        </span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settingsForm?.restaurantCommissionEnabled !== false}
+                          onChange={(e) => setSettingsForm({
+                            ...settingsForm,
+                            restaurantCommissionEnabled: e.target.checked
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                      </label>
+                    </div>
+
+                    {/* Commission Rate Numeric Input & Steppers */}
+                    <div className="flex flex-col gap-3">
+                      <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">
+                        Commission Percentage (%)
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = Number(settingsForm?.restaurantCommissionPercentage ?? settingsForm?.commissionPercent ?? 15);
+                            const next = Math.max(0, cur - 1);
+                            setSettingsForm({
+                              ...settingsForm,
+                              restaurantCommissionPercentage: next,
+                              commissionPercent: next
+                            });
+                          }}
+                          className="w-10 h-10 rounded-xl border border-line-strong bg-base hover:bg-gray-100 font-bold text-base flex items-center justify-center cursor-pointer transition-colors"
+                        >
+                          -
+                        </button>
+
+                        <div className="relative flex-1 max-w-xs">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.5"
+                            value={settingsForm?.restaurantCommissionPercentage ?? settingsForm?.commissionPercent ?? 15}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const num = val === '' ? 0 : parseFloat(val);
+                              const safeNum = Number.isFinite(num) ? Math.min(100, Math.max(0, num)) : 0;
+                              setSettingsForm({
+                                ...settingsForm,
+                                restaurantCommissionPercentage: safeNum,
+                                commissionPercent: safeNum
+                              });
+                            }}
+                            className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-sm text-main font-black outline-none w-full pr-10 focus:border-primary text-center"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted pointer-events-none">%</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = Number(settingsForm?.restaurantCommissionPercentage ?? settingsForm?.commissionPercent ?? 15);
+                            const next = Math.min(100, cur + 1);
+                            setSettingsForm({
+                              ...settingsForm,
+                              restaurantCommissionPercentage: next,
+                              commissionPercent: next
+                            });
+                          }}
+                          className="w-10 h-10 rounded-xl border border-line-strong bg-base hover:bg-gray-100 font-bold text-base flex items-center justify-center cursor-pointer transition-colors"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      {/* Quick Presets Buttons */}
+                      <div className="flex items-center gap-2 pt-1 flex-wrap">
+                        <span className="text-[10px] font-extrabold uppercase text-muted mr-1">Quick Presets:</span>
+                        {[0, 5, 10, 15, 20].map((pct) => (
+                          <button
+                            key={pct}
+                            type="button"
+                            onClick={() => setSettingsForm({
+                              ...settingsForm,
+                              restaurantCommissionPercentage: pct,
+                              commissionPercent: pct
+                            })}
+                            className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                              (settingsForm?.restaurantCommissionPercentage ?? settingsForm?.commissionPercent) === pct
+                                ? 'bg-primary text-white border-primary shadow-xs'
+                                : 'bg-base text-main border-line hover:border-primary'
+                            }`}
+                          >
+                            {pct}% {pct === 0 ? '(No Commission)' : ''}
+                          </button>
+                        ))}
+                      </div>
+
+                      <p className="text-[11px] text-muted font-medium bg-base/60 p-3 rounded-xl border border-line/60">
+                        💡 {settingsForm?.restaurantCommissionEnabled === false ? (
+                          <strong className="text-amber-600">Commission Switch is OFF. Effective Commission = 0%. Restaurant gets 100% payout.</strong>
+                        ) : (settingsForm?.restaurantCommissionPercentage ?? settingsForm?.commissionPercent) === 0 ? (
+                          <strong className="text-green-600">0% Commission Configured: Restaurant gets 100% of eligible food sales. Jinkzo Commission = ₹0.</strong>
+                        ) : (
+                          <span>Configured Rate = {settingsForm?.restaurantCommissionPercentage ?? settingsForm?.commissionPercent}%. Restaurant receives {(100 - (settingsForm?.restaurantCommissionPercentage ?? settingsForm?.commissionPercent)).toFixed(1)}% of eligible food sales.</span>
+                        )}
+                      </p>
                     </div>
                   </div>
 
@@ -3279,10 +3934,15 @@ export default function AdminDashboard() {
                           <input
                             type="number"
                             required
-                            value={settingsForm?.commissionPercent ?? 15}
+                            min="0"
+                            max="100"
+                            step="0.5"
+                            value={settingsForm?.restaurantCommissionPercentage ?? settingsForm?.commissionPercent ?? 15}
                             onChange={(e) => {
                               const val = e.target.value;
-                              setSettingsForm({ ...settingsForm, commissionPercent: val === '' ? '' : parseFloat(val) || 0 });
+                              const num = val === '' ? 0 : parseFloat(val);
+                              const safeNum = Number.isFinite(num) ? Math.min(100, Math.max(0, num)) : 0;
+                              setSettingsForm({ ...settingsForm, restaurantCommissionPercentage: safeNum, commissionPercent: safeNum });
                             }}
                             className="bg-base border border-line-strong rounded-xl px-3.5 py-2.5 text-xs text-main font-bold outline-none w-full focus:border-primary"
                           />
@@ -3679,189 +4339,61 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* PROMO BANNERS TAB */}
+          {/* PROMO BANNERS LIST TAB */}
           {activeSubTab === 'banners' && (
-            <div className="flex flex-col gap-6 animate-fade-in">
-              {/* Header with Title & Add Banner Button */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
-                <div className="flex flex-col gap-1">
-                  <h3 className="font-display font-extrabold text-base text-main flex items-center gap-2">
-                    <ImagePlus className="w-5 h-5 text-primary" />
-                    Homepage Carousel & Promo Banners
-                  </h3>
-                  <p className="text-xs text-muted font-medium">
-                    Configure customer homepage hero carousel slides, auto-advance sequence, and advertisement status.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAddBannerForm({
-                      title: '',
-                      subtitle: '',
-                      buttonText: 'Order Now',
-                      link: '/restaurants',
-                      displayOrder: banners.length + 1,
-                      isActive: true,
-                      imageUrl: ''
-                    });
-                    setAddBannerFile(null);
-                    setAddBannerError('');
-                    setShowAddBannerModal(true);
-                  }}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-2xl text-xs font-bold shadow-md shadow-primary/20 transition-all active:scale-95 cursor-pointer self-start sm:self-auto"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add New Banner</span>
-                </button>
-              </div>
+            <BannerDesignsTab
+              banners={banners}
+              bannerDesigns={bannerDesigns}
+              isLoading={isBannersLoading || isBannerDesignsLoading}
+              onRefresh={() => {
+                fetchBanners();
+                fetchBannerDesigns();
+              }}
+              onEditDesign={(bannerId) => {
+                setSelectedDesignBannerId(bannerId);
+                setActiveSubTab('banner_designer');
+              }}
+              onToggle={handleToggleBanner}
+              onDelete={(b) => setDeleteBannerModal({ isOpen: true, banner: b })}
+              onAdd={() => {
+                setAddBannerForm({
+                  title: '',
+                  subtitle: '',
+                  buttonText: 'Order Now',
+                  link: '/restaurants',
+                  displayOrder: banners.length + 1,
+                  isActive: true,
+                  imageUrl: ''
+                });
+                setAddBannerFile(null);
+                setAddBannerError('');
+                setShowAddBannerModal(true);
+              }}
+            />
+          )}
 
-              {/* Banners Table & Cards */}
-              {isBannersLoading ? (
-                <div className="bg-surface rounded-3xl p-12 border border-line flex flex-col items-center justify-center gap-3">
-                  <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
-                  <span className="text-xs font-bold text-muted">Loading promo banners...</span>
-                </div>
-              ) : banners.length > 0 ? (
-                <div className="bg-surface border border-line rounded-3xl overflow-hidden shadow-2xs">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-line bg-base/50 text-[10px] uppercase font-extrabold tracking-wider text-muted">
-                          <th className="py-3.5 px-4">Preview & Title</th>
-                          <th className="py-3.5 px-4">CTA Button & Link</th>
-                          <th className="py-3.5 px-4 text-center">Order</th>
-                          <th className="py-3.5 px-4 text-center">Status</th>
-                          <th className="py-3.5 px-4 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-line text-xs font-medium">
-                        {banners.map((b, idx) => {
-                          const isActive = b.isActive !== false && b.active !== false;
-                          return (
-                            <tr key={b._id || idx} className="hover:bg-base/30 transition-colors">
-                              {/* Preview & Title */}
-                              <td className="py-3.5 px-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-20 h-12 rounded-xl overflow-hidden bg-base border border-line flex-shrink-0 relative">
-                                    <img
-                                      src={getImageUrl(b.imageUrl, 'banner')}
-                                      alt={b.title}
-                                      className="w-full h-full object-cover"
-                                      onError={(e) => handleImageError(e, 'banner')}
-                                    />
-                                    {!isActive && (
-                                      <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center">
-                                        <span className="text-[9px] font-black text-white/90 uppercase tracking-wider">Hidden</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex flex-col min-w-0 max-w-[220px]">
-                                    <span className="font-bold text-main truncate text-xs">{b.title}</span>
-                                    {b.subtitle && (
-                                      <span className="text-[11px] text-muted truncate">{b.subtitle}</span>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-
-                              {/* CTA Button & Link */}
-                              <td className="py-3.5 px-4">
-                                <div className="flex flex-col gap-1">
-                                  <span className="inline-flex items-center self-start bg-primary/10 text-primary border border-primary/20 font-bold text-[10px] px-2.5 py-0.5 rounded-full">
-                                    {b.buttonText || 'Order Now'}
-                                  </span>
-                                  <span className="text-[10px] text-muted font-mono truncate max-w-[160px]">
-                                    {b.link || '/restaurants'}
-                                  </span>
-                                </div>
-                              </td>
-
-                              {/* Order */}
-                              <td className="py-3.5 px-4 text-center">
-                                <span className="inline-block bg-base border border-line-strong px-2.5 py-1 rounded-xl text-xs font-bold text-main">
-                                  #{b.displayOrder !== undefined ? b.displayOrder : idx + 1}
-                                </span>
-                              </td>
-
-                              {/* Status Toggle */}
-                              <td className="py-3.5 px-4 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleBanner(b._id)}
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer border ${
-                                    isActive
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 hover:bg-emerald-100'
-                                      : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 hover:bg-gray-200'
-                                  }`}
-                                  title={isActive ? 'Click to disable' : 'Click to enable'}
-                                >
-                                  <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
-                                  <span>{isActive ? 'Live on Home' : 'Disabled'}</span>
-                                </button>
-                              </td>
-
-                              {/* Actions */}
-                              <td className="py-3.5 px-4 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEditBanner(b)}
-                                    className="p-2 text-muted hover:text-primary hover:bg-primary/10 rounded-xl transition-colors cursor-pointer"
-                                    title="Edit Banner"
-                                  >
-                                    <Pencil className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setDeleteBannerModal({ isOpen: true, banner: b })}
-                                    className="p-2 text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-colors cursor-pointer"
-                                    title="Delete Banner"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-surface rounded-3xl p-10 text-center border border-line shadow-2xs flex flex-col items-center gap-3">
-                  <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
-                    <ImagePlus className="w-7 h-7" />
-                  </div>
-                  <h4 className="font-display font-extrabold text-base text-main">No Custom Banners Configured</h4>
-                  <p className="text-xs text-muted font-medium max-w-sm">
-                    Default system banners are currently active on the customer homepage. Upload custom advertisements to highlight seasonal campaigns and offers.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAddBannerForm({
-                        title: '',
-                        subtitle: '',
-                        buttonText: 'Order Now',
-                        link: '/restaurants',
-                        displayOrder: 1,
-                        isActive: true,
-                        imageUrl: ''
-                      });
-                      setAddBannerFile(null);
-                      setAddBannerError('');
-                      setShowAddBannerModal(true);
-                    }}
-                    className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-2xl text-xs font-bold shadow-md shadow-primary/20 cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Create First Banner</span>
-                  </button>
-                </div>
-              )}
-            </div>
+          {/* PROMO BANNER DESIGNER STUDIO TAB */}
+          {activeSubTab === 'banner_designer' && selectedDesignBannerId && (
+            <BannerDesigner
+              bannerId={selectedDesignBannerId}
+              banner={banners.find(b => b._id === selectedDesignBannerId)}
+              token={token}
+              allBanners={banners}
+              allBannerDesigns={bannerDesigns}
+              onBackToList={() => setActiveSubTab('banners')}
+              onDesignUpdated={(bannerId, updatedDoc) => {
+                setBannerDesigns((prev) => ({
+                  ...prev,
+                  [bannerId]: updatedDoc
+                }));
+              }}
+              onBannerUpdated={(bannerId, updatedBanner) => {
+                setBanners((prev) => prev.map(b => b._id === bannerId ? updatedBanner : b));
+              }}
+              onSwitchBanner={(bannerId) => {
+                setSelectedDesignBannerId(bannerId);
+              }}
+            />
           )}
 
           {/* ── CATEGORY MANAGEMENT TAB ──────────────────────────────────── */}
@@ -5214,6 +5746,29 @@ export default function AdminDashboard() {
         onApply={historyFilter.setDateFilter}
         availableYears={historyFilter.availableYears}
         datesWithRecords={historyFilter.datesWithRecords}
+      />
+
+      {/* ── UNIFIED MASTER ORDER DETAILS MODAL ─── */}
+      <OrderDetailsModal
+        isOpen={Boolean(selectedDetailsOrder)}
+        onClose={() => setSelectedDetailsOrder(null)}
+        order={selectedDetailsOrder}
+        role="admin"
+        token={token}
+        onAssignRider={handleOpenAssignRiderModal}
+        onMarkHandled={handleMarkRejectionHandled}
+      />
+
+      {/* ── ADMIN MANUAL ASSIGN RIDER MODAL ─── */}
+      <AssignRiderModal
+        isOpen={Boolean(assignRiderOrder)}
+        onClose={() => setAssignRiderOrder(null)}
+        order={assignRiderOrder}
+        allUsers={allUsers}
+        liveRiderLocations={liveRiderLocations}
+        onAssign={handleConfirmReassignRider}
+        isAssigning={isReassigning}
+        error={reassignError}
       />
 
       {/* ── CLEAR ALL ORDER HISTORY MODAL ─── */}

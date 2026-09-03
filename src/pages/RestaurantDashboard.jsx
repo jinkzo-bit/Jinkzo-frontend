@@ -2,14 +2,16 @@ import { API_BASE } from '../config/api';
 import { io } from 'socket.io-client';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus, Pencil, AlertTriangle, ArrowLeft, FolderTree, FolderPlus } from 'lucide-react';
+import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus, Pencil, AlertTriangle, ArrowLeft, FolderTree, FolderPlus, Star } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
+import { getOrderFinancialBreakdown, formatCurrency, formatDistance, formatRating, getOrderPlacedAt, getOrderDeliveredAt } from '../utils/orderUtils';
 import LocationPickerModal from '../components/LocationPickerModal';
 import NotificationCenter from '../components/NotificationCenter';
 import VegBadge from '../components/VegBadge';
 import ImageUploadInput from '../components/common/ImageUploadInput';
+import OrderDetailsModal from '../components/OrderDetailsModal';
 import {
   DEFAULT_OPENING_HOURS,
   normalizeOpeningHours,
@@ -28,6 +30,7 @@ import {
 
 export default function RestaurantDashboard() {
   const { user, token, logout } = useAuthStore();
+  const [selectedDetailsOrder, setSelectedDetailsOrder] = useState(null);
   const navigate = useNavigate();
 
   // ── Personal Edit Profile state ─────────────────────────────
@@ -127,7 +130,7 @@ export default function RestaurantDashboard() {
   const [activeSubTab, setActiveSubTabState] = useState(tabFromUrl || 'orders');
 
   useEffect(() => {
-    if (tabFromUrl && ['orders', 'menu', 'hours', 'offers', 'profile', 'kyc'].includes(tabFromUrl)) {
+    if (tabFromUrl && ['orders', 'menu', 'hours', 'offers', 'profile', 'kyc', 'reviews'].includes(tabFromUrl)) {
       setActiveSubTabState(tabFromUrl);
     }
   }, [tabFromUrl]);
@@ -305,7 +308,8 @@ export default function RestaurantDashboard() {
     let card = 0;
     let cod = 0;
     ordersList.forEach(order => {
-      const amount = (order.total || 0) * 0.85; // 85% is net earnings for restaurant
+      const fin = getOrderFinancialBreakdown(order);
+      const amount = fin.restaurant.restaurantPayable;
       const method = order.paymentDetails?.method || 'COD';
       if (method === 'UPI') upi += amount;
       else if (method === 'Card') card += amount;
@@ -1086,7 +1090,7 @@ export default function RestaurantDashboard() {
           <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col justify-between min-h-[100px]">
             <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Gross Sales</span>
             <div className="flex justify-between items-end mt-2">
-              <span className="text-xl font-black text-main">₹{metrics.totalSales.toFixed(2)}</span>
+              <span className="text-xl font-black text-main">{formatCurrency(metrics.totalSales)}</span>
               <span className="p-1 bg-green-50 text-green-600 rounded-md text-[9px] font-bold flex items-center">
                 <ArrowUpRight className="w-3 h-3" /> 15%
               </span>
@@ -1096,26 +1100,26 @@ export default function RestaurantDashboard() {
             <div>
               <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Net Earnings</span>
               <div className="flex justify-between items-end mt-2">
-                <span className="text-xl font-black text-main">₹{metrics.netEarnings.toFixed(2)}</span>
+                <span className="text-xl font-black text-main">{formatCurrency(metrics.netEarnings)}</span>
                 <span className="p-1 bg-primary/10 text-primary rounded-md text-[9px] font-bold">85% Split</span>
               </div>
             </div>
             <div className="border-t border-line pt-2.5 mt-2.5 text-[10px] font-bold text-muted flex flex-col gap-1">
               <div className="flex justify-between">
                 <span>UPI:</span>
-                <span>₹{getIncomeBreakdown(dateFilteredOrders).upi.toFixed(2)}</span>
+                <span>{formatCurrency(getIncomeBreakdown(dateFilteredOrders).upi)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Card:</span>
-                <span>₹{getIncomeBreakdown(dateFilteredOrders).card.toFixed(2)}</span>
+                <span>{formatCurrency(getIncomeBreakdown(dateFilteredOrders).card)}</span>
               </div>
               <div className="flex justify-between">
                 <span>COD:</span>
-                <span>₹{getIncomeBreakdown(dateFilteredOrders).cod.toFixed(2)}</span>
+                <span>{formatCurrency(getIncomeBreakdown(dateFilteredOrders).cod)}</span>
               </div>
               <div className="flex justify-between border-t border-dashed border-line-strong pt-1 mt-0.5 font-extrabold text-primary">
                 <span>Sum (Net):</span>
-                <span>₹{getIncomeBreakdown(dateFilteredOrders).total.toFixed(2)}</span>
+                <span>{formatCurrency(getIncomeBreakdown(dateFilteredOrders).total)}</span>
               </div>
             </div>
           </div>
@@ -1149,7 +1153,8 @@ export default function RestaurantDashboard() {
             { id: 'hours', label: 'Opening Hours', icon: Clock },
             { id: 'offers', label: 'Discounts & Offers', icon: Tag },
             { id: 'profile', label: 'Kitchen Profile', icon: Store },
-            { id: 'kyc', label: 'KYC Document Verification', icon: Shield }
+            { id: 'kyc', label: 'KYC Document Verification', icon: Shield },
+            { id: 'reviews', label: 'Ratings & Reviews', icon: Star, badge: orders.filter(o => Number(o.review?.rating) > 0).length }
           ].map(tab => {
             const Icon = tab.icon;
             const active = activeSubTab === tab.id;
@@ -1238,7 +1243,14 @@ export default function RestaurantDashboard() {
                         <div className="flex justify-between items-center border-b border-line pb-2">
                           <div>
                             <span className="text-[10px] font-mono font-bold text-muted">#{order._id.substr(-8).toUpperCase()}</span>
-                            <span className="text-[10px] text-muted font-semibold ml-2">• Placed on {order.createdAt ? formatAppDate(order.createdAt) : ''}</span>
+                            <span className="text-[10px] text-muted font-semibold ml-2">
+                              • Placed: {formatAppDate(getOrderPlacedAt(order))}
+                              {['Delivered', 'Completed'].includes(order.status) && (
+                                <span className="ml-2 font-bold text-green-700">
+                                  • Delivered: {getOrderDeliveredAt(order) ? formatAppDate(getOrderDeliveredAt(order)) : 'Delivery time unavailable'}
+                                </span>
+                              )}
+                            </span>
                           </div>
                           <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
                             ['Delivered', 'Completed'].includes(order.status) ? 'bg-green-100 text-green-700 border border-green-200' : 
@@ -1251,12 +1263,17 @@ export default function RestaurantDashboard() {
 
                         {/* List items */}
                         <div className="flex flex-col gap-1.5 py-1">
-                          {order.items.map((item, idx) => (
-                            <div key={idx} className="flex justify-between text-xs font-bold text-main">
-                              <span>x{item.quantity} {item.name}</span>
-                              <span className="text-muted font-medium">₹{item.price * item.quantity}</span>
-                            </div>
-                          ))}
+                          {order.items.map((item, idx) => {
+                            const unitPrice = parseFloat(item.price) || 0;
+                            const qty = parseInt(item.quantity, 10) || 1;
+                            const lineTotal = unitPrice * qty;
+                            return (
+                              <div key={idx} className="flex justify-between items-center text-xs font-bold text-main gap-2">
+                                <span className="truncate">{item.name}</span>
+                                <span className="text-muted font-medium shrink-0">Qty: {qty} × {formatCurrency(unitPrice)} = {formatCurrency(lineTotal)}</span>
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {/* Review details */}
@@ -1276,7 +1293,7 @@ export default function RestaurantDashboard() {
                               <span className="text-[9px] text-green-700 font-bold bg-green-100/50 px-1.5 py-0.5 rounded-md ml-1.5 uppercase">Customer Rated</span>
                             </div>
                             {order.review.comment && (
-                              <p className="text-[11px] text-gray-650 italic bg-surface/70 p-2.5 rounded-xl border border-green-100/10">
+                              <p className="text-[11px] text-gray-655 italic bg-surface/70 p-2.5 rounded-xl border border-green-100/10">
                                 "{order.review.comment}"
                               </p>
                             )}
@@ -1292,10 +1309,25 @@ export default function RestaurantDashboard() {
                         )}
 
                         <div className="border-t border-line pt-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                          <span className="text-xs font-black text-main">Total: ₹{order.total.toFixed(2)}</span>
+                          {(() => {
+                            const fin = getOrderFinancialBreakdown(order);
+                            const rFin = fin.restaurant.byRestaurant.find(r => String(r.restaurantId) === String(user?.restaurantId));
+                            const restPayable = rFin ? rFin.restaurantPayable : fin.restaurant.restaurantPayable;
+                            return (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-black text-primary">Payable to Restaurant: {formatCurrency(restPayable)}</span>
+                              </div>
+                            );
+                          })()}
                           
                           {/* Accept/Advance Actions */}
-                          <div className="flex flex-col sm:flex-row gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2 items-center">
+                            <button
+                              onClick={() => setSelectedDetailsOrder(order)}
+                              className="bg-base hover:bg-gray-100 text-main border border-line text-[10px] font-bold px-3 py-2 rounded-xl shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              <span>View Details</span>
+                            </button>
                             {order.status === 'Placed' && (
                               <button
                                 onClick={() => setRejectingOrderId(order._id)}
@@ -2067,6 +2099,128 @@ export default function RestaurantDashboard() {
             </div>
           )}
 
+          {/* REVIEWS & RATINGS TAB */}
+          {activeSubTab === 'reviews' && (
+            <div className="flex flex-col gap-6 animate-fade-in">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
+                <div>
+                  <h3 className="font-display font-extrabold text-lg text-main">Customer Feedback & Ratings</h3>
+                  <p className="text-xs text-muted font-medium mt-0.5">Reviews left by customers on completed orders</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted">
+                    {orders.filter(o => Number(o.review?.rating) > 0).length} Total Reviews
+                  </span>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* 1. AVERAGE RATING */}
+                <div className="bg-surface border border-line rounded-2xl p-5 flex flex-col justify-between shadow-2xs">
+                  <span className="text-[10px] uppercase font-extrabold text-muted tracking-wider">
+                    Average Customer Rating
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-display font-black text-3xl text-main">
+                      {restaurantProfile?.ratingCount > 0
+                        ? formatRating(restaurantProfile.rating)
+                        : (orders.some(o => Number(o.review?.rating) > 0)
+                            ? formatRating(orders.filter(o => Number(o.review?.rating) > 0).reduce((sum, o) => sum + o.review.rating, 0) / orders.filter(o => Number(o.review?.rating) > 0).length)
+                            : 'New')}
+                    </span>
+                    <Star className="w-7 h-7 fill-yellow-400 text-yellow-400" />
+                  </div>
+                  <span className="text-[11px] text-muted font-medium">
+                    {restaurantProfile?.ratingCount > 0
+                      ? `Based on ${restaurantProfile.ratingCount} reviews`
+                      : (orders.filter(o => Number(o.review?.rating) > 0).length > 0
+                          ? `Based on ${orders.filter(o => Number(o.review?.rating) > 0).length} reviews`
+                          : 'No reviews yet')}
+                  </span>
+                </div>
+
+                <div className="bg-surface border border-line rounded-2xl p-5 flex flex-col items-center justify-center text-center gap-2">
+                  <span className="text-[10px] uppercase font-extrabold text-muted tracking-wider">
+                    Total Completed Orders
+                  </span>
+                  <span className="font-display font-black text-3xl text-primary">
+                    {orders.filter(o => ['Delivered', 'Completed'].includes(o.status)).length}
+                  </span>
+                  <span className="text-[11px] text-muted font-medium">Successfully delivered</span>
+                </div>
+
+                <div className="bg-surface border border-line rounded-2xl p-5 flex flex-col items-center justify-center text-center gap-2">
+                  <span className="text-[10px] uppercase font-extrabold text-muted tracking-wider">
+                    Customer Reviews Received
+                  </span>
+                  <span className="font-display font-black text-3xl text-green-600">
+                    {orders.filter(o => Number(o.review?.rating) > 0).length}
+                  </span>
+                  <span className="text-[11px] text-muted font-medium">Verified customer feedback</span>
+                </div>
+              </div>
+
+              {/* Recent Reviews List */}
+              <div className="flex flex-col gap-3">
+                <h4 className="font-display font-extrabold text-sm text-main uppercase tracking-wider">
+                  Recent Customer Reviews
+                </h4>
+
+                {orders.filter(o => Number(o.review?.rating) > 0).length === 0 ? (
+                  <div className="bg-surface border border-line rounded-2xl p-10 flex flex-col items-center justify-center text-center gap-2">
+                    <Star className="w-10 h-10 text-gray-300" />
+                    <h5 className="font-bold text-sm text-main">No reviews received yet</h5>
+                    <p className="text-xs text-muted max-w-sm">
+                      Customer ratings and comments for your dishes will appear here once your orders are delivered and rated.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {orders
+                      .filter(o => Number(o.review?.rating) > 0)
+                      .map((o) => (
+                        <div key={o._id} className="bg-surface border border-line rounded-2xl p-4 flex flex-col gap-2.5 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`w-4 h-4 ${
+                                    star <= o.review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-200'
+                                  }`}
+                                />
+                              ))}
+                              <span className="text-xs font-bold text-main ml-1.5">{o.review.rating}.0</span>
+                            </div>
+                            <span className="text-[10px] text-muted font-mono font-bold">
+                              #{String(o._id).slice(-6).toUpperCase()}
+                            </span>
+                          </div>
+
+                          {o.review.comment ? (
+                            <p className="text-xs text-main italic bg-base p-3 rounded-xl border border-line leading-relaxed">
+                              "{o.review.comment}"
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted italic">No written comment provided.</p>
+                          )}
+
+                          <div className="flex items-center justify-between text-[10px] text-muted border-t border-line/60 pt-2 mt-1">
+                            <span>{formatAppDateOnly(o.review.createdAt || o.updatedAt)}</span>
+                            <span className="text-green-700 font-bold bg-green-50 px-2 py-0.5 rounded-md border border-green-200">
+                              Verified Order
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -2525,6 +2679,15 @@ export default function RestaurantDashboard() {
         onApply={historyFilter.setDateFilter}
         availableYears={historyFilter.availableYears}
         datesWithRecords={historyFilter.datesWithRecords}
+      />
+
+      {/* ── UNIFIED ORDER DETAILS MODAL ─── */}
+      <OrderDetailsModal
+        isOpen={Boolean(selectedDetailsOrder)}
+        onClose={() => setSelectedDetailsOrder(null)}
+        order={selectedDetailsOrder}
+        role="restaurant"
+        token={token}
       />
 
       {/* ── CLEAR HISTORY CONFIRMATION MODAL ─── */}

@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config/api';
 import { useAuthStore } from '../store/authStore';
+import { setupForegroundNotificationListener } from '../services/firebaseMessaging';
 
 const NotificationCenter = ({ role, userId, restaurantId }) => {
   const [notifications, setNotifications] = useState([]);
@@ -43,8 +44,18 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
       }
     });
 
+    // Also attach foreground Web Push listener
+    let unsubscribePush = () => {};
+    setupForegroundNotificationListener((payload) => {
+      console.log('[NotificationCenter] Foreground FCM push notification:', payload);
+      fetchNotifications();
+    }).then(unsub => {
+      if (typeof unsub === 'function') unsubscribePush = unsub;
+    });
+
     return () => {
       socket.disconnect();
+      unsubscribePush();
     };
   }, [userId, restaurantId, token]);
 
@@ -58,8 +69,10 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
       });
       if (res.ok) {
         const data = await res.json();
-        setNotifications(data);
-        setUnreadCount(data.filter(n => !n.read).length);
+        const list = Array.isArray(data) ? data : (data.notifications || []);
+        setNotifications(list);
+        const unread = typeof data.unreadCount === 'number' ? data.unreadCount : list.filter(n => !n.read).length;
+        setUnreadCount(unread);
       }
     } catch (err) {
       console.error('Failed to fetch notifications', err);

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ShieldAlert, CreditCard, Landmark, CheckCircle2, Lock, X } from 'lucide-react';
+import { formatCurrency } from '../utils/orderUtils';
 
 export default function RazorpaySim({ amount, isOpen, onClose, onSuccess }) {
   const [selectedMethod, setSelectedMethod] = useState('card');
@@ -44,7 +45,7 @@ export default function RazorpaySim({ amount, isOpen, onClose, onSuccess }) {
           </div>
           <div className="text-right">
             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Amount to Pay</p>
-            <p className="text-lg font-extrabold text-blue-400">₹{amount.toFixed(2)}</p>
+            <p className="text-lg font-extrabold text-blue-400">{formatCurrency(amount)}</p>
           </div>
           <button 
             onClick={onClose}
@@ -162,7 +163,7 @@ export default function RazorpaySim({ amount, isOpen, onClose, onSuccess }) {
               ) : (
                 <>
                   <Lock className="w-4 h-4" />
-                  <span>Pay Securely ₹{amount.toFixed(2)}</span>
+                  <span>Pay Securely {formatCurrency(amount)}</span>
                 </>
               )}
             </button>

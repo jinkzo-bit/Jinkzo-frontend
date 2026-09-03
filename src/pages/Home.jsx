@@ -12,6 +12,11 @@ import { useTranslation } from '../store/languageStore';
 import { useCartStore } from '../store/cartStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import io from 'socket.io-client';
+import CategoryCardRenderer from '../components/common/CategoryCardRenderer';
+import PromoBannerRenderer from '../components/common/PromoBannerRenderer';
+import HomeHeroCarousel from '../components/common/HomeHeroCarousel';
+import HomeBackgroundRenderer from '../components/common/HomeBackgroundRenderer';
+import { DEFAULT_CATEGORY_DESIGNS } from '../utils/categoryDesignDefaults';
 
 const DEFAULT_BANNER_SLIDES = [
   {
@@ -46,12 +51,79 @@ const DEFAULT_BANNER_SLIDES = [
   }
 ];
 
+const HOME_DESIGN_CACHE_KEY = 'jinkzo_home_design_cache_v1';
+
+const getCachedHomeDesign = () => {
+  try {
+    const raw = localStorage.getItem(HOME_DESIGN_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.v === 1 && typeof parsed.categoryDesigns === 'object') {
+      return parsed;
+    }
+  } catch (e) {
+    // ignore invalid cache
+  }
+  return null;
+};
+
+const setCachedHomeDesign = (data) => {
+  try {
+    if (!data) return;
+    const payload = {
+      v: 1,
+      timestamp: Date.now(),
+      homeHeroBanners: data.homeHeroBanners || [],
+      homeBackgroundConfig: data.homeBackgroundConfig || { type: 'default' },
+      categoryDesigns: data.categoryDesigns || DEFAULT_CATEGORY_DESIGNS
+    };
+    localStorage.setItem(HOME_DESIGN_CACHE_KEY, JSON.stringify(payload));
+  } catch (e) {
+    // ignore storage errors
+  }
+};
+
+const preloadVisualAssets = (bgConfig, heroBanners) => {
+  try {
+    const urls = [];
+    if (bgConfig?.type === 'image') {
+      const bgImg = bgConfig.image?.mobileImageUrl || bgConfig.image?.desktopImageUrl || bgConfig.image?.imageUrl;
+      if (bgImg) urls.push(getImageUrl(bgImg, 'banner'));
+    }
+    if (Array.isArray(heroBanners) && heroBanners.length > 0) {
+      const firstHero = heroBanners[0]?.publishedConfig || heroBanners[0]?.draftConfig;
+      if (firstHero) {
+        const heroBg = firstHero.layered?.background?.mobileImageUrl || firstHero.layered?.background?.desktopImageUrl || firstHero.layered?.background?.imageUrl;
+        if (heroBg) urls.push(getImageUrl(heroBg, 'banner'));
+        const singleImg = firstHero.single?.desktop?.en?.imageUrl || firstHero.single?.defaultImage?.imageUrl;
+        if (singleImg) urls.push(getImageUrl(singleImg, 'banner'));
+      }
+    }
+    urls.forEach(url => {
+      if (url && typeof url === 'string' && !url.startsWith('data:')) {
+        const img = new Image();
+        img.src = url;
+      }
+    });
+  } catch (e) {
+    // ignore preloading errors
+  }
+};
+
 export default function Home() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { showToast } = useCartStore();
   const [foodAvailable, setFoodAvailable] = useState(true);
   const [rideAvailable, setRideAvailable] = useState(true);
+
+  // Load synchronous cache for immediate zero-flash first paint
+  const cachedDesign = getCachedHomeDesign();
+
+  // Category Designs (Visual Presentation)
+  const [categoryDesigns, setCategoryDesigns] = useState(
+    cachedDesign?.categoryDesigns || DEFAULT_CATEGORY_DESIGNS
+  );
 
   // Category Services Availability Status
   const [categoryStatus, setCategoryStatus] = useState({
@@ -64,9 +136,20 @@ export default function Home() {
   });
 
   // Dynamic Banners from Backend
+  const [homeHeroBanners, setHomeHeroBanners] = useState(
+    cachedDesign?.homeHeroBanners || []
+  );
   const [bannerSlides, setBannerSlides] = useState(DEFAULT_BANNER_SLIDES);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+
+  // Home Background Configuration
+  const [homeBackgroundConfig, setHomeBackgroundConfig] = useState(
+    cachedDesign?.homeBackgroundConfig || { type: 'default' }
+  );
+
+  // Design Loading & Readiness State (prevents default-design swap flash if no cache exists)
+  const [isHomeDesignLoading, setIsHomeDesignLoading] = useState(!cachedDesign);
 
   // Mobile Touch Swipe Handling
   const [touchStart, setTouchStart] = useState(0);
@@ -75,11 +158,52 @@ export default function Home() {
   useEffect(() => {
     const fetchAvailabilityAndBanners = async () => {
       try {
-        const [availRes, bannersRes, catServicesRes] = await Promise.allSettled([
+        const [availRes, bannersRes, catServicesRes, catDesignsRes, heroBannersRes, bgRes] = await Promise.allSettled([
           fetch(`${API_BASE}/auth/driver-availability`),
           fetch(`${API_BASE}/restaurants/banners`),
-          fetch(`${API_BASE}/restaurants/category-services`)
+          fetch(`${API_BASE}/restaurants/category-services`),
+          fetch(`${API_BASE}/category-designs/published`),
+          fetch(`${API_BASE}/home-hero-banners/active`),
+          fetch(`${API_BASE}/home-background`)
         ]);
+
+        let updatedHeroBanners = homeHeroBanners;
+        let updatedBgConfig = homeBackgroundConfig;
+        let updatedCategoryDesigns = categoryDesigns;
+
+        if (heroBannersRes.status === 'fulfilled' && heroBannersRes.value.ok) {
+          const heroData = await heroBannersRes.value.json();
+          if (Array.isArray(heroData)) {
+            updatedHeroBanners = heroData;
+            setHomeHeroBanners(heroData);
+          }
+        }
+
+        if (bgRes.status === 'fulfilled' && bgRes.value.ok) {
+          const bgData = await bgRes.value.json();
+          if (bgData && bgData.success && bgData.config) {
+            updatedBgConfig = bgData.config;
+            setHomeBackgroundConfig(bgData.config);
+          }
+        }
+
+        if (catDesignsRes.status === 'fulfilled' && catDesignsRes.value.ok) {
+          const designsData = await catDesignsRes.value.json();
+          if (designsData && typeof designsData === 'object') {
+            updatedCategoryDesigns = { ...DEFAULT_CATEGORY_DESIGNS, ...designsData };
+            setCategoryDesigns(updatedCategoryDesigns);
+          }
+        }
+
+        // Sync local cache for next load
+        setCachedHomeDesign({
+          homeHeroBanners: updatedHeroBanners,
+          homeBackgroundConfig: updatedBgConfig,
+          categoryDesigns: updatedCategoryDesigns
+        });
+
+        // Preload visual assets for instant frame paint
+        preloadVisualAssets(updatedBgConfig, updatedHeroBanners);
 
         if (availRes.status === 'fulfilled' && availRes.value.ok) {
           const data = await availRes.value.json();
@@ -126,7 +250,8 @@ export default function Home() {
                 buttonText: b.buttonText || 'Order Now',
                 link: b.link || '/restaurants',
                 image: b.imageUrl || '/assets/hero_delivery_banner.jpg',
-                bgGradient: gradients[idx % gradients.length]
+                bgGradient: gradients[idx % gradients.length],
+                design: b.design || null
               };
             });
             setBannerSlides(mapped);
@@ -134,6 +259,8 @@ export default function Home() {
         }
       } catch (err) {
         console.error('Error fetching driver availability, categories, or banners:', err);
+      } finally {
+        setIsHomeDesignLoading(false);
       }
     };
     fetchAvailabilityAndBanners();
@@ -156,6 +283,63 @@ export default function Home() {
               return updated;
             });
           }
+        }
+      });
+
+      socket.on('categoryDesignPublished', (data) => {
+        if (data && data.categoryKey && data.publishedConfig) {
+          setCategoryDesigns(prev => {
+            const updated = { ...prev, [data.categoryKey]: data.publishedConfig };
+            setCachedHomeDesign({ homeHeroBanners, homeBackgroundConfig, categoryDesigns: updated });
+            return updated;
+          });
+        }
+      });
+
+      socket.on('bannerDesignPublished', (data) => {
+        if (data && data.bannerId && data.publishedConfig) {
+          setBannerSlides(prev => prev.map(slide => {
+            if (String(slide.id) === String(data.bannerId)) {
+              return { ...slide, design: data.publishedConfig };
+            }
+            return slide;
+          }));
+        }
+      });
+
+      const reloadHeroBanners = () => {
+        fetch(`${API_BASE}/home-hero-banners/active`)
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data)) {
+              setHomeHeroBanners(data);
+              setCachedHomeDesign({ homeHeroBanners: data, homeBackgroundConfig, categoryDesigns });
+            }
+          })
+          .catch(() => {});
+      };
+
+      const reloadHomeBackground = () => {
+        fetch(`${API_BASE}/home-background`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.success && data.config) {
+              setHomeBackgroundConfig(data.config);
+              setCachedHomeDesign({ homeHeroBanners, homeBackgroundConfig: data.config, categoryDesigns });
+            }
+          })
+          .catch(() => {});
+      };
+
+      socket.on('homeHeroBannerPublished', reloadHeroBanners);
+      socket.on('homeHeroBannerUpdated', reloadHeroBanners);
+      socket.on('homeHeroBannerDeleted', reloadHeroBanners);
+      socket.on('homeBackgroundPublished', (data) => {
+        if (data && data.publishedConfig) {
+          setHomeBackgroundConfig(data.publishedConfig);
+          setCachedHomeDesign({ homeHeroBanners, homeBackgroundConfig: data.publishedConfig, categoryDesigns });
+        } else {
+          reloadHomeBackground();
         }
       });
     } catch (e) {
@@ -219,15 +403,10 @@ export default function Home() {
       id: 'food',
       name: 'Food',
       title: t('home.categoryFood', 'Food'),
-      subtitle: t('home.foodSubtitle', 'Tasty meals from top...'),
-      background: '/assets/home/categories/backgrounds/food-bg.png',
-      image: '/assets/home/categories/png/food.png',
-      titleColor: 'text-[#FF5722]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#FF5722] hover:bg-[#E64A19]',
-      imgOffset: '-mb-0.5 sm:-mb-14 md:-mb-20 lg:-mb-24',
-      imgScale: 'scale-[2.25] sm:scale-110 md:scale-115',
-      imgShift: 'translate-x-1.5 sm:translate-x-0',
+      subtitle: t('home.foodSubtitle', 'Tasty meals from top restaurants'),
+      cardImage: '/assets/home/categories/cards/food-card.webp',
+      titleColor: 'text-[#FF4B16]',
+      btnBg: 'bg-[#FF4B16] hover:bg-[#E63E00]',
       link: '/restaurants'
     },
     {
@@ -235,44 +414,29 @@ export default function Home() {
       name: 'Ride & Courier',
       title: t('home.categoryRide', 'Ride & Courier'),
       subtitle: t('home.rideSubtitle', 'Quick rides & courier service'),
-      background: '/assets/home/categories/backgrounds/ride-bg.png',
-      image: '/assets/home/categories/png/ride.png',
-      titleColor: 'text-[#0D47FF]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#0D47FF] hover:bg-[#0038E0]',
-      imgOffset: '-mb-0.5 sm:-mb-14 md:-mb-20 lg:-mb-24',
-      imgScale: 'scale-[2.45] sm:scale-110 md:scale-115',
-      imgShift: '-translate-x-1.5 sm:translate-x-0',
+      cardImage: '/assets/home/categories/cards/ride-card.webp',
+      titleColor: 'text-[#1557FF]',
+      btnBg: 'bg-[#1557FF] hover:bg-[#0D47FF]',
       link: '/ride'
     },
     {
       id: 'grocery',
       name: 'Grocery',
       title: t('home.categoryGrocery', 'Grocery'),
-      subtitle: t('home.grocerySubtitle', 'Daily essentials delivered...'),
-      background: '/assets/home/categories/backgrounds/grocery-bg.png',
-      image: '/assets/home/categories/png/grocery.png',
-      titleColor: 'text-[#00C853]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#00C853] hover:bg-[#00B248]',
-      imgOffset: 'mb-0 sm:-mb-12 md:-mb-16 lg:-mb-20',
-      imgScale: 'scale-[2.05] sm:scale-105 md:scale-110',
-      imgShift: 'translate-x-0 sm:translate-x-0',
+      subtitle: t('home.grocerySubtitle', 'Daily essentials delivered fast'),
+      cardImage: '/assets/home/categories/cards/grocery-card.webp',
+      titleColor: 'text-[#00B83E]',
+      btnBg: 'bg-[#00B83E] hover:bg-[#009E35]',
       link: '/restaurants?category=grocery'
     },
     {
       id: 'bakery_beverages',
       name: 'Bakery & Beverages',
       title: t('home.categoryBakery', 'Bakery & Beverages'),
-      subtitle: t('home.bakerySubtitle', 'Fresh cakes, puffs, snacks...'),
-      background: '/assets/home/categories/backgrounds/bakery-bg.png',
-      image: '/assets/home/categories/png/bakery.png',
-      titleColor: 'text-[#E91E63]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#E91E63] hover:bg-[#D81B60]',
-      imgOffset: 'mb-0 sm:-mb-10 md:-mb-14 lg:-mb-16',
-      imgScale: 'scale-[1.70] sm:scale-100 md:scale-105',
-      imgShift: 'translate-x-2 sm:translate-x-0',
+      subtitle: t('home.bakerySubtitle', 'Fresh cakes, puffs, snacks & cool drinks'),
+      cardImage: '/assets/home/categories/cards/bakery-card.webp',
+      titleColor: 'text-[#ED1761]',
+      btnBg: 'bg-[#ED1761] hover:bg-[#D60F53]',
       link: '/restaurants?category=beverages'
     },
     {
@@ -280,14 +444,9 @@ export default function Home() {
       name: 'Veg & Fruits',
       title: t('home.categoryVegFruits', 'Veg & Fruits'),
       subtitle: t('home.vegFruitsSubtitle', 'Fresh vegetables & fruits'),
-      background: '/assets/home/categories/backgrounds/veg-fruits-bg.png',
-      image: '/assets/home/categories/png/veg-fruits.png',
-      titleColor: 'text-[#009688]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#009688] hover:bg-[#00796B]',
-      imgOffset: '-mb-0.5 sm:-mb-14 md:-mb-20 lg:-mb-24',
-      imgScale: 'scale-[2.30] sm:scale-110 md:scale-115',
-      imgShift: '-translate-x-1.5 sm:translate-x-0',
+      cardImage: '/assets/home/categories/cards/veg-fruits-card.webp',
+      titleColor: 'text-[#008F83]',
+      btnBg: 'bg-[#008F83] hover:bg-[#007A70]',
       link: '/restaurants?category=fruits-vegetables'
     },
     {
@@ -295,273 +454,223 @@ export default function Home() {
       name: 'Meat',
       title: t('home.categoryMeat', 'Meat'),
       subtitle: t('home.meatSubtitle', 'Fresh meat, chicken & fish'),
-      background: '/assets/home/categories/backgrounds/meat-bg.png',
-      image: '/assets/home/categories/png/meat.png',
-      titleColor: 'text-[#FF3D00]',
-      subtitleColor: 'text-black',
-      btnBg: 'bg-[#FF3D00] hover:bg-[#DD2C00]',
-      imgOffset: '-mb-0.5 sm:-mb-16 md:-mb-24 lg:-mb-28',
-      imgScale: 'scale-[1.90] sm:scale-110 md:scale-115',
-      imgShift: 'translate-x-1 sm:translate-x-0',
+      cardImage: '/assets/home/categories/cards/meat-card.webp',
+      titleColor: 'text-[#FF4B0A]',
+      btnBg: 'bg-[#FF4B0A] hover:bg-[#E63E00]',
       link: '/restaurants?category=meat'
     }
   ];
 
   const activeBanner = bannerSlides[currentSlide] || bannerSlides[0];
 
-  return (
-    <div
-      style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
-      className="flex flex-col gap-3.5 sm:gap-5 md:gap-8 max-w-7xl mx-auto px-3 sm:px-4 md:px-8 w-full box-border animate-fade-in transition-colors duration-300"
-    >
+  if (isHomeDesignLoading) {
+    return (
+      <HomeBackgroundRenderer config={{ type: 'default' }}>
+        <div
+          style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
+          className="flex flex-col gap-3.5 sm:gap-5 md:gap-8 max-w-7xl mx-auto px-3 sm:px-4 md:px-8 w-full box-border animate-fade-in"
+        >
+          {/* Hero Banner Skeleton */}
+          <div className="w-full aspect-[16/6] sm:aspect-[16/5] rounded-3xl sm:rounded-[32px] bg-surface/80 border border-line animate-pulse flex flex-col justify-end p-6 gap-3 shadow-xs">
+            <div className="w-1/3 h-5 sm:h-7 rounded-xl bg-base" />
+            <div className="w-2/3 h-7 sm:h-10 rounded-xl bg-base" />
+            <div className="w-28 sm:w-36 h-8 sm:h-10 rounded-2xl bg-primary/20 mt-2" />
+          </div>
 
-      {/* 1. HERO ADVERTISEMENT CAROUSEL (PURPLE -> PINK -> ORANGE VIBRANT GRADIENT) */}
-      <section
-        onMouseEnter={() => setIsPaused(true)}
-        onMouseLeave={() => setIsPaused(false)}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        className={`relative rounded-3xl sm:rounded-[32px] overflow-hidden ${activeBanner.bgGradient} text-white p-4 sm:p-6 md:p-10 lg:p-12 shadow-[0_8px_30px_rgba(123,31,162,0.25)] flex flex-row items-center justify-between min-h-[160px] sm:min-h-[220px] md:min-h-[300px] transition-all duration-700 group select-none w-full box-border`}
+          {/* Section Heading Skeleton */}
+          <div className="flex items-center gap-2 mt-1 sm:mt-2">
+            <div className="w-6 h-6 rounded-lg bg-surface animate-pulse" />
+            <div className="w-48 sm:w-64 h-6 sm:h-8 rounded-xl bg-surface animate-pulse" />
+          </div>
+
+          {/* 6 Category Cards Skeleton Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4 md:gap-6 lg:gap-7 w-full box-border">
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <div
+                key={n}
+                className="aspect-square w-full rounded-2xl sm:rounded-[24px] md:rounded-[28px] bg-surface/80 border border-line p-4 sm:p-6 flex flex-col justify-between animate-pulse shadow-xs"
+              >
+                <div className="w-1/2 h-5 sm:h-7 rounded-xl bg-base" />
+                <div className="w-full h-1/2 rounded-2xl bg-base/50" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </HomeBackgroundRenderer>
+    );
+  }
+
+  return (
+    <HomeBackgroundRenderer config={homeBackgroundConfig}>
+      <div
+        style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}
+        className="flex flex-col gap-3.5 sm:gap-5 md:gap-8 max-w-7xl mx-auto px-3 sm:px-4 md:px-8 w-full box-border animate-fade-in transition-colors duration-300"
       >
 
-        {/* Decorative Floating Shapes & Watermark Accents */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-35">
-          <div className="absolute top-3 left-1/4 w-2.5 sm:w-3.5 h-2.5 sm:h-3.5 bg-yellow-300 rounded-sm rotate-45"></div>
-          <div className="absolute top-8 left-1/3 w-2 sm:w-2.5 h-2 sm:h-2.5 bg-pink-200 rounded-full"></div>
-          <div className="absolute bottom-4 left-1/5 w-3 sm:w-4 h-1.5 sm:h-2 bg-yellow-200 rounded-full rotate-12"></div>
-          <div className="absolute top-4 right-1/3 w-2.5 sm:w-3 h-2.5 sm:h-3 bg-yellow-300 rounded-sm rotate-12"></div>
-          <div className="absolute bottom-6 right-1/4 w-2.5 sm:w-3 h-2.5 sm:h-3 bg-white rounded-full"></div>
-        </div>
-
-        {/* Left / Previous Slide Button (Desktop / Tablet) */}
-        {bannerSlides.length > 1 && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              prevSlide();
-            }}
-            className="absolute left-2 sm:left-3.5 top-1/2 -translate-y-1/2 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-black/20 hover:bg-black/45 backdrop-blur-xs text-white flex items-center justify-center transition-all cursor-pointer shadow-md opacity-0 group-hover:opacity-100 z-20 focus:opacity-100"
-            title="Previous banner"
+        {/* 1. HERO ADVERTISEMENT CAROUSEL (NEW HOME HERO CAROUSEL WITH FALLBACK TO OLD CAROUSEL) */}
+        {homeHeroBanners && homeHeroBanners.length > 0 ? (
+          <HomeHeroCarousel banners={homeHeroBanners} />
+        ) : (
+          <section
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            className={`relative rounded-3xl sm:rounded-[32px] overflow-hidden ${activeBanner.bgGradient} text-white p-4 sm:p-6 md:p-10 lg:p-12 shadow-[0_8px_30px_rgba(123,31,162,0.25)] flex flex-row items-center justify-between min-h-[160px] sm:min-h-[220px] md:min-h-[300px] transition-all duration-700 group select-none w-full box-border`}
           >
-            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
-          </button>
-        )}
 
-        {/* Right / Next Slide Button (Desktop / Tablet) */}
-        {bannerSlides.length > 1 && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              nextSlide();
-            }}
-            className="absolute right-2 sm:right-3.5 top-1/2 -translate-y-1/2 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-black/20 hover:bg-black/45 backdrop-blur-xs text-white flex items-center justify-center transition-all cursor-pointer shadow-md opacity-0 group-hover:opacity-100 z-20 focus:opacity-100"
-            title="Next banner"
-          >
-            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
-          </button>
-        )}
-
-        {/* Active Banner Slide Content */}
-        <div key={activeBanner.id} className="w-full flex flex-row items-center justify-between animate-fade-in transition-all duration-500 z-10">
-
-          {/* Left Text & CTA Content */}
-          <div className="flex flex-col items-start gap-1 sm:gap-2.5 md:gap-3.5 z-10 w-[55%] sm:w-[55%] md:w-[52%] flex-1">
-            <span className="text-xs sm:text-base md:text-2xl font-bold text-white/95 tracking-tight leading-none">
-              {activeBanner.title}
-            </span>
-            <h1 className="font-display font-black text-2xl sm:text-4xl md:text-6xl lg:text-7xl text-[#FFEB3B] tracking-tight leading-none drop-shadow-sm">
-              {activeBanner.highlight}
-            </h1>
-            <p className="text-[11px] sm:text-xs md:text-base text-white/95 font-medium leading-tight sm:leading-relaxed max-w-xs md:max-w-md line-clamp-2 md:line-clamp-none">
-              {activeBanner.subtitle}
-            </p>
-
-            <Link
-              to={activeBanner.link}
-              className="mt-1.5 sm:mt-3 md:mt-5 inline-flex items-center gap-1 sm:gap-2 bg-[#FFEB3B] hover:bg-[#FDD835] text-gray-950 font-black text-xs sm:text-sm md:text-base px-4 sm:px-6 md:px-7 py-1.5 sm:py-2.5 md:py-3 rounded-full shadow-md shadow-yellow-500/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-            >
-              <span>{activeBanner.buttonText || t('common.orderNow', 'Order Now')}</span>
-              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 stroke-[3]" />
-            </Link>
-          </div>
-
-          {/* Right Banner Artwork Graphics (Rider & App Smartphone) */}
-          <div className="w-[45%] sm:w-[45%] md:w-[48%] flex items-center justify-center md:justify-end z-10 pl-2 sm:pl-4">
-            <div className="relative max-w-[170px] sm:max-w-[260px] md:max-w-[420px] lg:max-w-[480px] w-full flex items-center justify-center">
-              <img
-                src={getImageUrl(activeBanner.image, 'banner')}
-                alt={activeBanner.highlight || activeBanner.title}
-                onError={(e) => handleImageError(e, 'banner')}
-                className="w-full h-auto max-h-[135px] sm:max-h-[190px] md:max-h-[260px] object-cover rounded-2xl sm:rounded-3xl shadow-lg shadow-purple-950/30"
-              />
+            {/* Decorative Floating Shapes & Watermark Accents */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-35">
+              <div className="absolute top-3 left-1/4 w-2.5 sm:w-3.5 h-2.5 sm:h-3.5 bg-yellow-300 rounded-sm rotate-45"></div>
+              <div className="absolute top-8 left-1/3 w-2 sm:w-2.5 h-2 sm:h-2.5 bg-pink-200 rounded-full"></div>
+              <div className="absolute bottom-4 left-1/5 w-3 sm:w-4 h-1.5 sm:h-2 bg-yellow-200 rounded-full rotate-12"></div>
+              <div className="absolute top-4 right-1/3 w-2.5 sm:w-3 h-2.5 sm:h-3 bg-yellow-300 rounded-sm rotate-12"></div>
+              <div className="absolute bottom-6 right-1/4 w-2.5 sm:w-3 h-2.5 sm:h-3 bg-white rounded-full"></div>
             </div>
-          </div>
 
-        </div>
-
-        {/* Slide Indicators / Dots at Bottom (Elongated Yellow Pill for Active) */}
-        {bannerSlides.length > 1 && (
-          <div className="absolute bottom-2.5 sm:bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 sm:gap-2 z-20">
-            {bannerSlides.map((_, idx) => (
+            {/* Left / Previous Slide Button (Desktop / Tablet) */}
+            {bannerSlides.length > 1 && (
               <button
-                key={idx}
                 type="button"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  goToSlide(idx);
+                  prevSlide();
                 }}
-                className={`h-1.5 sm:h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                  currentSlide === idx
-                    ? 'w-6 sm:w-7 bg-[#FFEB3B] shadow-sm'
-                    : 'w-1.5 sm:w-2 bg-white/50 hover:bg-white/80'
-                }`}
-                title={`Banner ${idx + 1}`}
+                className="absolute left-2 sm:left-3.5 top-1/2 -translate-y-1/2 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-black/20 hover:bg-black/45 backdrop-blur-xs text-white flex items-center justify-center transition-all cursor-pointer shadow-md opacity-0 group-hover:opacity-100 z-20 focus:opacity-100"
+                title="Previous banner"
+              >
+                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+              </button>
+            )}
+
+            {/* Right / Next Slide Button (Desktop / Tablet) */}
+            {bannerSlides.length > 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  nextSlide();
+                }}
+                className="absolute right-2 sm:right-3.5 top-1/2 -translate-y-1/2 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-black/20 hover:bg-black/45 backdrop-blur-xs text-white flex items-center justify-center transition-all cursor-pointer shadow-md opacity-0 group-hover:opacity-100 z-20 focus:opacity-100"
+                title="Next banner"
+              >
+                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+              </button>
+            )}
+
+            {/* Active Banner Slide Content */}
+            <div key={activeBanner.id} className="w-full flex flex-row items-center justify-between animate-fade-in transition-all duration-500 z-10">
+              <PromoBannerRenderer
+                slide={activeBanner}
+                design={activeBanner.design}
+                language={language}
               />
-            ))}
-          </div>
+            </div>
+            {/* Slide Indicators / Dots at Bottom (Elongated Yellow Pill for Active) */}
+            {bannerSlides.length > 1 && (
+              <div className="absolute bottom-2.5 sm:bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 sm:gap-2 z-20">
+                {bannerSlides.map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      goToSlide(idx);
+                    }}
+                    className={`h-1.5 sm:h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                      currentSlide === idx
+                        ? 'w-6 sm:w-7 bg-[#FFEB3B] shadow-sm'
+                        : 'w-1.5 sm:w-2 bg-white/50 hover:bg-white/80'
+                    }`}
+                    title={`Banner ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+
+          </section>
         )}
 
-      </section>
-
-      {/* 2. SECTION HEADING WITH COLORFUL DECORATIVE ACCENT */}
-      <section className="mt-1 sm:mt-2">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center text-[#FF5722] font-black text-lg sm:text-xl leading-none select-none">
-            <span className="-mr-1">›</span>
-            <span>›</span>
+        {/* 2. SECTION HEADING WITH COLORFUL DECORATIVE ACCENT */}
+        <section className="mt-1 sm:mt-2">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center text-[#FF5722] font-black text-lg sm:text-xl leading-none select-none">
+              <span className="-mr-1">›</span>
+              <span>›</span>
+            </div>
+            <h2 className="font-display font-black text-base sm:text-xl md:text-2xl text-gray-950 dark:text-white tracking-tight">
+              {t('home.whatToOrder', 'What would you like to order?')}
+            </h2>
           </div>
-          <h2 className="font-display font-black text-base sm:text-xl md:text-2xl text-gray-950 dark:text-white tracking-tight">
-            {t('home.whatToOrder', 'What would you like to order?')}
-          </h2>
-        </div>
-      </section>
+        </section>
 
-      {/* 3. CATEGORY CARDS (2-COLUMN RESPONSIVE GRID ON MOBILE, 3-COLUMN ON DESKTOP) */}
-      <section className="grid grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-5 md:gap-6 lg:gap-7 w-full box-border">
-        {categories.map((cat) => {
-          const currentCat = categoryStatus[cat.id] || { status: 'OPEN', isEnabled: true, message: null };
-          const isEnabled = typeof currentCat === 'boolean' ? currentCat : currentCat.isEnabled !== false;
-          const status = currentCat.status || (isEnabled ? 'OPEN' : 'DISABLED');
-          const isOpen = status === 'OPEN';
-          const isClosed = status === 'CLOSED';
-          const isDisabled = status === 'DISABLED' || !isEnabled;
-          const closedMsg = currentCat.message || t('home.serviceClosed', 'Service Closed');
+        {/* 3. CATEGORY CARDS (2-COLUMN LARGE SQUARE CARDS ON MOBILE, 3-COLUMN ON DESKTOP) */}
+        <section className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4 md:gap-6 lg:gap-7 w-full box-border">
+          {categories.map((cat) => {
+            const currentCat = categoryStatus[cat.id] || { status: 'OPEN', isEnabled: true, message: null };
+            const isEnabled = currentCat.isEnabled !== false;
+            const status = currentCat.status || (isEnabled ? 'OPEN' : 'DISABLED');
+            const isOpen = status === 'OPEN' && isEnabled;
+            const isClosed = status === 'CLOSED';
+            const closedMsg = currentCat.message || t('home.categoryClosedMsg', 'Currently closed. Reopens as per daily schedule.');
+            const customDesign = categoryDesigns[cat.id] || DEFAULT_CATEGORY_DESIGNS[cat.id];
 
-          const cardContent = (
-            <>
-              {/* Category Foreground Product Artwork (Enlarged and centered on mobile, preserved on desktop) */}
-              <div className={`w-full flex-1 flex flex-col items-center justify-end min-h-0 sm:min-h-[220px] md:min-h-[280px] lg:min-h-[320px] pt-1 md:pt-4 ${cat.imgOffset} group-hover:scale-105 transition-transform duration-300 pointer-events-none z-0 overflow-visible`}>
-                <img
-                  src={cat.image}
-                  alt={cat.title}
-                  className={`w-full sm:w-[96%] md:w-[98%] max-w-full sm:max-w-[400px] md:max-w-[460px] lg:max-w-[500px] h-[80px] sm:h-auto max-h-[88px] sm:max-h-[250px] md:max-h-[310px] lg:max-h-[350px] ${cat.imgScale} ${cat.imgShift} object-contain mx-auto block drop-shadow-md`}
-                />
-              </div>
-
-              {/* Centered Content: Large Title, Large Black Subtitle, Large Circular Arrow Button */}
-              <div className="w-full flex flex-col items-center justify-end z-10 pt-0.5 pb-0.5 sm:pb-2">
-                <h3 className={`font-display font-black text-sm sm:text-3xl md:text-4xl lg:text-[42px] xl:text-[44px] ${cat.titleColor} tracking-tight leading-tight line-clamp-1 sm:line-clamp-none`}>
-                  {cat.title}
-                </h3>
-                <p style={{ color: '#000000' }} className="mt-0.5 sm:mt-2 text-[10px] sm:text-base md:text-lg lg:text-xl xl:text-2xl text-black dark:text-black font-semibold leading-tight line-clamp-1 sm:line-clamp-none max-w-[140px] sm:max-w-[260px] md:max-w-[300px] lg:max-w-[340px]">
-                  {cat.subtitle}
-                </p>
-
-                {/* Centered Large Circular Arrow Button */}
-                <div className={`mt-1.5 sm:mt-3.5 md:mt-4 lg:mt-5 w-6 h-6 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-13 lg:h-13 rounded-full ${cat.btnBg} text-white flex items-center justify-center shadow-xs sm:shadow-md group-hover:scale-110 active:scale-95 transition-all duration-200`}>
-                  <ArrowRight className="w-3.5 h-3.5 sm:w-5 sm:h-5 md:w-6 md:h-6 stroke-[2.5] sm:stroke-[3]" />
-                </div>
-              </div>
-
-              {/* Closed Service Hours Overlay */}
-              {isClosed && (
-                <div className="absolute inset-0 bg-black/55 backdrop-blur-[2.5px] rounded-3xl sm:rounded-[36px] md:rounded-[40px] flex flex-col items-center justify-center p-3 sm:p-4 text-center z-20 select-none animate-fade-in transition-all">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-amber-500/20 backdrop-blur-md flex items-center justify-center mb-1.5 shadow-sm border border-amber-400/40">
-                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-amber-300 stroke-[2.5]" />
-                  </div>
-                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-amber-300 mb-0.5 drop-shadow-xs">
-                    {t('home.closedNow', 'CLOSED NOW')}
-                  </span>
-                  <p className="text-white font-bold text-xs sm:text-sm leading-tight drop-shadow-sm px-2">
-                    {closedMsg}
-                  </p>
-                </div>
-              )}
-
-              {/* Disabled / Service Unavailable Overlay */}
-              {isDisabled && (
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-[2.5px] rounded-3xl sm:rounded-[36px] md:rounded-[40px] flex flex-col items-center justify-center p-3 sm:p-4 text-center z-20 select-none animate-fade-in transition-all">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-1.5 shadow-sm border border-white/30">
-                    <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-white stroke-[2.5]" />
-                  </div>
-                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-red-300 mb-0.5 drop-shadow-xs">
-                    {t('home.serviceDisabled', 'SERVICE DISABLED')}
-                  </span>
-                  <p className="text-white font-bold text-xs sm:text-sm leading-tight drop-shadow-sm px-2">
-                    {t('home.serviceUnavailable', 'We are not providing this service currently.')}
-                  </p>
-                </div>
-              )}
-            </>
-          );
-
-          if (isOpen) {
-            return (
-              <Link
-                key={cat.id}
-                to={cat.link}
-                style={{
-                  backgroundImage: `url(${cat.background})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundRepeat: 'no-repeat'
-                }}
-                className="relative rounded-3xl sm:rounded-[36px] md:rounded-[40px] p-2.5 sm:p-5 md:p-6 lg:p-7 pt-2.5 sm:pt-6 md:pt-8 pb-3 sm:pb-6 md:pb-8 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group flex flex-col items-center justify-between text-center cursor-pointer overflow-hidden shadow-xs select-none aspect-square sm:aspect-auto sm:min-h-[370px] md:min-h-[450px] lg:min-h-[490px] w-full"
-              >
-                {cardContent}
-              </Link>
+            const cardContent = (
+              <CategoryCardRenderer
+                category={cat}
+                design={customDesign}
+                isOpen={isOpen}
+                isClosed={isClosed}
+                closedMsg={closedMsg}
+              />
             );
-          }
 
-          const clickMessage = isClosed
-            ? `${cat.title}: ${closedMsg}`
-            : t('home.serviceUnavailable', 'We are not providing this service currently.');
+            if (isOpen) {
+              return (
+                <Link
+                  key={cat.id}
+                  to={cat.link}
+                  className="relative aspect-square w-full rounded-2xl sm:rounded-[24px] md:rounded-[28px] overflow-hidden shadow-xs hover:shadow-lg transition-all duration-300 group cursor-pointer block select-none bg-surface"
+                  aria-label={cat.title}
+                >
+                  {cardContent}
+                </Link>
+              );
+            }
 
-          return (
-            <div
-              key={cat.id}
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                e.preventDefault();
-                showToast(clickMessage, 'error');
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+            const clickMessage = isClosed
+              ? `${cat.title}: ${closedMsg}`
+              : t('home.serviceUnavailable', 'We are not providing this service currently.');
+
+            return (
+              <div
+                key={cat.id}
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
                   e.preventDefault();
                   showToast(clickMessage, 'error');
-                }
-              }}
-              style={{
-                backgroundImage: `url(${cat.background})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat'
-              }}
-              className="relative rounded-3xl sm:rounded-[36px] md:rounded-[40px] p-2.5 sm:p-5 md:p-6 lg:p-7 pt-2.5 sm:pt-6 md:pt-8 pb-3 sm:pb-6 md:pb-8 transition-all duration-300 group flex flex-col items-center justify-between text-center cursor-not-allowed overflow-hidden shadow-xs select-none opacity-95 aspect-square sm:aspect-auto sm:min-h-[370px] md:min-h-[450px] lg:min-h-[490px] w-full"
-            >
-              {cardContent}
-            </div>
-          );
-        })}
-      </section>
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    showToast(clickMessage, 'error');
+                  }
+                }}
+                className="relative aspect-square w-full rounded-2xl sm:rounded-[24px] md:rounded-[28px] overflow-hidden shadow-xs group cursor-not-allowed select-none opacity-95 block bg-surface"
+                aria-label={cat.title}
+              >
+                {cardContent}
+              </div>
+            );
+          })}
+        </section>
 
-    </div>
+      </div>
+    </HomeBackgroundRenderer>
   );
 }
