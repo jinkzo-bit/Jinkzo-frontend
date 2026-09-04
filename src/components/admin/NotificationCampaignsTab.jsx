@@ -115,6 +115,49 @@ export default function NotificationCampaignsTab({ token }) {
       setErrorMsg('');
       setSuccessMsg('');
 
+      const frequencyMap = {
+        'DAILY': 'daily',
+        'WEEKLY': 'weekly',
+        'HOURLY_WINDOW': 'every_n_hours'
+      };
+
+      const mode = sendImmediately
+        ? 'now'
+        : form.scheduleType === 'SCHEDULE_ONCE'
+          ? 'schedule_once'
+          : form.scheduleType === 'REPEATING'
+            ? 'repeat'
+            : 'now';
+
+      let windowStartHour = 9;
+      let windowEndHour = 21;
+
+      if (form.repeatFrequency === 'DAILY' || form.repeatFrequency === 'WEEKLY') {
+        if (form.repeatTime) {
+          const parsedHour = parseInt(form.repeatTime.split(':')[0], 10);
+          if (!isNaN(parsedHour)) {
+            windowStartHour = parsedHour;
+          }
+        }
+      } else if (form.repeatFrequency === 'HOURLY_WINDOW') {
+        if (form.windowStartTime) {
+          const parsedStart = parseInt(form.windowStartTime.split(':')[0], 10);
+          if (!isNaN(parsedStart)) windowStartHour = parsedStart;
+        }
+        if (form.windowEndTime) {
+          const parsedEnd = parseInt(form.windowEndTime.split(':')[0], 10);
+          if (!isNaN(parsedEnd)) windowEndHour = parsedEnd;
+        }
+      }
+
+      const repeatConfig = (!sendImmediately && form.scheduleType === 'REPEATING') ? {
+        frequency: frequencyMap[form.repeatFrequency] || 'daily',
+        intervalHours: Number(form.repeatIntervalHours) || 3,
+        windowStartHour,
+        windowEndHour,
+        daysOfWeek: form.repeatDays
+      } : undefined;
+
       const payload = {
         title: form.title.trim(),
         message: form.body.trim(),
@@ -122,19 +165,13 @@ export default function NotificationCampaignsTab({ token }) {
         topic: form.topic.trim() || undefined,
         imageUrl: form.imageUrl.trim() || undefined,
         link: form.link.trim() || undefined,
+        mode,
         scheduleType: sendImmediately ? 'SEND_NOW' : form.scheduleType,
         sendNow: sendImmediately,
         scheduledAt: (!sendImmediately && form.scheduleType === 'SCHEDULE_ONCE' && form.scheduledAtDate)
           ? new Date(form.scheduledAtDate).toISOString()
           : undefined,
-        repeatConfig: (!sendImmediately && form.scheduleType === 'REPEATING') ? {
-          frequency: form.repeatFrequency,
-          time: form.repeatTime,
-          daysOfWeek: form.repeatDays,
-          intervalHours: Number(form.repeatIntervalHours) || 3,
-          windowStartTime: form.windowStartTime,
-          windowEndTime: form.windowEndTime
-        } : undefined
+        repeatConfig
       };
 
       const res = await fetch(`${API_BASE}/notifications/admin/campaigns`, {
