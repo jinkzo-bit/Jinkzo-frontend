@@ -21,44 +21,32 @@ import { DEFAULT_CATEGORY_DESIGNS } from '../utils/categoryDesignDefaults';
 const DEFAULT_BANNER_SLIDES = [
   {
     id: 'default_1',
-    title: 'Special',
-    highlight: 'Manam',
-    subtitle: 'Order karo',
+    title: 'Order Food & Essentials',
+    highlight: 'Fast Delivery',
+    subtitle: 'Delicious meals and daily staples delivered to your doorstep',
     buttonText: 'Order Now',
     link: '/restaurants',
     image: '/assets/hero_delivery_banner.jpg',
     bgGradient: 'bg-gradient-to-r from-[#7B1FA2] via-[#E91E63] to-[#FF5722]'
-  },
-  {
-    id: 'default_2',
-    title: 'Fresh Groceries',
-    highlight: 'Delivered Fast',
-    subtitle: 'Daily essentials, snacks & staples in minutes!',
-    buttonText: 'Order Now',
-    link: '/restaurants?category=grocery',
-    image: '/assets/cat_grocery.jpg',
-    bgGradient: 'bg-gradient-to-r from-[#065F46] via-[#047857] to-[#059669]'
-  },
-  {
-    id: 'default_3',
-    title: 'Hot Deals On',
-    highlight: 'Your Favorite Food',
-    subtitle: 'Delicious dishes from top restaurants near you',
-    buttonText: 'Order Now',
-    link: '/restaurants',
-    image: '/assets/cat_food.jpg',
-    bgGradient: 'bg-gradient-to-r from-[#991B1B] via-[#DC2626] to-[#EA580C]'
   }
 ];
 
-const HOME_DESIGN_CACHE_KEY = 'jinkzo_home_design_cache_v1';
+const HOME_DESIGN_CACHE_KEY = 'jinkzo_home_design_cache_v2';
 
 const getCachedHomeDesign = () => {
   try {
     const raw = localStorage.getItem(HOME_DESIGN_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed && parsed.v === 1 && typeof parsed.categoryDesigns === 'object') {
+    if (
+      parsed &&
+      parsed.v === 2 &&
+      Array.isArray(parsed.homeHeroBanners) &&
+      typeof parsed.categoryDesigns === 'object' &&
+      parsed.categoryDesigns !== null &&
+      typeof parsed.homeBackgroundConfig === 'object' &&
+      parsed.homeBackgroundConfig !== null
+    ) {
       // Invalidate cache if older than 5 minutes (300,000 ms) to guarantee fresh published state
       if (parsed.timestamp && (Date.now() - parsed.timestamp > 5 * 60 * 1000)) {
         return null;
@@ -75,9 +63,9 @@ const setCachedHomeDesign = (data) => {
   try {
     if (!data) return;
     const payload = {
-      v: 1,
+      v: 2,
       timestamp: Date.now(),
-      homeHeroBanners: data.homeHeroBanners || [],
+      homeHeroBanners: Array.isArray(data.homeHeroBanners) ? data.homeHeroBanners : [],
       homeBackgroundConfig: data.homeBackgroundConfig || { type: 'default' },
       categoryDesigns: data.categoryDesigns || DEFAULT_CATEGORY_DESIGNS
     };
@@ -143,7 +131,7 @@ export default function Home() {
   const [homeHeroBanners, setHomeHeroBanners] = useState(
     cachedDesign?.homeHeroBanners || []
   );
-  const [bannerSlides, setBannerSlides] = useState(DEFAULT_BANNER_SLIDES);
+  const [bannerSlides, setBannerSlides] = useState([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -153,7 +141,7 @@ export default function Home() {
   );
 
   // Design Loading & Readiness State (prevents default-design swap flash if no cache exists)
-  const [isHomeDesignLoading, setIsHomeDesignLoading] = useState(!cachedDesign);
+  const [isHomeDesignLoading, setIsHomeDesignLoading] = useState(!cachedDesign || !cachedDesign.homeHeroBanners || cachedDesign.homeHeroBanners.length === 0);
 
   // Mobile Touch Swipe Handling
   const [touchStart, setTouchStart] = useState(0);
@@ -172,9 +160,9 @@ export default function Home() {
           fetch(`${API_BASE}/home-background`, { headers: requestHeaders })
         ]);
 
-        let updatedHeroBanners = homeHeroBanners;
-        let updatedBgConfig = homeBackgroundConfig;
-        let updatedCategoryDesigns = categoryDesigns;
+        let updatedHeroBanners = cachedDesign?.homeHeroBanners || [];
+        let updatedBgConfig = cachedDesign?.homeBackgroundConfig || { type: 'default' };
+        let updatedCategoryDesigns = cachedDesign?.categoryDesigns || DEFAULT_CATEGORY_DESIGNS;
 
         if (heroBannersRes.status === 'fulfilled' && heroBannersRes.value.ok) {
           const heroData = await heroBannersRes.value.json();
@@ -194,13 +182,13 @@ export default function Home() {
 
         if (catDesignsRes.status === 'fulfilled' && catDesignsRes.value.ok) {
           const designsData = await catDesignsRes.value.json();
-          if (designsData && typeof designsData === 'object') {
+          if (designsData && typeof designsData === 'object' && Object.keys(designsData).length > 0) {
             updatedCategoryDesigns = { ...DEFAULT_CATEGORY_DESIGNS, ...designsData };
             setCategoryDesigns(updatedCategoryDesigns);
           }
         }
 
-        // Sync local cache for next load
+        // Sync local cache with authoritative latest data from published Admin APIs
         setCachedHomeDesign({
           homeHeroBanners: updatedHeroBanners,
           homeBackgroundConfig: updatedBgConfig,
