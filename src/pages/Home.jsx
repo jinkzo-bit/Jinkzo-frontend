@@ -454,7 +454,10 @@ export default function Home() {
     }
   ];
 
-  const activeBanner = bannerSlides[currentSlide] || bannerSlides[0];
+  const activeBanner =
+    bannerSlides && bannerSlides.length > 0
+      ? (bannerSlides[currentSlide] || bannerSlides[0])
+      : DEFAULT_BANNER_SLIDES[0];
 
   if (isHomeDesignLoading) {
     return (
@@ -510,7 +513,7 @@ export default function Home() {
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            className={`relative rounded-3xl sm:rounded-[32px] overflow-hidden ${activeBanner.bgGradient} text-white p-4 sm:p-6 md:p-10 lg:p-12 shadow-[0_8px_30px_rgba(123,31,162,0.25)] flex flex-row items-center justify-between min-h-[160px] sm:min-h-[220px] md:min-h-[300px] transition-all duration-700 group select-none w-full box-border`}
+            className={`relative rounded-3xl sm:rounded-[32px] overflow-hidden ${activeBanner?.bgGradient || 'bg-gradient-to-r from-[#7B1FA2] via-[#E91E63] to-[#FF5722]'} text-white p-4 sm:p-6 md:p-10 lg:p-12 shadow-[0_8px_30px_rgba(123,31,162,0.25)] flex flex-row items-center justify-between min-h-[160px] sm:min-h-[220px] md:min-h-[300px] transition-all duration-700 group select-none w-full box-border`}
           >
 
             {/* Decorative Floating Shapes & Watermark Accents */}
@@ -555,10 +558,10 @@ export default function Home() {
             )}
 
             {/* Active Banner Slide Content */}
-            <div key={activeBanner.id} className="w-full flex flex-row items-center justify-between animate-fade-in transition-all duration-500 z-10">
+            <div key={activeBanner?.id || 'default_hero'} className="w-full flex flex-row items-center justify-between animate-fade-in transition-all duration-500 z-10">
               <PromoBannerRenderer
-                slide={activeBanner}
-                design={activeBanner.design}
+                slide={activeBanner || DEFAULT_BANNER_SLIDES[0]}
+                design={activeBanner?.design}
                 language={language}
               />
             </div>
