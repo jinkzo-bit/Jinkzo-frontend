@@ -418,6 +418,8 @@ export default function Checkout() {
         items: items.map(i => {
           const isCatalog = Boolean(i.supplierId) || i.itemModel === 'CatalogItem' || ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes((i.category || i.service || '').toLowerCase());
           const itemName = i.name || i.itemName || i.productName || i.title || i.foodName || 'Item';
+          const rawSupId = i.supplierId || i.supplier?._id || i.supplier?.id;
+          const validSupId = (rawSupId && /^[0-9a-fA-F]{24}$/.test(String(rawSupId))) ? String(rawSupId) : null;
           return {
             menuItemId: i.menuItemId,
             itemModel: isCatalog ? 'CatalogItem' : 'MenuItem',
@@ -427,7 +429,7 @@ export default function Checkout() {
             unit: i.unit || '',
             service: i.service || i.category || (isCatalog ? 'catalog' : 'food'),
             category: i.category || '',
-            supplierId: isCatalog ? (i.supplierId || null) : null,
+            supplierId: isCatalog ? validSupId : null,
             supplierName: isCatalog ? (i.supplierName || null) : null,
             image: i.image || '',
             isVeg: i.isVeg || false,
@@ -723,7 +725,7 @@ export default function Checkout() {
                                 className="w-10 h-10 object-cover rounded-xl bg-base border border-line flex-shrink-0"
                               />
                               <div className="flex flex-col min-w-0">
-                                <h5 className="font-display font-extrabold text-xs md:text-sm text-gray-950 dark:text-white truncate">
+                                <h5 className="font-display font-black text-xs md:text-sm text-main dark:text-white truncate">
                                   {itemName}
                                 </h5>
                                 <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700 dark:text-gray-300">

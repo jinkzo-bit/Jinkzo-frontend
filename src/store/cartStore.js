@@ -121,6 +121,10 @@ export const useCartStore = create(
 
       const itemName = item.name || item.itemName || item.productName || item.title || item.foodName || 'Item';
 
+      const rawSupId = item.supplierId || item.supplier?._id || item.supplier?.id;
+      const isHexId = rawSupId && /^[0-9a-fA-F]{24}$/.test(String(rawSupId));
+      const validSupId = isHexId ? String(rawSupId) : null;
+
       updatedItems.push({
         cartKey: itemKey,
         menuItemId: item._id || item.id,
@@ -132,7 +136,7 @@ export const useCartStore = create(
         service: isCatalog ? (item.service || item.category || 'catalog') : 'food',
         category: item.category || '',
         itemModel: isCatalog ? 'CatalogItem' : 'MenuItem',
-        supplierId: item.supplierId || item.supplier?._id || item.supplier?.id || (isCatalog && item.category ? `sup_${item.category}` : null),
+        supplierId: validSupId,
         supplierName: item.supplierName || item.supplier?.name || (typeof item.supplier === 'string' ? item.supplier : null) || (isCatalog && item.category ? `${item.category.toUpperCase().replace(/_/g, ' ')} STORE` : null),
         supplierAddress: supAddr,
         supplierLatitude: supLat,

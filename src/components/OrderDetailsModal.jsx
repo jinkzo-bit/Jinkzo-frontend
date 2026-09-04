@@ -828,7 +828,7 @@ export default function OrderDetailsModal({
                                           <span className={`w-1.5 h-1.5 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
                                         </span>
                                       )}
-                                      <span className={`font-extrabold truncate text-gray-950 dark:text-white ${item.isCancelled ? 'line-through text-red-500' : ''}`}>
+                                      <span className={`font-black truncate text-main dark:text-white ${item.isCancelled ? 'line-through text-red-500' : ''}`}>
                                         {itemName}
                                       </span>
                                       {item.unit ? (

@@ -319,7 +319,7 @@ export default function Cart() {
                           className="w-16 h-16 md:w-18 md:h-18 object-cover rounded-2xl bg-base flex-shrink-0 border border-line"
                         />
                         <div className="flex flex-col gap-0.5">
-                          <h4 className="font-display font-extrabold text-sm md:text-base text-gray-950 dark:text-white line-clamp-1">
+                          <h4 className="font-display font-black text-sm md:text-base text-main dark:text-white line-clamp-1 leading-snug">
                             {itemName}
                           </h4>
                           <div className="flex items-center gap-2 flex-wrap">
