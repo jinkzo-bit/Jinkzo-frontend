@@ -117,7 +117,7 @@ export default function NotificationCampaignsTab({ token }) {
 
       const payload = {
         title: form.title.trim(),
-        body: form.body.trim(),
+        message: form.body.trim(),
         targetAudience: form.targetAudience,
         topic: form.topic.trim() || undefined,
         imageUrl: form.imageUrl.trim() || undefined,
@@ -586,7 +586,7 @@ export default function NotificationCampaignsTab({ token }) {
                   <tr key={cmp._id} className="hover:bg-base/50 transition-all">
                     <td className="p-3">
                       <div className="font-bold text-main text-xs">{cmp.title}</div>
-                      <div className="text-[11px] text-muted line-clamp-1">{cmp.body}</div>
+                      <div className="text-[11px] text-muted line-clamp-1">{cmp.message || cmp.body}</div>
                     </td>
 
                     <td className="p-3">
