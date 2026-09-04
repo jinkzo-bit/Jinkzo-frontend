@@ -7,7 +7,7 @@ import {
   XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare,
   AlertCircle, ChevronLeft, ChevronRight, Ban, Unlock, Clock, Percent, MapPin, Calendar, X, ImagePlus, Trash2,
   Pencil, Plus, UserCircle, Activity, FileText, Star, TrendingUp, Search, Menu, Filter, Info, Shield, RefreshCw,
-  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical, Save, Sparkles, Utensils, Boxes, ExternalLink, Palette
+  Layers, MoveUp, MoveDown, Eye, EyeOff, SlidersHorizontal, GripVertical, Save, Sparkles, Utensils, Boxes, ExternalLink, Palette, Send, Bell
 } from 'lucide-react';
 import InteractiveMap from '../components/InteractiveMap';
 import SuppliersAndItemsTab from '../components/admin/SuppliersAndItemsTab';
@@ -21,6 +21,7 @@ import HomeBackgroundTab from '../components/admin/HomeBackgroundTab';
 import HomeDesignDashboard from '../components/admin/HomeDesignDashboard';
 import EarningsAndSettlementsTab from '../components/admin/EarningsAndSettlementsTab';
 import RiderRejectionsTab from '../components/admin/RiderRejectionsTab';
+import NotificationCampaignsTab from '../components/admin/NotificationCampaignsTab';
 import AssignRiderModal from '../components/admin/AssignRiderModal';
 import OrderDetailsModal from '../components/OrderDetailsModal';
 import { DEFAULT_CATEGORY_DESIGNS } from '../utils/categoryDesignDefaults';
@@ -1732,6 +1733,7 @@ export default function AdminDashboard() {
             { id: 'withdrawals', label: 'Wallet Cashouts', icon: CheckCircle, badge: withdrawals.filter(w => w.status === 'Pending').length },
             { id: 'complaints', label: 'Complaints Resolution', icon: MessageSquare, badge: complaints.filter(c => c.status === 'Open').length },
             { id: 'coupons', label: 'Platform Coupons', icon: Tag, badge: coupons.length },
+            { id: 'campaigns', label: 'Push Campaigns', icon: Send },
             { id: 'banners', label: 'Promo Banners (Legacy)', icon: ImagePlus, badge: banners.length },
             { id: 'settings', label: 'Operational Parameters', icon: Settings }
           ].map(tab => {
@@ -3311,6 +3313,11 @@ export default function AdminDashboard() {
                 ))}
               </div>
             </div>
+          )}
+
+          {/* PUSH CAMPAIGN MANAGEMENT TAB */}
+          {activeSubTab === 'campaigns' && (
+            <NotificationCampaignsTab token={token} />
           )}
 
           {/* OPERATIONAL PARAMETERS TAB */}

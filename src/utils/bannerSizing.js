@@ -108,23 +108,23 @@ export function getSingleImageUrl(singleImageConfig, isMobile, language, fallbac
     return singleImageConfig.trim();
   }
 
-  const langKey = language === 'te' ? 'te' : 'en';
-
-  // 2. Mobile-specific priority if in mobile view
-  if (isMobile) {
-    const mob = singleImageConfig.mobile || singleImageConfig.mobileImage;
-    if (typeof mob === 'string' && mob.trim()) return mob.trim();
-    if (mob && typeof mob === 'object') {
-      if (mob[langKey]?.imageUrl) return mob[langKey].imageUrl;
-      if (mob.en?.imageUrl) return mob.en.imageUrl;
-      if (mob.te?.imageUrl) return mob.te.imageUrl;
-      if (mob.imageUrl) return mob.imageUrl;
-      if (mob.url) return mob.url;
-    }
-    if (singleImageConfig.mobileImageUrl) return singleImageConfig.mobileImageUrl;
+  // 2. PRIMARY CANONICAL SINGLE IMAGE URL (applies to ALL devices - Desktop, Tablet, Mobile)
+  if (typeof singleImageConfig.imageUrl === 'string' && singleImageConfig.imageUrl.trim()) {
+    return singleImageConfig.imageUrl.trim();
+  }
+  if (typeof singleImageConfig.desktopImageUrl === 'string' && singleImageConfig.desktopImageUrl.trim()) {
+    return singleImageConfig.desktopImageUrl.trim();
+  }
+  if (typeof singleImageConfig.defaultImage?.imageUrl === 'string' && singleImageConfig.defaultImage.imageUrl.trim()) {
+    return singleImageConfig.defaultImage.imageUrl.trim();
+  }
+  if (typeof singleImageConfig.default?.imageUrl === 'string' && singleImageConfig.default.imageUrl.trim()) {
+    return singleImageConfig.default.imageUrl.trim();
   }
 
-  // 3. Desktop / General device configuration
+  const langKey = language === 'te' ? 'te' : 'en';
+
+  // 3. Desktop / General device object configuration
   const desk = singleImageConfig.desktop || singleImageConfig.desktopImage;
   if (typeof desk === 'string' && desk.trim()) return desk.trim();
   if (desk && typeof desk === 'object') {
@@ -135,15 +135,25 @@ export function getSingleImageUrl(singleImageConfig, isMobile, language, fallbac
     if (desk.url) return desk.url;
   }
 
-  // 4. Default image object fallbacks
-  if (singleImageConfig.defaultImage?.imageUrl) return singleImageConfig.defaultImage.imageUrl;
-  if (singleImageConfig.default?.imageUrl) return singleImageConfig.default.imageUrl;
+  // 4. Legacy Mobile-specific fallback (only if no canonical single URL is set)
+  if (isMobile) {
+    const mob = singleImageConfig.mobile || singleImageConfig.mobileImage;
+    if (typeof mob === 'string' && mob.trim()) return mob.trim();
+    if (mob && typeof mob === 'object') {
+      if (mob[langKey]?.imageUrl) return mob[langKey].imageUrl;
+      if (mob.en?.imageUrl) return mob.en.imageUrl;
+      if (mob.te?.imageUrl) return mob.te.imageUrl;
+      if (mob.imageUrl) return mob.imageUrl;
+      if (mob.url) return mob.url;
+    }
+    if (typeof singleImageConfig.mobileImageUrl === 'string' && singleImageConfig.mobileImageUrl.trim()) {
+      return singleImageConfig.mobileImageUrl.trim();
+    }
+  }
 
-  // 5. Direct properties on root single configuration
-  if (singleImageConfig.imageUrl) return singleImageConfig.imageUrl;
-  if (singleImageConfig.url) return singleImageConfig.url;
-  if (singleImageConfig.image) return singleImageConfig.image;
-  if (singleImageConfig.desktopImageUrl) return singleImageConfig.desktopImageUrl;
+  // 5. Remaining root level fallbacks
+  if (typeof singleImageConfig.url === 'string' && singleImageConfig.url.trim()) return singleImageConfig.url.trim();
+  if (typeof singleImageConfig.image === 'string' && singleImageConfig.image.trim()) return singleImageConfig.image.trim();
 
   return fallbackUrl;
 }

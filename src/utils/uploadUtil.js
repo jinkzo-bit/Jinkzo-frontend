@@ -42,7 +42,15 @@ export const getBackendOrigin = () => {
     }
   }
 
-  // 3. In local dev (Vite proxy active) or single-origin deployments,
+  // 3. In production browser when window.location.hostname is NOT localhost/127.0.0.1,
+  // fallback to production backend origin 'https://api.jinkzo.com' if VITE_BACKEND_URL or absolute API_BASE is omitted
+  if (typeof window !== 'undefined' && window.location?.hostname &&
+      !window.location.hostname.includes('localhost') &&
+      !window.location.hostname.includes('127.0.0.1')) {
+    return 'https://api.jinkzo.com';
+  }
+
+  // 4. In local dev (Vite proxy active) or single-origin deployments,
   // return empty string so assets resolve relative to window.location.origin
   return '';
 };

@@ -59,6 +59,10 @@ const getCachedHomeDesign = () => {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && parsed.v === 1 && typeof parsed.categoryDesigns === 'object') {
+      // Invalidate cache if older than 5 minutes (300,000 ms) to guarantee fresh published state
+      if (parsed.timestamp && (Date.now() - parsed.timestamp > 5 * 60 * 1000)) {
+        return null;
+      }
       return parsed;
     }
   } catch (e) {
@@ -158,13 +162,14 @@ export default function Home() {
   useEffect(() => {
     const fetchAvailabilityAndBanners = async () => {
       try {
+        const requestHeaders = { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' };
         const [availRes, bannersRes, catServicesRes, catDesignsRes, heroBannersRes, bgRes] = await Promise.allSettled([
-          fetch(`${API_BASE}/auth/driver-availability`),
-          fetch(`${API_BASE}/restaurants/banners`),
-          fetch(`${API_BASE}/restaurants/category-services`),
-          fetch(`${API_BASE}/category-designs/published`),
-          fetch(`${API_BASE}/home-hero-banners/active`),
-          fetch(`${API_BASE}/home-background`)
+          fetch(`${API_BASE}/auth/driver-availability`, { headers: requestHeaders }),
+          fetch(`${API_BASE}/restaurants/banners`, { headers: requestHeaders }),
+          fetch(`${API_BASE}/restaurants/category-services`, { headers: requestHeaders }),
+          fetch(`${API_BASE}/category-designs/published`, { headers: requestHeaders }),
+          fetch(`${API_BASE}/home-hero-banners/active`, { headers: requestHeaders }),
+          fetch(`${API_BASE}/home-background`, { headers: requestHeaders })
         ]);
 
         let updatedHeroBanners = homeHeroBanners;

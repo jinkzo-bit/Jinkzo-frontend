@@ -70,7 +70,7 @@ export default function HomeHeroBannerRenderer({
     const imageUrl = getSingleImageUrl(single, isMobileView, language, '/assets/hero_delivery_banner.jpg');
     const linkTarget = DESTINATION_MAP.food;
 
-    const singleFitMode = single.defaultImage?.fitMode || 'contain';
+    const singleFitMode = single.fitMode || single.defaultImage?.fitMode || 'cover';
 
     const renderGraphic = (
       <img
@@ -79,7 +79,8 @@ export default function HomeHeroBannerRenderer({
         onError={(e) => handleImageError(e, 'banner')}
         style={{
           borderRadius: `${metrics.borderRadiusPx}px`,
-          objectFit: singleFitMode
+          objectFit: singleFitMode,
+          objectPosition: 'center'
         }}
         className="w-full h-full pointer-events-none transition-all duration-300"
       />

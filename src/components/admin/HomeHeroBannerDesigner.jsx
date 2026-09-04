@@ -458,10 +458,11 @@ export default function HomeHeroBannerDesigner({
           c.layered.artwork.y = 50;
           c.layered.artwork.width = 30;
           if (!c.layered.artwork.fitMode) c.layered.artwork.fitMode = 'contain';
-        } else if (targetSlot === 'default_single' || targetSlot === 'desktop_single' || targetSlot === 'single' || c.mode === 'single') {
+        } else if (targetSlot === 'default_single' || targetSlot === 'desktop_single' || targetSlot === 'single' || targetSlot === 'mobile_single' || c.mode === 'single') {
           if (!c.single) c.single = {};
           c.single.imageUrl = uploadedUrl;
           c.single.desktopImageUrl = uploadedUrl;
+          c.single.mobileImageUrl = uploadedUrl;
           if (!c.single.defaultImage) c.single.defaultImage = {};
           c.single.defaultImage.imageUrl = uploadedUrl;
           c.single.defaultImage.width = w;
@@ -473,9 +474,6 @@ export default function HomeHeroBannerDesigner({
           c.single.desktop.en.imageUrl = uploadedUrl;
           if (!c.single.desktop.te) c.single.desktop.te = {};
           c.single.desktop.te.imageUrl = uploadedUrl;
-        } else if (targetSlot === 'mobile_single') {
-          if (!c.single) c.single = {};
-          c.single.mobileImageUrl = uploadedUrl;
           if (!c.single.mobile) c.single.mobile = {};
           c.single.mobile.imageUrl = uploadedUrl;
           if (!c.single.mobile.en) c.single.mobile.en = {};
@@ -1420,81 +1418,44 @@ export default function HomeHeroBannerDesigner({
                   </span>
                 </div>
 
-                {/* Desktop & Mobile Image Upload Slots */}
+                {/* Unified Canonical Hero Banner Image Upload */}
                 <div className="flex flex-col gap-3 border-t border-line pt-3">
-                  {/* Slot 1: Desktop Banner Image */}
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] font-extrabold uppercase text-muted">1. Desktop / Website Banner Image</span>
-                    {single.desktop?.en?.imageUrl || single.desktop?.imageUrl || single.defaultImage?.imageUrl || single.imageUrl ? (
+                    <span className="text-[10px] font-extrabold uppercase text-muted">1. HERO BANNER IMAGE</span>
+                    {single.imageUrl || single.desktopImageUrl || single.defaultImage?.imageUrl || single.desktop?.imageUrl ? (
                       <div className="flex flex-col gap-2">
                         <div className="relative rounded-xl overflow-hidden border border-line bg-surface aspect-[16/6]">
                           <img
-                            src={getImageUrl(single.desktop?.en?.imageUrl || single.desktop?.imageUrl || single.defaultImage?.imageUrl || single.imageUrl, 'banner')}
-                            alt="Desktop Banner"
+                            src={getImageUrl(single.imageUrl || single.desktopImageUrl || single.defaultImage?.imageUrl || single.desktop?.imageUrl, 'banner')}
+                            alt="Hero Banner Image"
                             onError={(e) => handleImageError(e, 'banner')}
-                            style={{ objectFit: single.defaultImage?.fitMode || 'contain' }}
+                            style={{ objectFit: single.defaultImage?.fitMode || 'contain', objectPosition: 'center' }}
                             className="w-full h-full"
                           />
                         </div>
                         <button
                           type="button"
-                          onClick={() => triggerImageUpload('desktop_single')}
+                          onClick={() => triggerImageUpload('single')}
                           disabled={isUploading}
                           className="py-2 bg-primary/10 hover:bg-primary/20 text-primary font-bold text-xs rounded-xl cursor-pointer transition-colors"
                         >
-                          Replace Desktop Image
+                          Replace Banner Image
                         </button>
                       </div>
                     ) : (
                       <button
                         type="button"
-                        onClick={() => triggerImageUpload('desktop_single')}
+                        onClick={() => triggerImageUpload('single')}
                         disabled={isUploading}
                         className="py-3 px-4 bg-primary text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                       >
                         <Upload className="w-4 h-4" />
-                        <span>Upload Desktop Banner Image</span>
+                        <span>Upload Hero Banner Image</span>
                       </button>
                     )}
-                  </div>
-
-                  {/* Slot 2: Mobile Banner Image */}
-                  <div className="flex flex-col gap-1.5 border-t border-line/60 pt-2.5">
-                    <span className="text-[10px] font-extrabold uppercase text-muted">2. Mobile Banner Image (Optional)</span>
-                    {single.mobile?.en?.imageUrl || single.mobile?.imageUrl || single.mobileImageUrl ? (
-                      <div className="flex flex-col gap-2">
-                        <div className="relative rounded-xl overflow-hidden border border-purple-200 bg-purple-50 dark:bg-purple-950/20 aspect-[16/9]">
-                          <img
-                            src={getImageUrl(single.mobile?.en?.imageUrl || single.mobile?.imageUrl || single.mobileImageUrl, 'banner')}
-                            alt="Mobile Banner"
-                            onError={(e) => handleImageError(e, 'banner')}
-                            style={{ objectFit: single.defaultImage?.fitMode || 'contain' }}
-                            className="w-full h-full"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => triggerImageUpload('mobile_single')}
-                          disabled={isUploading}
-                          className="py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 dark:text-purple-200 font-bold text-xs rounded-xl cursor-pointer transition-colors"
-                        >
-                          Replace Mobile Image
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-1">
-                        <button
-                          type="button"
-                          onClick={() => triggerImageUpload('mobile_single')}
-                          disabled={isUploading}
-                          className="py-2.5 px-4 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 text-purple-700 dark:text-purple-300 border border-purple-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors"
-                        >
-                          <Upload className="w-4 h-4" />
-                          <span>Upload Mobile Banner Image</span>
-                        </button>
-                        <span className="text-[9px] text-muted italic px-1">Mobile automatically uses Desktop image if no mobile image is uploaded.</span>
-                      </div>
-                    )}
+                    <p className="text-[10px] text-muted italic mt-1 bg-surface p-2.5 rounded-xl border border-line/60">
+                      💡 One uploaded image is automatically used for Desktop, Tablet and Mobile. The image is responsively cropped to fit each screen.
+                    </p>
                   </div>
                 </div>
               </div>
