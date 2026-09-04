@@ -103,17 +103,47 @@ export function computeBannerFontSize(scaleBase, sizeRatio, minPx = 10) {
 export function getSingleImageUrl(singleImageConfig, isMobile, language, fallbackUrl) {
   if (!singleImageConfig) return fallbackUrl;
 
-  const deviceKey = isMobile ? 'mobile' : 'desktop';
+  // 1. Direct string URL
+  if (typeof singleImageConfig === 'string' && singleImageConfig.trim()) {
+    return singleImageConfig.trim();
+  }
+
   const langKey = language === 'te' ? 'te' : 'en';
 
-  const deviceObj = singleImageConfig[deviceKey] || singleImageConfig.desktop || {};
-  
-  if (deviceObj[langKey]?.imageUrl) return deviceObj[langKey].imageUrl;
-  if (deviceObj['en']?.imageUrl) return deviceObj['en'].imageUrl;
+  // 2. Mobile-specific priority if in mobile view
+  if (isMobile) {
+    const mob = singleImageConfig.mobile || singleImageConfig.mobileImage;
+    if (typeof mob === 'string' && mob.trim()) return mob.trim();
+    if (mob && typeof mob === 'object') {
+      if (mob[langKey]?.imageUrl) return mob[langKey].imageUrl;
+      if (mob.en?.imageUrl) return mob.en.imageUrl;
+      if (mob.te?.imageUrl) return mob.te.imageUrl;
+      if (mob.imageUrl) return mob.imageUrl;
+      if (mob.url) return mob.url;
+    }
+    if (singleImageConfig.mobileImageUrl) return singleImageConfig.mobileImageUrl;
+  }
+
+  // 3. Desktop / General device configuration
+  const desk = singleImageConfig.desktop || singleImageConfig.desktopImage;
+  if (typeof desk === 'string' && desk.trim()) return desk.trim();
+  if (desk && typeof desk === 'object') {
+    if (desk[langKey]?.imageUrl) return desk[langKey].imageUrl;
+    if (desk.en?.imageUrl) return desk.en.imageUrl;
+    if (desk.te?.imageUrl) return desk.te.imageUrl;
+    if (desk.imageUrl) return desk.imageUrl;
+    if (desk.url) return desk.url;
+  }
+
+  // 4. Default image object fallbacks
   if (singleImageConfig.defaultImage?.imageUrl) return singleImageConfig.defaultImage.imageUrl;
   if (singleImageConfig.default?.imageUrl) return singleImageConfig.default.imageUrl;
-  if (singleImageConfig.desktop?.[langKey]?.imageUrl) return singleImageConfig.desktop[langKey].imageUrl;
-  if (singleImageConfig.desktop?.['en']?.imageUrl) return singleImageConfig.desktop['en'].imageUrl;
+
+  // 5. Direct properties on root single configuration
+  if (singleImageConfig.imageUrl) return singleImageConfig.imageUrl;
+  if (singleImageConfig.url) return singleImageConfig.url;
+  if (singleImageConfig.image) return singleImageConfig.image;
+  if (singleImageConfig.desktopImageUrl) return singleImageConfig.desktopImageUrl;
 
   return fallbackUrl;
 }

@@ -318,7 +318,7 @@ export default function OrderHistory() {
                     `Pickup: ${order.pickupAddress?.street || 'Customer Location'} ➔ Drop: ${order.address?.street || 'Destination Address'}`
                   ) : (
                     (order.items && order.items.length > 0)
-                      ? order.items.map(i => `${i.name} (${i.quantity})`).join(', ')
+                      ? order.items.map(i => `${i.name || i.itemName || i.productName || i.title || i.foodName || 'Item'} (${i.quantity})`).join(', ')
                       : '—'
                   )}
                 </p>

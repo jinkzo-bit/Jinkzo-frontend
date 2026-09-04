@@ -119,10 +119,12 @@ export const useCartStore = create(
       const supAddr = item.supplierAddress ?? item.supplier?.address ?? '';
       const supPhone = item.supplierPhone ?? item.supplier?.phone ?? '';
 
+      const itemName = item.name || item.itemName || item.productName || item.title || item.foodName || 'Item';
+
       updatedItems.push({
         cartKey: itemKey,
         menuItemId: item._id || item.id,
-        name: item.name,
+        name: itemName,
         price: item.price,
         image: item.image || '',
         isVeg: item.isVeg,
@@ -152,7 +154,8 @@ export const useCartStore = create(
       restaurant: restaurant || get().restaurant
     });
     
-    get().showToast(`Added "${item.name}${itemUnit ? ` (${itemUnit})` : ''}" to cart!`);
+    const addedName = item.name || item.itemName || item.productName || item.title || item.foodName || 'Item';
+    get().showToast(`Added "${addedName}${itemUnit ? ` (${itemUnit})` : ''}" to cart!`);
     return { success: true };
   },
 
@@ -168,13 +171,14 @@ export const useCartStore = create(
 
     let updatedItems = [...items];
     const item = updatedItems[existingIndex];
+    const iName = item.name || item.itemName || item.productName || item.title || item.foodName || 'Item';
 
     if (item.quantity > 1) {
       item.quantity -= 1;
-      get().showToast(`Updated quantity of "${item.name}"`);
+      get().showToast(`Updated quantity of "${iName}"`);
     } else {
       updatedItems.splice(existingIndex, 1);
-      get().showToast(`Removed "${item.name}" from cart`, 'info');
+      get().showToast(`Removed "${iName}" from cart`, 'info');
     }
 
     set({ 

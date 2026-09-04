@@ -816,6 +816,7 @@ export default function OrderDetailsModal({
                                 const unitPrice = parseFloat(item.price) || 0;
                                 const qty = parseInt(item.quantity, 10) || 1;
                                 const itemTotal = unitPrice * qty;
+                                const itemName = item.name || item.itemName || item.productName || item.title || item.foodName || 'Item';
 
                                 return (
                                   <div key={iIdx} className="flex items-center justify-between py-1.5 text-xs gap-3">
@@ -827,9 +828,14 @@ export default function OrderDetailsModal({
                                           <span className={`w-1.5 h-1.5 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
                                         </span>
                                       )}
-                                      <span className={`font-semibold truncate ${item.isCancelled ? 'line-through text-red-500' : 'text-main'}`}>
-                                        {item.name}
+                                      <span className={`font-extrabold truncate text-gray-950 dark:text-white ${item.isCancelled ? 'line-through text-red-500' : ''}`}>
+                                        {itemName}
                                       </span>
+                                      {item.unit ? (
+                                        <span className="text-[10px] font-extrabold text-primary bg-primary/10 px-1.5 py-0.2 rounded border border-primary/20 shrink-0">
+                                          {item.unit}
+                                        </span>
+                                      ) : null}
                                       {item.isCancelled && (
                                         <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 bg-red-50 text-red-600 border border-red-200 rounded shrink-0">
                                           Cancelled

@@ -95,6 +95,7 @@ export default function HomeHeroBannerDesigner({
   });
 
   const fileInputRef = useRef(null);
+  const uploadTargetSlotRef = useRef(null);
   const [uploadTargetSlot, setUploadTargetSlot] = useState(null);
 
   // Fetch authoritatively from Backend
@@ -417,6 +418,7 @@ export default function HomeHeroBannerDesigner({
 
   // Image Upload Handling with safe default positioning (x: 70, y: 50, width: 30)
   const triggerImageUpload = (slot) => {
+    uploadTargetSlotRef.current = slot;
     setUploadTargetSlot(slot);
     if (fileInputRef.current) fileInputRef.current.click();
   };
@@ -424,6 +426,7 @@ export default function HomeHeroBannerDesigner({
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const targetSlot = uploadTargetSlotRef.current || uploadTargetSlot;
     try {
       setIsUploading(true);
       const uploadedUrl = await uploadFileToBackend(file, token);
@@ -436,37 +439,49 @@ export default function HomeHeroBannerDesigner({
       const h = img.naturalHeight || 600;
 
       updateConfig((c) => {
-        if (uploadTargetSlot === 'background' || uploadTargetSlot === 'desktop_background') {
+        if (targetSlot === 'background' || targetSlot === 'desktop_background') {
+          if (!c.layered) c.layered = {};
           if (!c.layered.background) c.layered.background = {};
           c.layered.background.imageUrl = uploadedUrl;
           c.layered.background.desktopImageUrl = uploadedUrl;
           if (!c.layered.background.fitMode) c.layered.background.fitMode = 'cover';
-        } else if (uploadTargetSlot === 'mobile_background') {
+        } else if (targetSlot === 'mobile_background') {
+          if (!c.layered) c.layered = {};
           if (!c.layered.background) c.layered.background = {};
           c.layered.background.mobileImageUrl = uploadedUrl;
           if (!c.layered.background.fitMode) c.layered.background.fitMode = 'cover';
-        } else if (uploadTargetSlot === 'artwork') {
+        } else if (targetSlot === 'artwork') {
+          if (!c.layered) c.layered = {};
           if (!c.layered.artwork) c.layered.artwork = {};
           c.layered.artwork.imageUrl = uploadedUrl;
           c.layered.artwork.x = 70;
           c.layered.artwork.y = 50;
           c.layered.artwork.width = 30;
           if (!c.layered.artwork.fitMode) c.layered.artwork.fitMode = 'contain';
-        } else if (uploadTargetSlot === 'default_single' || uploadTargetSlot === 'desktop_single') {
+        } else if (targetSlot === 'default_single' || targetSlot === 'desktop_single' || targetSlot === 'single' || c.mode === 'single') {
           if (!c.single) c.single = {};
+          c.single.imageUrl = uploadedUrl;
+          c.single.desktopImageUrl = uploadedUrl;
           if (!c.single.defaultImage) c.single.defaultImage = {};
           c.single.defaultImage.imageUrl = uploadedUrl;
           c.single.defaultImage.width = w;
           c.single.defaultImage.height = h;
           if (!c.single.defaultImage.fitMode) c.single.defaultImage.fitMode = 'contain';
-          if (!c.single.desktop) c.single.desktop = { en: {} };
+          if (!c.single.desktop) c.single.desktop = {};
+          c.single.desktop.imageUrl = uploadedUrl;
           if (!c.single.desktop.en) c.single.desktop.en = {};
           c.single.desktop.en.imageUrl = uploadedUrl;
-        } else if (uploadTargetSlot === 'mobile_single') {
+          if (!c.single.desktop.te) c.single.desktop.te = {};
+          c.single.desktop.te.imageUrl = uploadedUrl;
+        } else if (targetSlot === 'mobile_single') {
           if (!c.single) c.single = {};
-          if (!c.single.mobile) c.single.mobile = { en: {} };
+          c.single.mobileImageUrl = uploadedUrl;
+          if (!c.single.mobile) c.single.mobile = {};
+          c.single.mobile.imageUrl = uploadedUrl;
           if (!c.single.mobile.en) c.single.mobile.en = {};
           c.single.mobile.en.imageUrl = uploadedUrl;
+          if (!c.single.mobile.te) c.single.mobile.te = {};
+          c.single.mobile.te.imageUrl = uploadedUrl;
         }
       });
 
@@ -1410,12 +1425,13 @@ export default function HomeHeroBannerDesigner({
                   {/* Slot 1: Desktop Banner Image */}
                   <div className="flex flex-col gap-1.5">
                     <span className="text-[10px] font-extrabold uppercase text-muted">1. Desktop / Website Banner Image</span>
-                    {single.desktop?.en?.imageUrl || single.defaultImage?.imageUrl ? (
+                    {single.desktop?.en?.imageUrl || single.desktop?.imageUrl || single.defaultImage?.imageUrl || single.imageUrl ? (
                       <div className="flex flex-col gap-2">
                         <div className="relative rounded-xl overflow-hidden border border-line bg-surface aspect-[16/6]">
                           <img
-                            src={single.desktop?.en?.imageUrl || single.defaultImage?.imageUrl}
+                            src={getImageUrl(single.desktop?.en?.imageUrl || single.desktop?.imageUrl || single.defaultImage?.imageUrl || single.imageUrl, 'banner')}
                             alt="Desktop Banner"
+                            onError={(e) => handleImageError(e, 'banner')}
                             style={{ objectFit: single.defaultImage?.fitMode || 'contain' }}
                             className="w-full h-full"
                           />
@@ -1445,12 +1461,13 @@ export default function HomeHeroBannerDesigner({
                   {/* Slot 2: Mobile Banner Image */}
                   <div className="flex flex-col gap-1.5 border-t border-line/60 pt-2.5">
                     <span className="text-[10px] font-extrabold uppercase text-muted">2. Mobile Banner Image (Optional)</span>
-                    {single.mobile?.en?.imageUrl ? (
+                    {single.mobile?.en?.imageUrl || single.mobile?.imageUrl || single.mobileImageUrl ? (
                       <div className="flex flex-col gap-2">
                         <div className="relative rounded-xl overflow-hidden border border-purple-200 bg-purple-50 dark:bg-purple-950/20 aspect-[16/9]">
                           <img
-                            src={single.mobile.en.imageUrl}
+                            src={getImageUrl(single.mobile?.en?.imageUrl || single.mobile?.imageUrl || single.mobileImageUrl, 'banner')}
                             alt="Mobile Banner"
+                            onError={(e) => handleImageError(e, 'banner')}
                             style={{ objectFit: single.defaultImage?.fitMode || 'contain' }}
                             className="w-full h-full"
                           />

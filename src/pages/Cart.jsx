@@ -307,31 +307,33 @@ export default function Cart() {
 
               {/* Items List in Card */}
               <div className="flex flex-col divide-y divide-gray-100">
-                {group.items.map((item) => (
-                  <div key={item.cartKey || `${item.menuItemId}_${item.unit || ''}`} className="py-3.5 first:pt-1 last:pb-1 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5 max-w-[65%]">
-                      <img
-                        src={getImageUrl(item.image, 'food')}
-                        alt={item.name}
-                        onError={(e) => handleImageError(e, 'food')}
-                        className="w-16 h-16 md:w-18 md:h-18 object-cover rounded-2xl bg-base flex-shrink-0 border border-line"
-                      />
-                      <div className="flex flex-col gap-0.5">
-                        <h4 className="font-display font-bold text-sm md:text-base text-gray-900 dark:text-white line-clamp-1">
-                          {item.name}
-                        </h4>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-gray-600 dark:text-gray-300">
-                            Qty: {item.quantity}
-                          </span>
-                          {item.unit ? (
-                            <span className="text-[10px] font-extrabold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
-                              {item.unit}
+                {group.items.map((item) => {
+                  const itemName = item.name || item.itemName || item.productName || item.title || item.foodName || 'Item';
+                  return (
+                    <div key={item.cartKey || `${item.menuItemId}_${item.unit || ''}`} className="py-3.5 first:pt-1 last:pb-1 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3.5 max-w-[65%]">
+                        <img
+                          src={getImageUrl(item.image, 'food')}
+                          alt={itemName}
+                          onError={(e) => handleImageError(e, 'food')}
+                          className="w-16 h-16 md:w-18 md:h-18 object-cover rounded-2xl bg-base flex-shrink-0 border border-line"
+                        />
+                        <div className="flex flex-col gap-0.5">
+                          <h4 className="font-display font-extrabold text-sm md:text-base text-gray-950 dark:text-white line-clamp-1">
+                            {itemName}
+                          </h4>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                              Qty: {item.quantity}
                             </span>
-                          ) : null}
+                            {item.unit ? (
+                              <span className="text-[10px] font-extrabold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
+                                {item.unit}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                       <span className="text-xs md:text-sm font-bold text-gray-900 dark:text-white">
@@ -354,7 +356,8 @@ export default function Cart() {
                       </div>
                     </div>
                   </div>
-                ))}
+                );
+              })}
               </div>
             </div>
           ))}

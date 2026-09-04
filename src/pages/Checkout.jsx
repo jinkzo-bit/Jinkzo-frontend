@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/authStore';
 import { useTranslation } from '../store/languageStore';
 import { playOrderPlacedSound } from '../utils/audio';
 import LocationPickerModal from '../components/LocationPickerModal';
+import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { getCartItemSource, CATEGORY_META, normalizeCategory } from './Cart';
 
 export default function Checkout() {
@@ -414,21 +415,26 @@ export default function Checkout() {
       const primaryRestaurantId = foodItems.length > 0 ? (foodItems[0].restaurantId || restaurant?._id || null) : null;
 
       const orderPayload = {
-        items: items.map(i => ({
-          menuItemId: i.menuItemId,
-          itemModel: i.supplierId ? 'CatalogItem' : 'MenuItem',
-          name: i.name,
-          quantity: i.quantity,
-          price: i.price,
-          unit: i.unit || '',
-          service: i.service || i.category || (i.supplierId ? 'catalog' : 'food'),
-          category: i.category || '',
-          supplierId: i.supplierId || null,
-          supplierName: i.supplierName || null,
-          image: i.image || '',
-          isVeg: i.isVeg || false,
-          restaurantId: i.supplierId ? null : (i.restaurantId || null)
-        })),
+        items: items.map(i => {
+          const isCatalog = Boolean(i.supplierId) || i.itemModel === 'CatalogItem' || ['grocery', 'meat', 'veg_fruits', 'fruits-vegetables', 'veg & fruits', 'bakery_beverages', 'bakery & beverages', 'cool_hot', 'hot_cool'].includes((i.category || i.service || '').toLowerCase());
+          const itemName = i.name || i.itemName || i.productName || i.title || i.foodName || 'Item';
+          return {
+            menuItemId: i.menuItemId,
+            itemModel: isCatalog ? 'CatalogItem' : 'MenuItem',
+            name: itemName,
+            quantity: i.quantity,
+            price: i.price,
+            unit: i.unit || '',
+            service: i.service || i.category || (isCatalog ? 'catalog' : 'food'),
+            category: i.category || '',
+            supplierId: isCatalog ? (i.supplierId || null) : null,
+            supplierName: isCatalog ? (i.supplierName || null) : null,
+            image: i.image || '',
+            isVeg: i.isVeg || false,
+            restaurantId: isCatalog ? null : (i.restaurantId || primaryRestaurantId || null),
+            restaurantName: isCatalog ? null : (i.restaurantName || null)
+          };
+        }),
         addressId: activeAddress._id,
         restaurantId: primaryRestaurantId,
         paymentMethod,
@@ -704,16 +710,38 @@ export default function Checkout() {
                     </div>
 
                     {/* 4. ORDERED ITEMS */}
-                    <div className="flex flex-col gap-1.5 pt-0.5">
-                      {group.items.map((i) => (
-                        <div key={i.cartKey || i.menuItemId} className="flex justify-between items-center text-xs font-semibold">
-                          <span className="text-main truncate max-w-[70%]">
-                            {i.name} {i.unit ? <span className="text-[10px] font-extrabold text-primary bg-primary/10 px-1.5 py-0.2 rounded border border-primary/20">{i.unit}</span> : ''}
-                            <span className="text-muted font-medium ml-1">× {i.quantity}</span>
-                          </span>
-                          <span className="text-main font-bold">₹{i.price * i.quantity}</span>
-                        </div>
-                      ))}
+                    <div className="flex flex-col gap-2 pt-1">
+                      {group.items.map((i) => {
+                        const itemName = i.name || i.itemName || i.productName || i.title || i.foodName || 'Item';
+                        return (
+                          <div key={i.cartKey || i.menuItemId} className="flex justify-between items-center py-1.5 border-b border-line/40 last:border-0 gap-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <img
+                                src={getImageUrl(i.image, 'food')}
+                                alt={itemName}
+                                onError={(e) => handleImageError(e, 'food')}
+                                className="w-10 h-10 object-cover rounded-xl bg-base border border-line flex-shrink-0"
+                              />
+                              <div className="flex flex-col min-w-0">
+                                <h5 className="font-display font-extrabold text-xs md:text-sm text-gray-950 dark:text-white truncate">
+                                  {itemName}
+                                </h5>
+                                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700 dark:text-gray-300">
+                                  <span>Qty: {i.quantity}</span>
+                                  {i.unit ? (
+                                    <span className="text-[10px] font-extrabold text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+                                      {i.unit}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                            <span className="text-xs md:text-sm font-extrabold text-gray-950 dark:text-white flex-shrink-0">
+                              ₹{i.price * i.quantity}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
