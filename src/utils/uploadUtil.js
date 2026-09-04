@@ -60,10 +60,12 @@ export const getBackendOrigin = () => {
  * Handles:
  * 1. Empty/null/undefined/file:// -> returns default fallback
  * 2. Blobs & Data URLs (from file picker previews) -> returns unchanged
- * 3. Absolute External URLs (https://..., http://...) -> returns unchanged directly
- * 4. Localhost / IP upload paths -> strips local host and converts to relative /uploads/... path
+ * 3. Localhost / LAN IP addresses -> strips origin and converts to relative /api/upload/... or /uploads/... path
+ * 4. Absolute External HTTPS / HTTP URLs -> returns unchanged directly
  * 5. Frontend public assets (/assets/...) -> returns unchanged
- * 6. Local uploads (/uploads/..., uploads/..., or bare filenames) -> returns relative /uploads/... path
+ * 6. GridFS uploaded files (/api/upload/file/...) -> prepends backend origin when available
+ * 7. Backend legacy uploaded images (/uploads/... or uploads/...) -> prepends backend origin when available
+ * 8. Bare uploaded filenames -> prepends backend origin + /uploads/
  *
  * @param {string} url - The raw image path or URL
  * @param {string} type - 'food' | 'restaurant' | 'banner' | 'category' | 'avatar' | 'default'
@@ -103,9 +105,9 @@ export const getImageUrl = (url, type = 'default') => {
 
   const backendOrigin = getBackendOrigin();
 
-  // 3. Stored localhost / 127.0.0.1 / IP upload paths (e.g. http://localhost:5000/uploads/... or http://10.x.x.x:5000/uploads/...)
-  // Dynamically normalize to relative /uploads/... path so mobile devices fetch via Vite proxy
-  if (/^https?:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+)(:\d+)?\/uploads\//i.test(trimmed)) {
+  // 3. Localhost / Direct LAN IP addresses in database strings (e.g. http://localhost:5000/api/upload/file/... or http://10.169.207.97:5000/uploads/...)
+  // Dynamically normalize to relative /api/upload/... or /uploads/... path
+  if (/^https?:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+)(:\d+)?\/(uploads|api\/upload)\//i.test(trimmed)) {
     const relativePath = trimmed.replace(/^https?:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+)(:\d+)?/i, '');
     return backendOrigin ? `${backendOrigin}${relativePath}` : relativePath;
   }
@@ -123,7 +125,13 @@ export const getImageUrl = (url, type = 'default') => {
     return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
   }
 
-  // 6. Backend uploaded images (/uploads/... or uploads/...)
+  // 6. GridFS uploaded files (/api/upload/file/... or api/upload/file/...)
+  if (trimmed.startsWith('/api/upload/') || trimmed.startsWith('api/upload/')) {
+    const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    return backendOrigin ? `${backendOrigin}${cleanPath}` : cleanPath;
+  }
+
+  // 7. Backend legacy uploaded images (/uploads/... or uploads/...)
   if (trimmed.startsWith('/uploads/')) {
     return backendOrigin ? `${backendOrigin}${trimmed}` : trimmed;
   }
@@ -131,12 +139,12 @@ export const getImageUrl = (url, type = 'default') => {
     return backendOrigin ? `${backendOrigin}/${trimmed}` : `/${trimmed}`;
   }
 
-  // 7. Bare uploaded filenames (e.g. img-1781293812-123.jpg or image-123.jpg)
+  // 8. Bare uploaded filenames (e.g. img-1781293812-123.jpg or image-123.jpg)
   if (trimmed.startsWith('img-') || trimmed.startsWith('image-')) {
     return backendOrigin ? `${backendOrigin}/uploads/${trimmed}` : `/uploads/${trimmed}`;
   }
 
-  // 8. General relative path
+  // 9. General relative path
   if (trimmed.startsWith('/')) {
     return backendOrigin ? `${backendOrigin}${trimmed}` : trimmed;
   }
@@ -218,7 +226,7 @@ export const uploadFileToBackend = async (file, customToken = null) => {
     }
 
     const data = await res.json();
-    const returnedUrl = data.imageUrl || data.url || (data.filename ? `/uploads/${data.filename}` : null);
+    const returnedUrl = data.imageUrl || data.url || (data.fileId ? `/api/upload/file/${data.fileId}` : (data.filename ? `/uploads/${data.filename}` : null));
     if (!returnedUrl) {
       throw new Error('Upload succeeded but no image URL was returned.');
     }
@@ -264,7 +272,7 @@ export const uploadPublicFileToBackend = async (file) => {
     }
 
     const data = await res.json();
-    const returnedUrl = data.imageUrl || data.url || (data.filename ? `/uploads/${data.filename}` : null);
+    const returnedUrl = data.imageUrl || data.url || (data.fileId ? `/api/upload/file/${data.fileId}` : (data.filename ? `/uploads/${data.filename}` : null));
     if (!returnedUrl) {
       throw new Error('Upload succeeded but no image URL was returned.');
     }
@@ -322,7 +330,7 @@ export const importImageFromUrl = async (url) => {
     }
 
     const data = await res.json();
-    const finalUrl = data.imageUrl || data.url;
+    const finalUrl = data.imageUrl || data.url || (data.fileId ? `/api/upload/file/${data.fileId}` : null);
     if (!finalUrl) {
       throw new Error('Image import succeeded but no storage URL was returned.');
     }
@@ -342,4 +350,3 @@ export const importImageFromUrl = async (url) => {
     throw error;
   }
 };
-
