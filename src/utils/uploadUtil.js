@@ -26,7 +26,7 @@ export const FALLBACK_IMAGES = {
  */
 export const getBackendOrigin = () => {
   // 1. Explicit env variable override
-  if (import.meta.env.VITE_BACKEND_URL) {
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) {
     return import.meta.env.VITE_BACKEND_URL.replace(/\/+$/, '');
   }
 
@@ -34,12 +34,7 @@ export const getBackendOrigin = () => {
   if (API_BASE && (API_BASE.startsWith('http://') || API_BASE.startsWith('https://'))) {
     try {
       const parsed = new URL(API_BASE);
-      if (
-        typeof window !== 'undefined' &&
-        parsed.origin !== window.location.origin &&
-        !parsed.hostname.includes('localhost') &&
-        !parsed.hostname.includes('127.0.0.1')
-      ) {
+      if (!parsed.hostname.includes('localhost') && !parsed.hostname.includes('127.0.0.1')) {
         return parsed.origin;
       }
     } catch (e) {

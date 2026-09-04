@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import HomeHeroBannerRenderer from '../common/HomeHeroBannerRenderer';
 import { API_BASE } from '../../config/api';
-import { uploadFileToBackend } from '../../utils/uploadUtil';
+import { uploadFileToBackend, getImageUrl, handleImageError } from '../../utils/uploadUtil';
 import { HERO_FONT_FAMILIES, getHomeHeroMetrics } from '../../utils/bannerSizing';
 
 const DEVICE_VIEWPORTS = [
@@ -429,7 +429,7 @@ export default function HomeHeroBannerDesigner({
       const uploadedUrl = await uploadFileToBackend(file, token);
 
       const img = new Image();
-      img.src = uploadedUrl;
+      img.src = getImageUrl(uploadedUrl, 'banner');
       await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
 
       const w = img.naturalWidth || 2560;

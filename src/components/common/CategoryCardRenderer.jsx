@@ -1,4 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { getImageUrl, handleImageError } from '../../utils/uploadUtil';
+import { DEFAULT_CATEGORY_DESIGNS } from '../../utils/categoryDesignDefaults';
 
 /**
  * CategoryCardRenderer — Single Source of Truth for Category Card Visual Presentation.
@@ -10,6 +12,9 @@ import React, { useRef, useState, useEffect } from 'react';
  */
 export default function CategoryCardRenderer({
   design,
+  designConfig,
+  serviceKey,
+  category,
   language = 'en',
   forcedCardWidth = null,
   isInteractive = false,
@@ -50,11 +55,14 @@ export default function CategoryCardRenderer({
     return () => ro.disconnect();
   }, [forcedCardWidth]);
 
-  if (!design) return null;
+  const fallbackKey = serviceKey || category?.id || 'food';
+  const fallbackDesign = DEFAULT_CATEGORY_DESIGNS[fallbackKey] || DEFAULT_CATEGORY_DESIGNS.food;
+  const rawDesign = design?.publishedConfig || design?.draftConfig || design || designConfig?.publishedConfig || designConfig?.draftConfig || designConfig || fallbackDesign;
+  const currentDesign = rawDesign || fallbackDesign;
 
-  const bg = design.background || {};
-  const artwork = design.artwork || { x: 50, y: 30, width: 62 };
-  const heading = design.heading || {
+  const bg = currentDesign.background || fallbackDesign.background || {};
+  const artwork = currentDesign.artwork || fallbackDesign.artwork || { x: 50, y: 30, width: 62 };
+  const heading = currentDesign.heading || fallbackDesign.heading || {
     en: 'Food',
     te: 'ఫుడ్',
     x: 50,
@@ -66,7 +74,7 @@ export default function CategoryCardRenderer({
     outlineWidth: 0.8,
     align: 'center'
   };
-  const tagline = design.tagline || {
+  const tagline = currentDesign.tagline || fallbackDesign.tagline || {
     en: 'Tasty meals from top restaurants',
     te: 'టాప్ రెస్టారెంట్ల నుండి రుచికరమైన భోజనం',
     x: 50,
@@ -90,10 +98,11 @@ export default function CategoryCardRenderer({
   const normalizedOutlineWidth = Math.max(0.5, Math.min(2.5, ((heading.outlineWidth || 0.8) * (baseWidth / 300))));
 
   // Single Card Image Mode (Full 1080x1080 Image)
-  const isSingleMode = design.designMode === 'single';
-  const singleImage = design.singleImage || {};
+  const isSingleMode = currentDesign.designMode === 'single';
+  const singleImage = currentDesign.singleImage || fallbackDesign.singleImage || {};
+  const singleImageUrl = singleImage.imageUrl || fallbackDesign.singleImage?.imageUrl;
 
-  if (isSingleMode && singleImage.imageUrl) {
+  if (isSingleMode && singleImageUrl) {
     const objectFitClass = singleImage.fit === 'contain' ? 'object-contain' : 'object-cover';
     return (
       <div
@@ -105,8 +114,9 @@ export default function CategoryCardRenderer({
         className={`relative w-full aspect-square overflow-hidden select-none ${className}`}
       >
         <img
-          src={singleImage.imageUrl}
+          src={getImageUrl(singleImageUrl, 'category')}
           alt={headingText || 'Category Card'}
+          onError={(e) => handleImageError(e, 'category')}
           loading="eager"
           decoding="async"
           draggable={false}
@@ -164,21 +174,25 @@ export default function CategoryCardRenderer({
     );
   }
 
+  const bgImageUrl = bg.imageUrl;
+  const artworkUrl = artwork.imageUrl || fallbackDesign.artwork?.imageUrl;
+
   return (
     <div
       ref={containerRef}
       style={{
-        backgroundColor: bg.color || '#FFFFFF',
+        backgroundColor: bg.color || fallbackDesign.background?.color || '#FFFFFF',
         aspectRatio: '1 / 1'
       }}
       className={`relative w-full aspect-square overflow-hidden select-none ${className}`}
     >
       {/* 1. Background Image (if configured) */}
-      {bg.imageUrl && (
+      {bgImageUrl && (
         <img
-          src={bg.imageUrl}
+          src={getImageUrl(bgImageUrl, 'category')}
           alt=""
           aria-hidden="true"
+          onError={(e) => handleImageError(e, 'category')}
           loading="eager"
           decoding="async"
           className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0"
@@ -189,7 +203,7 @@ export default function CategoryCardRenderer({
       <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-white/30 via-white/10 to-transparent pointer-events-none z-1" />
 
       {/* 2. Main Artwork / Product Image */}
-      {artwork.imageUrl && (
+      {artworkUrl && (
         <div
           data-element="artwork"
           onClick={(e) => {
@@ -212,8 +226,9 @@ export default function CategoryCardRenderer({
           }`}
         >
           <img
-            src={artwork.imageUrl}
+            src={getImageUrl(artworkUrl, 'category')}
             alt={headingText}
+            onError={(e) => handleImageError(e, 'category')}
             loading="eager"
             decoding="async"
             draggable={false}

@@ -206,7 +206,7 @@ export default function HomeHeroBannerRenderer({
         height: `${metrics.minHeight}px`,
         maxHeight: `${metrics.minHeight}px`,
         borderRadius: `${metrics.borderRadiusPx}px`,
-        ...(bg.imageUrl ? backgroundStyle : { backgroundColor: bg.color || '#7B1FA2' })
+        ...(bgImageUrl ? backgroundStyle : { backgroundColor: bg.color || '#7B1FA2' })
       }}
       className={`relative overflow-hidden ${backgroundClass} text-white shadow-[0_8px_30px_rgba(123,31,162,0.25)] transition-all duration-300 select-none w-full box-border`}
     >

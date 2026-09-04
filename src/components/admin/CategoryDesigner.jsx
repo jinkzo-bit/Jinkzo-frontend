@@ -11,6 +11,8 @@ import {
   DEFAULT_CATEGORY_DESIGNS
 } from '../../utils/categoryDesignDefaults';
 import { API_BASE } from '../../config/api';
+import { uploadFileToBackend, getImageUrl, handleImageError } from '../../utils/uploadUtil';
+import { useAuthStore } from '../../store/authStore';
 
 const DEVICE_VIEWPORTS = [
   { id: 'mobile-320', name: 'Mobile (320px)', width: 140, icon: Smartphone, label: '320' },
@@ -36,9 +38,12 @@ export default function CategoryDesigner({
 
   // Current Design Working State
   const [currentDesign, setCurrentDesign] = useState(() => {
-    const doc = initialDesigns[activeCategory];
+    const doc = initialDesigns ? initialDesigns[activeCategory] : null;
     if (doc && doc.draftConfig) {
       return JSON.parse(JSON.stringify(doc.draftConfig));
+    }
+    if (doc && (doc.designMode || doc.artwork || doc.singleImage)) {
+      return JSON.parse(JSON.stringify(doc));
     }
     return JSON.parse(JSON.stringify(DEFAULT_CATEGORY_DESIGNS[activeCategory] || DEFAULT_CATEGORY_DESIGNS.food));
   });
@@ -102,10 +107,12 @@ export default function CategoryDesigner({
   // Initialize design when switching category
   const loadCategory = useCallback((catKey) => {
     setActiveCategory(catKey);
-    const doc = initialDesigns[catKey];
+    const doc = initialDesigns ? initialDesigns[catKey] : null;
     let base;
     if (doc && doc.draftConfig) {
       base = JSON.parse(JSON.stringify(doc.draftConfig));
+    } else if (doc && (doc.designMode || doc.artwork || doc.singleImage)) {
+      base = JSON.parse(JSON.stringify(doc));
     } else {
       base = JSON.parse(JSON.stringify(DEFAULT_CATEGORY_DESIGNS[catKey] || DEFAULT_CATEGORY_DESIGNS.food));
     }
@@ -120,6 +127,28 @@ export default function CategoryDesigner({
   useEffect(() => {
     loadCategory(activeCategory);
   }, []);
+
+  // Category prop change sync
+  useEffect(() => {
+    if (categoryKey && categoryKey !== activeCategory) {
+      loadCategory(categoryKey);
+    }
+  }, [categoryKey, loadCategory]);
+
+  // External initialDesigns update sync (when API finishes fetching in dashboard and user has no unsaved changes)
+  useEffect(() => {
+    if (!hasUnsavedChanges && initialDesigns && initialDesigns[activeCategory]) {
+      const doc = initialDesigns[activeCategory];
+      const base = doc?.draftConfig
+        ? JSON.parse(JSON.stringify(doc.draftConfig))
+        : (doc?.designMode || doc?.artwork || doc?.singleImage)
+          ? JSON.parse(JSON.stringify(doc))
+          : null;
+      if (base) {
+        setCurrentDesign(base);
+      }
+    }
+  }, [initialDesigns, activeCategory, hasUnsavedChanges]);
 
   // Category switch with unsaved changes guard
   const handleCategoryClick = (newCat) => {
@@ -266,9 +295,14 @@ export default function CategoryDesigner({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Reset input value so selecting the same file triggers change
+    if (e.target) {
+      e.target.value = '';
+    }
+
     // Validate MIME Type & Extension
-    const validMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!validMimeTypes.includes(file.type)) {
+    const validMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (file.type && !validMimeTypes.includes(file.type)) {
       setStatusNotification({
         type: 'error',
         text: 'Invalid file format. Please upload a transparent PNG, JPEG, or WebP file.'
@@ -284,82 +318,82 @@ export default function CategoryDesigner({
       return;
     }
 
-    // Inspect image resolution before uploading
-    const objectUrl = URL.createObjectURL(file);
-    const imgTest = new Image();
-    imgTest.src = objectUrl;
-    imgTest.onload = async () => {
-      const { naturalWidth, naturalHeight } = imgTest;
-      URL.revokeObjectURL(objectUrl);
+    // Inspect image resolution before uploading safely
+    let naturalWidth = 1080;
+    let naturalHeight = 1080;
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      const imgTest = new Image();
+      const dims = await new Promise((resolve) => {
+        imgTest.onload = () => {
+          const res = { width: imgTest.naturalWidth || 1080, height: imgTest.naturalHeight || 1080 };
+          URL.revokeObjectURL(objectUrl);
+          resolve(res);
+        };
+        imgTest.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          resolve({ width: 1080, height: 1080 });
+        };
+        imgTest.src = objectUrl;
+      });
+      naturalWidth = dims.width;
+      naturalHeight = dims.height;
+    } catch {
+      naturalWidth = 1080;
+      naturalHeight = 1080;
+    }
 
-      if (naturalWidth < 400 || naturalHeight < 400) {
-        setImageQualityWarning(
-          `Uploaded image is only ${naturalWidth}×${naturalHeight}px. Recommended minimum is 800×800px for crisp high-density screens.`
-        );
-      } else {
-        setImageQualityWarning('');
+    if (naturalWidth < 400 || naturalHeight < 400) {
+      setImageQualityWarning(
+        `Uploaded image is only ${naturalWidth}×${naturalHeight}px. Recommended minimum is 800×800px for crisp high-density screens.`
+      );
+    } else {
+      setImageQualityWarning('');
+    }
+
+    // Upload file to backend
+    try {
+      setIsUploadingImage(true);
+      const authToken = token || useAuthStore.getState().token;
+      const uploadedUrl = await uploadFileToBackend(file, authToken);
+
+      if (targetField === 'background') {
+        updateDesign((d) => {
+          if (!d.background) d.background = {};
+          d.background.imageUrl = uploadedUrl;
+        });
+      } else if (targetField === 'artwork') {
+        updateDesign((d) => {
+          if (!d.artwork) d.artwork = {};
+          d.artwork.imageUrl = uploadedUrl;
+        });
+      } else if (targetField === 'singleImage') {
+        const quality = naturalWidth >= 1000 ? 'Excellent' : naturalWidth >= 700 ? 'Good' : 'Fair';
+        updateDesign((d) => {
+          d.designMode = 'single';
+          if (!d.singleImage) d.singleImage = {};
+          d.singleImage.imageUrl = uploadedUrl;
+          d.singleImage.width = naturalWidth;
+          d.singleImage.height = naturalHeight;
+          d.singleImage.quality = quality;
+          if (!d.singleImage.fit) d.singleImage.fit = 'cover';
+        });
       }
 
-      // Upload file to backend
-      try {
-        setIsUploadingImage(true);
-        const formData = new FormData();
-        formData.append('image', file);
-
-        const res = await fetch(`${API_BASE}/upload`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`
-          },
-          body: formData
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || 'Image upload failed');
-        }
-
-        const data = await res.json();
-        const uploadedUrl = data.imageUrl || data.url;
-
-        if (targetField === 'background') {
-          updateDesign((d) => {
-            if (!d.background) d.background = {};
-            d.background.imageUrl = uploadedUrl;
-          });
-        } else if (targetField === 'artwork') {
-          updateDesign((d) => {
-            if (!d.artwork) d.artwork = {};
-            d.artwork.imageUrl = uploadedUrl;
-          });
-        } else if (targetField === 'singleImage') {
-          const quality = naturalWidth >= 1000 ? 'Excellent' : naturalWidth >= 700 ? 'Good' : 'Fair';
-          updateDesign((d) => {
-            d.designMode = 'single';
-            if (!d.singleImage) d.singleImage = {};
-            d.singleImage.imageUrl = uploadedUrl;
-            d.singleImage.width = naturalWidth;
-            d.singleImage.height = naturalHeight;
-            d.singleImage.quality = quality;
-            if (!d.singleImage.fit) d.singleImage.fit = 'cover';
-          });
-        }
-
-        setStatusNotification({
-          type: 'success',
-          text: 'Image uploaded successfully!'
-        });
-        setTimeout(() => setStatusNotification(null), 3000);
-      } catch (err) {
-        console.error('Upload error:', err);
-        setStatusNotification({
-          type: 'error',
-          text: err.message || 'Image upload failed. Super Admin authorization required.'
-        });
-      } finally {
-        setIsUploadingImage(false);
-      }
-    };
+      setStatusNotification({
+        type: 'success',
+        text: 'Image uploaded successfully!'
+      });
+      setTimeout(() => setStatusNotification(null), 3000);
+    } catch (err) {
+      console.error('Upload error:', err);
+      setStatusNotification({
+        type: 'error',
+        text: err.message || 'Image upload failed. Super Admin authorization required.'
+      });
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -672,8 +706,9 @@ export default function CategoryDesigner({
                     className="w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-black/5 flex items-center justify-center p-1"
                   >
                     <img
-                      src={`/assets/home/categories/png/${key === 'bakery_beverages' ? 'bakery' : key === 'veg_fruits' ? 'veg-fruits' : key}.png`}
+                      src={getImageUrl(`/assets/home/categories/png/${key === 'bakery_beverages' ? 'bakery' : key === 'veg_fruits' ? 'veg-fruits' : key}.png`, 'category')}
                       alt={info.name}
+                      onError={(e) => handleImageError(e, 'category')}
                       className="w-full h-full object-contain"
                     />
                   </div>
@@ -722,8 +757,9 @@ export default function CategoryDesigner({
                 <div className="relative w-full h-full flex items-center justify-center overflow-hidden bg-base">
                   {currentDesign.singleImage?.imageUrl ? (
                     <img
-                      src={currentDesign.singleImage.imageUrl}
+                      src={getImageUrl(currentDesign.singleImage.imageUrl, 'category')}
                       alt="Single Card Preview"
+                      onError={(e) => handleImageError(e, 'category')}
                       draggable={false}
                       className={`w-full h-full select-none ${
                         currentDesign.singleImage.fit === 'contain' ? 'object-contain' : 'object-cover'
@@ -743,9 +779,10 @@ export default function CategoryDesigner({
                   {/* Background Layer */}
                   {currentDesign.background?.imageUrl && (
                     <img
-                      src={currentDesign.background.imageUrl}
+                      src={getImageUrl(currentDesign.background.imageUrl, 'category')}
                       alt=""
                       aria-hidden="true"
+                      onError={(e) => handleImageError(e, 'category')}
                       className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0"
                     />
                   )}
@@ -771,8 +808,9 @@ export default function CategoryDesigner({
                       }`}
                     >
                       <img
-                        src={currentDesign.artwork.imageUrl}
+                        src={getImageUrl(currentDesign.artwork.imageUrl, 'category')}
                         alt=""
+                        onError={(e) => handleImageError(e, 'category')}
                         draggable={false}
                         className="w-full h-auto max-h-[90%] object-contain select-none pointer-events-none"
                       />
@@ -947,8 +985,9 @@ export default function CategoryDesigner({
                 <div className="w-full max-w-[240px] mx-auto aspect-square rounded-2xl overflow-hidden border border-line bg-base shadow-2xs flex items-center justify-center relative">
                   {currentDesign.singleImage?.imageUrl ? (
                     <img
-                      src={currentDesign.singleImage.imageUrl}
+                      src={getImageUrl(currentDesign.singleImage.imageUrl, 'category')}
                       alt="Current preview"
+                      onError={(e) => handleImageError(e, 'category')}
                       className={`w-full h-full ${
                         currentDesign.singleImage.fit === 'contain' ? 'object-contain' : 'object-cover'
                       }`}

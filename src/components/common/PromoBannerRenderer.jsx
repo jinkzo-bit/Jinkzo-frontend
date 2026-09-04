@@ -159,10 +159,15 @@ export default function PromoBannerRenderer({
   const tag = design.tagline || {};
   const cta = design.ctaStyle || {};
 
-  const backgroundStyle = bg.imageUrl
-    ? { backgroundImage: `url(${getImageUrl(bg.imageUrl, 'banner')})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+  const isMobileView = forceMobile || metrics.isMobile;
+  const bgImageUrl = isMobileView
+    ? (bg.mobileImageUrl || bg.desktopImageUrl || bg.imageUrl)
+    : (bg.desktopImageUrl || bg.imageUrl || bg.mobileImageUrl);
+
+  const backgroundStyle = bgImageUrl
+    ? { backgroundImage: `url(${getImageUrl(bgImageUrl, 'banner')})`, backgroundSize: bg.fitMode || 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }
     : { backgroundColor: bg.color || '#7B1FA2' };
-  const backgroundClass = (!bg.imageUrl && bg.gradient) ? bg.gradient : '';
+  const backgroundClass = (!bgImageUrl && bg.gradient) ? bg.gradient : '';
 
   // Effective scale base height for typography calculation
   const effectiveScaleHeight = metrics.minHeight;
@@ -212,7 +217,7 @@ export default function PromoBannerRenderer({
         height: `${metrics.minHeight}px`,
         maxHeight: `${metrics.minHeight}px`,
         borderRadius: `${metrics.borderRadiusPx}px`,
-        ...(bg.imageUrl ? backgroundStyle : { backgroundColor: bg.color || '#7B1FA2' })
+        ...(bgImageUrl ? backgroundStyle : { backgroundColor: bg.color || '#7B1FA2' })
       }}
       className={`relative overflow-hidden ${backgroundClass} text-white shadow-[0_8px_30px_rgba(123,31,162,0.25)] transition-all duration-300 select-none w-full box-border`}
     >
