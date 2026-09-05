@@ -64,6 +64,7 @@ export default function RideBooking() {
   const [isCheckingRiders, setIsCheckingRiders] = useState(true);
 
   useEffect(() => {
+    if (!token) return;
     const checkRiderAvailability = async () => {
       try {
         // Check Ride Category Service Availability
@@ -85,12 +86,12 @@ export default function RideBooking() {
           }
         }
 
-        const res = await fetch(`${API_BASE}/orders/riders/check?type=ride`);
+        const res = await fetch(`${API_BASE}/orders/riders/check?type=ride`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
           const data = await res.json();
           setIsRiderAvailable(data.available);
           if (!data.available) {
-            setErrorMsg("Riders or delivery partners not available. We can't confirm your order.");
+            setErrorMsg(data.message || "Riders or delivery partners not available. We can't confirm your order.");
           }
         }
       } catch (err) {
@@ -100,7 +101,7 @@ export default function RideBooking() {
       }
     };
     checkRiderAvailability();
-  }, []);
+  }, [token, user?.role]);
 
   // Saved Addresses
   const savedAddresses = user?.addresses || [];
@@ -244,15 +245,15 @@ export default function RideBooking() {
 
     setIsSubmitting(true);
     try {
-      const checkRes = await fetch(`${API_BASE}/orders/riders/check?type=ride`);
+      const checkRes = await fetch(`${API_BASE}/orders/riders/check?type=ride`, { headers: { Authorization: `Bearer ${token}` } });
       if (checkRes.ok) {
         const checkData = await checkRes.json();
         setIsRiderAvailable(checkData.available);
         if (!checkData.available) {
-          setErrorMsg("Riders or delivery partners not available. We can't confirm your order.");
-          setIsSubmitting(false);
-          return;
-        }
+  setErrorMsg(checkData.message || "Riders or delivery partners not available. We can't confirm your order.");
+  setIsSubmitting(false);
+  return;
+}
       }
     } catch (err) {
       console.error('Rider availability check error:', err);

@@ -122,7 +122,7 @@ export default function App() {
                 </RoleProtectedRoute>
               } />
               <Route path="/ride" element={
-                <RoleProtectedRoute allowedRoles={['customer']}>
+                <RoleProtectedRoute allowedRoles={['customer', 'admin', 'restaurant', 'delivery']}>
                   <RideBooking />
                 </RoleProtectedRoute>
               } />
