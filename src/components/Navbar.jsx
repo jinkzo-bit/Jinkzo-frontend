@@ -15,6 +15,8 @@ import {
   Sun,
   SlidersHorizontal
 } from 'lucide-react';
+import { io } from 'socket.io-client';
+import { API_BASE } from '../config/api';
 import jinkzoLogo from '../assets/branding/jinkzo-logo.png';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
@@ -36,11 +38,7 @@ export default function Navbar() {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState([
-    { id: 1, title: 'Order Delivered', desc: 'Your Biryani order was successfully delivered.', time: '10m ago' },
-    { id: 2, title: '50% OFF Flash Sale', desc: 'Get 50% discount on orders above ₹249 today!', time: '1h ago' },
-    { id: 3, title: 'Free Delivery Active', desc: 'Enjoy zero delivery fees on all restaurant orders.', time: '2h ago' }
-  ]);
+  const [notifications, setNotifications] = useState([]);
 
   const profileMenuRef = useRef(null);
   const notifMenuRef = useRef(null);
@@ -79,38 +77,106 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Synchronize FCM Web Push token for customer and listen for foreground pushes
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const fetchNotifications = async () => {
+    const activeToken = token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token');
+    if (!activeToken) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/notifications`, {
+        headers: { 'Authorization': `Bearer ${activeToken}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data.notifications || []);
+        setNotifications(list);
+      }
+    } catch (err) {
+      console.error('[Navbar] Failed to fetch notifications:', err);
+    }
+  };
+
+  const markAsRead = async (id) => {
+    const activeToken = token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token');
+    if (!activeToken) return;
+
+    try {
+      await fetch(`${API_BASE}/notifications/${id}/read`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${activeToken}` }
+      });
+      setNotifications(prev => prev.map(n => n._id === id ? { ...n, read: true } : n));
+    } catch (err) {
+      console.error('[Navbar] Failed to mark read:', err);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    const activeToken = token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token');
+    if (!activeToken) return;
+
+    try {
+      await fetch(`${API_BASE}/notifications/read-all`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${activeToken}` }
+      });
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch (err) {
+      console.error('[Navbar] Failed to mark all read:', err);
+    }
+  };
+
+  // Synchronize FCM Web Push token for customer, fetch persistent notifications, and listen for real-time notifications
   useEffect(() => {
     if (!user) {
-      console.log('[FCM-DIAGNOSTIC] Stage 2 (Navbar): No authenticated user, skipping web push sync');
+      setNotifications([]);
       return;
     }
 
+    fetchNotifications();
+
     const activeToken = token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token') || 'cookie-auth-active';
-    console.log('[FCM-DIAGNOSTIC] Stage 2 (Navbar): Triggering web push sync for user:', user.email, 'role:', user.role);
 
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       registerWebPush(activeToken, user).catch((err) => {
         console.warn('[FCM-DIAGNOSTIC] Stage 2 (Navbar): registerWebPush error:', err);
       });
-    } else {
-      console.log('[FCM-DIAGNOSTIC] Stage 2 (Navbar): Notification permission is not granted yet:', typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
     }
+
+    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
+    const socket = io(socketHost, {
+      auth: { token: activeToken },
+      withCredentials: true,
+      transports: ['websocket', 'polling']
+    });
+
+    socket.on('connect', () => {
+      if (user?._id) socket.emit('join', `user_${user._id}`);
+    });
+
+    socket.on('notification:new', (notif) => {
+      console.log('[Navbar] Real-time socket notification received:', notif);
+      setNotifications(prev => {
+        if (prev.some(n => n._id === notif._id || (n.eventId && notif.eventId && n.eventId === notif.eventId))) {
+          return prev;
+        }
+        return [notif, ...prev];
+      });
+    });
 
     let unsubscribe = () => {};
     setupForegroundNotificationListener((payload) => {
       console.log('[Navbar] Foreground FCM notification received:', payload);
-      const title = payload.notification?.title || payload.data?.title || 'Notification';
-      const body = payload.notification?.body || payload.data?.body || '';
-      setUnreadNotifications(prev => [
-        { id: Date.now(), title, desc: body, time: 'Just now' },
-        ...prev
-      ]);
+      fetchNotifications();
     }).then(unsub => {
       if (typeof unsub === 'function') unsubscribe = unsub;
     });
 
-    return () => unsubscribe();
+    return () => {
+      socket.disconnect();
+      unsubscribe();
+    };
   }, [user, token]);
 
   const handleSearch = (e) => {
@@ -190,9 +256,9 @@ export default function Navbar() {
                     title={t('nav.notifications', 'Notifications')}
                   >
                     <Bell className="w-3.5 h-3.5 text-gray-700 dark:text-slate-200" />
-                    {unreadNotifications.length > 0 && (
+                    {unreadCount > 0 && (
                       <span className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500 text-white text-[7px] font-black rounded-full flex items-center justify-center ring-1 ring-white dark:ring-[#141926] animate-pulse">
-                        {unreadNotifications.length}
+                        {unreadCount}
                       </span>
                     )}
                   </button>
@@ -321,9 +387,9 @@ export default function Navbar() {
                 title={t('nav.notifications', 'Notifications')}
               >
                 <Bell className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-gray-700 dark:text-slate-200" />
-                {unreadNotifications.length > 0 && (
+                {unreadCount > 0 && (
                   <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center ring-2 ring-white dark:ring-[#141926] animate-pulse">
-                    {unreadNotifications.length}
+                    {unreadCount}
                   </span>
                 )}
               </button>
@@ -352,23 +418,34 @@ export default function Navbar() {
               className="absolute right-2 sm:right-6 top-full mt-2 w-80 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-[#141926] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden z-50 animate-fade-in"
             >
               <div className="p-4 bg-gray-50/80 dark:bg-[#1C2233] border-b border-gray-100 dark:border-white/10 flex items-center justify-between">
-                <span className="font-bold text-sm text-gray-900 dark:text-white">{t('nav.notifications', 'Notifications')} ({unreadNotifications.length})</span>
-                <button
-                  onClick={() => setUnreadNotifications([])}
-                  className="text-xs text-[#7C3AED] dark:text-[#A78BFA] font-semibold hover:underline cursor-pointer"
-                >
-                  Clear all
-                </button>
+                <span className="font-bold text-sm text-gray-900 dark:text-white">{t('nav.notifications', 'Notifications')} ({unreadCount})</span>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllAsRead}
+                    className="text-xs text-[#7C3AED] dark:text-[#A78BFA] font-semibold hover:underline cursor-pointer"
+                  >
+                    Clear all
+                  </button>
+                )}
               </div>
               <div className="max-h-80 overflow-y-auto divide-y divide-gray-50 dark:divide-white/5">
-                {unreadNotifications.length === 0 ? (
+                {notifications.length === 0 ? (
                   <div className="p-6 text-center text-xs text-gray-400 dark:text-slate-400 font-medium">{t('nav.noNotifications', 'No new notifications')}</div>
                 ) : (
-                  unreadNotifications.map(n => (
-                    <div key={n.id} className="p-3.5 hover:bg-purple-50/40 dark:hover:bg-white/5 transition-colors">
-                      <h4 className="text-xs font-bold text-gray-900 dark:text-white">{n.title}</h4>
-                      <p className="text-[11px] text-gray-600 dark:text-slate-300 mt-0.5">{n.desc}</p>
-                      <span className="text-[9px] text-gray-400 dark:text-slate-500 font-semibold mt-1 block">{n.time}</span>
+                  notifications.map(n => (
+                    <div
+                      key={n._id || n.id}
+                      onClick={() => !n.read && n._id && markAsRead(n._id)}
+                      className={`p-3.5 transition-colors cursor-pointer ${!n.read ? 'bg-purple-50/40 dark:bg-white/5' : 'hover:bg-gray-50 dark:hover:bg-white/5'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <h4 className={`text-xs font-bold ${!n.read ? 'text-[#7C3AED] dark:text-[#A78BFA]' : 'text-gray-900 dark:text-white'}`}>{n.title}</h4>
+                        {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-[#7C3AED]" />}
+                      </div>
+                      <p className="text-[11px] text-gray-600 dark:text-slate-300 mt-0.5">{n.message || n.desc}</p>
+                      <span className="text-[9px] text-gray-400 dark:text-slate-500 font-semibold mt-1 block">
+                        {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (n.time || 'Just now')}
+                      </span>
                     </div>
                   ))
                 )}

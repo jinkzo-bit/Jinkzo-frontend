@@ -1070,6 +1070,9 @@ export default function RestaurantDashboard() {
             </div>
           )}
 
+          {/* Notification Center Bell */}
+          <NotificationCenter role="restaurant" userId={user?._id} restaurantId={restaurantProfile?._id} />
+
           {/* KYC Status Badge */}
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-muted font-bold uppercase">KYC status</span>

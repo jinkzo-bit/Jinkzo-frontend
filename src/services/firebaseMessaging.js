@@ -236,6 +236,45 @@ export async function setupForegroundNotificationListener(onNotificationReceived
 
     return onMessage(messaging, (payload) => {
       console.log('[WebPush] Foreground push notification received:', payload);
+
+      // Trigger native browser notification popup if permission granted
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+          const title = payload.notification?.title || payload.data?.title || 'Jinkzo Notification';
+          const body = payload.notification?.body || payload.data?.body || payload.message || '';
+          const icon = payload.notification?.icon || '/jinkzo-pwa-192.png';
+          const badge = '/jinkzo-favicon-32.png';
+          const data = payload.data || {};
+
+          const notification = new Notification(title, {
+            body,
+            icon,
+            badge,
+            data,
+            tag: data.notificationType || data.orderId || `jinkzo-${Date.now()}`
+          });
+
+          notification.onclick = (event) => {
+            event.preventDefault();
+            if (typeof window !== 'undefined') {
+              window.focus();
+              let targetRoute = data.link || data.url || null;
+              if (!targetRoute) {
+                if (data.orderId) targetRoute = `/order/${data.orderId}`;
+                else if (data.recipientRole === 'restaurant' || data.screen === 'restaurant-orders') targetRoute = '/restaurant-dashboard';
+                else if (data.recipientRole === 'delivery' || data.screen === 'rider-orders') targetRoute = '/delivery-dashboard';
+              }
+              if (targetRoute && window.location.pathname !== targetRoute) {
+                window.location.href = targetRoute;
+              }
+            }
+            notification.close();
+          };
+        } catch (popupErr) {
+          console.warn('[WebPush] Failed to show foreground browser notification popup:', popupErr);
+        }
+      }
+
       if (typeof onNotificationReceived === 'function') {
         onNotificationReceived(payload);
       }

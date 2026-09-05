@@ -74,7 +74,7 @@ export default function NotificationCampaignsTab({ token }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to fetch campaign list');
-      setCampaigns(data.campaigns || []);
+      setCampaigns(Array.isArray(data) ? data : (data.campaigns || []));
     } catch (err) {
       console.error('[NotificationCampaignsTab] Error fetching campaigns:', err);
       setErrorMsg(err.message || 'Could not load campaigns');
@@ -186,11 +186,13 @@ export default function NotificationCampaignsTab({ token }) {
 
       if (!res.ok) throw new Error(data.message || 'Failed to create campaign');
 
-      setSuccessMsg(
-        sendImmediately || data.campaign?.status === 'COMPLETED'
-          ? `Campaign created and sent successfully to target audience!`
-          : `Campaign scheduled successfully (Status: ${data.campaign?.status})`
-      );
+      if (data.campaign?.status === 'COMPLETED') {
+        setSuccessMsg('Campaign created and sent successfully!');
+      } else if (sendImmediately || data.campaign?.status === 'RUNNING') {
+        setSuccessMsg('Campaign created and queued for immediate dispatch!');
+      } else {
+        setSuccessMsg(`Campaign scheduled successfully (Status: ${data.campaign?.status || 'SCHEDULED'})`);
+      }
 
       // Reset form
       setForm(prev => ({
