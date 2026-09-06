@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config/api';
@@ -6,6 +7,7 @@ import { useAuthStore } from '../store/authStore';
 import { setupForegroundNotificationListener } from '../services/firebaseMessaging';
 
 const NotificationCenter = ({ role, userId, restaurantId }) => {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -26,6 +28,9 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
       console.log('[NotificationCenter] Connected to socket');
       if (userId) socket.emit('join', `user_${userId}`);
       if (restaurantId) socket.emit('join', `restaurant_${restaurantId}`);
+      if (role === 'admin') socket.emit('join', 'admin_room');
+      if (role === 'delivery' && userId) socket.emit('join', `delivery_${userId}`);
+      if ((role === 'customer' || role === 'user') && userId) socket.emit('join', `customer_${userId}`);
     });
 
     const SOUND_NOTIFICATION_TYPES = new Set([
@@ -117,6 +122,28 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
     }
   };
 
+  const handleNotificationClick = (notif) => {
+    if (!notif.read) {
+      markAsRead(notif._id);
+    }
+    const meta = notif.metadata || notif.data || {};
+    const orderId = notif.orderId || meta.orderId || notif.rideId || meta.rideId;
+    const recipientRole = notif.recipientRole || meta.recipientRole || role;
+
+    if (recipientRole === 'restaurant' || meta.screen === 'restaurant-orders') {
+      navigate('/restaurant-dashboard');
+    } else if (recipientRole === 'delivery' || meta.screen === 'rider-orders') {
+      navigate('/delivery-dashboard');
+    } else if (recipientRole === 'admin' || meta.screen === 'admin-orders') {
+      navigate('/admin-dashboard');
+    } else if (orderId) {
+      navigate(`/order-tracking/${orderId}`);
+    } else if (notif.link || meta.link) {
+      navigate(notif.link || meta.link);
+    }
+    setIsOpen(false);
+  };
+
   return (
     <div className="relative z-50">
       {/* Audio element for notification sound */}
@@ -160,8 +187,8 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
                 notifications.map((notif) => (
                   <div 
                     key={notif._id} 
-                    onClick={() => !notif.read && markAsRead(notif._id)}
-                      className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition cursor-pointer ${!notif.read ? 'bg-blue-50/50' : 'bg-white'}`}
+                    onClick={() => handleNotificationClick(notif)}
+                    className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition cursor-pointer ${!notif.read ? 'bg-blue-50/50' : 'bg-white'}`}
                   >
                     <div className="flex justify-between items-start">
                         <h4 className={`text-sm font-semibold ${!notif.read ? "text-blue-800" : "text-gray-800"}`}>{notif.title}</h4>

@@ -167,6 +167,7 @@ export async function registerWebPush(authToken, user, forcePrompt = false) {
         body: JSON.stringify({
           pushToken,
           platform: 'web',
+          provider: 'firebase',
           deviceId,
           role
         })
@@ -251,7 +252,7 @@ export async function setupForegroundNotificationListener(onNotificationReceived
             icon,
             badge,
             data,
-            tag: data.notificationType || data.orderId || `jinkzo-${Date.now()}`
+            tag: data.orderId ? `jinkzo-order-${data.orderId}` : (data.rideId ? `jinkzo-ride-${data.rideId}` : (data.notificationType || 'jinkzo-update'))
           });
 
           notification.onclick = (event) => {
@@ -259,10 +260,14 @@ export async function setupForegroundNotificationListener(onNotificationReceived
             if (typeof window !== 'undefined') {
               window.focus();
               let targetRoute = data.link || data.url || null;
+              if (targetRoute && targetRoute.startsWith('/order/')) {
+                targetRoute = `/order-tracking/${data.orderId || data.rideId || targetRoute.replace('/order/', '')}`;
+              }
               if (!targetRoute) {
-                if (data.orderId) targetRoute = `/order/${data.orderId}`;
-                else if (data.recipientRole === 'restaurant' || data.screen === 'restaurant-orders') targetRoute = '/restaurant-dashboard';
+                if (data.recipientRole === 'restaurant' || data.screen === 'restaurant-orders') targetRoute = '/restaurant-dashboard';
                 else if (data.recipientRole === 'delivery' || data.screen === 'rider-orders') targetRoute = '/delivery-dashboard';
+                else if (data.recipientRole === 'admin' || data.screen === 'admin-orders') targetRoute = '/admin-dashboard';
+                else if (data.orderId || data.rideId) targetRoute = `/order-tracking/${data.orderId || data.rideId}`;
               }
               if (targetRoute && window.location.pathname !== targetRoute) {
                 window.location.href = targetRoute;

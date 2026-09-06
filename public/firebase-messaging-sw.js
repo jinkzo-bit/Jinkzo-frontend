@@ -34,13 +34,17 @@ try {
 if (messaging) {
   messaging.onBackgroundMessage((payload) => {
     const notifTitle = payload.notification?.title || payload.data?.title || 'Jinkzo Notification';
+    const notifData = payload.data || {};
+    const notifTag = notifData.orderId
+      ? `jinkzo-order-${notifData.orderId}`
+      : (notifData.rideId ? `jinkzo-ride-${notifData.rideId}` : (notifData.notificationType || 'jinkzo-update'));
     const notifOptions = {
-      body: payload.notification?.body || payload.data?.body || 'You have a new update from Jinkzo.',
+      body: payload.notification?.body || notifData.body || 'You have a new update from Jinkzo.',
       icon: payload.notification?.icon || '/jinkzo-pwa-192.png',
       badge: '/jinkzo-favicon-32.png',
       vibrate: [200, 100, 200],
-      data: payload.data || {},
-      tag: payload.data?.notificationType || 'jinkzo-update',
+      data: notifData,
+      tag: notifTag,
       renotify: true
     };
 
@@ -56,13 +60,17 @@ self.addEventListener('push', (event) => {
     if (rawData && (rawData.notification || rawData.data)) {
       const title = rawData.notification?.title || rawData.data?.title || 'Jinkzo Notification';
       const body = rawData.notification?.body || rawData.data?.body || 'New notification received.';
+      const notifData = rawData.data || {};
+      const notifTag = notifData.orderId
+        ? `jinkzo-order-${notifData.orderId}`
+        : (notifData.rideId ? `jinkzo-ride-${notifData.rideId}` : (notifData.notificationType || 'jinkzo-update'));
       const options = {
         body,
         icon: rawData.notification?.icon || '/jinkzo-pwa-192.png',
         badge: '/jinkzo-favicon-32.png',
         vibrate: [200, 100, 200],
-        data: rawData.data || {},
-        tag: rawData.data?.notificationType || 'jinkzo-update',
+        data: notifData,
+        tag: notifTag,
         renotify: true
       };
 
@@ -82,12 +90,17 @@ self.addEventListener('notificationclick', (event) => {
   let targetRoute = '/';
   if (data.link) {
     targetRoute = data.link;
-  } else if (data.orderId) {
-    targetRoute = `/order/${data.orderId}`;
+    if (targetRoute.startsWith('/order/')) {
+      targetRoute = `/order-tracking/${data.orderId || data.rideId || targetRoute.replace('/order/', '')}`;
+    }
   } else if (data.recipientRole === 'restaurant' || data.screen === 'restaurant-orders' || data.notificationType === 'NEW_ORDER_RESTAURANT') {
     targetRoute = '/restaurant-dashboard';
   } else if (data.recipientRole === 'delivery' || data.screen === 'rider-orders' || data.notificationType === 'DELIVERY_ASSIGNED_RIDER') {
     targetRoute = '/delivery-dashboard';
+  } else if (data.recipientRole === 'admin' || data.screen === 'admin-orders') {
+    targetRoute = '/admin-dashboard';
+  } else if (data.orderId || data.rideId) {
+    targetRoute = `/order-tracking/${data.orderId || data.rideId}`;
   } else if (data.restaurantId) {
     targetRoute = `/restaurant/${data.restaurantId}`;
   }
