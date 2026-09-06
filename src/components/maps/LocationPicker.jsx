@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MapPin, Navigation, Compass, Loader, Check, Copy } from 'lucide-react';
+import { MapPin, Navigation, Compass, Loader, Check, Copy, RotateCw, RotateCcw } from 'lucide-react';
 import { useJsApiLoader, GoogleMap } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMapsLoader';
 import { parseAddressComponents } from '../../utils/parseAddressComponents';
@@ -41,6 +41,30 @@ export default function LocationPicker({
   const skipNextGeocodeRef = useRef(false);
 
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
+
+  // Manual Map Rotation Heading Ref (Separate from Phone Compass Overlay)
+  const mapHeadingRef = useRef(0);
+
+  const setMapHeading = useCallback((heading) => {
+    if (!mapRef.current) return;
+
+    const normalized = ((heading % 360) + 360) % 360;
+    mapHeadingRef.current = normalized;
+
+    mapRef.current.setHeading(normalized);
+  }, []);
+
+  const handleRotateClockwise = useCallback(() => {
+    setMapHeading(mapHeadingRef.current + 15);
+  }, [setMapHeading]);
+
+  const handleRotateCounterClockwise = useCallback(() => {
+    setMapHeading(mapHeadingRef.current - 15);
+  }, [setMapHeading]);
+
+  const handleResetNorth = useCallback(() => {
+    setMapHeading(0);
+  }, [setMapHeading]);
 
   // Compass / Phone Direction State (Indicator Overlay ONLY - Map stays 2D North-Up)
   const [isDirectionActive, setIsDirectionActive] = useState(false);
@@ -337,6 +361,7 @@ export default function LocationPicker({
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
+    mapHeadingRef.current = map.getHeading?.() || 0;
 
     const listener = map.addListener('idle', async () => {
       const center = map.getCenter();
@@ -373,6 +398,7 @@ export default function LocationPicker({
   }, [fillForm]);
 
   const onMapUnmount = useCallback(() => {
+    mapHeadingRef.current = 0;
     if (idleListenerRef.current && window.google?.maps?.event) {
       window.google.maps.event.removeListener(idleListenerRef.current);
       idleListenerRef.current = null;
@@ -770,6 +796,83 @@ export default function LocationPicker({
 
         {/* Map Floating Controls (Bottom-Right) */}
         <div style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+          {/* Rotate Controls: ↻ +15°, N 0°, ↺ -15° */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {/* Clockwise ↻ */}
+            <button
+              type="button"
+              onClick={handleRotateClockwise}
+              title="Rotate clockwise (+15°)"
+              aria-label="Rotate clockwise (+15°)"
+              style={{
+                width: 32,
+                height: 32,
+                background: 'white',
+                border: '1px solid #e5e7eb',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: '#374151',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                userSelect: 'none',
+              }}
+            >
+              <RotateCw style={{ width: 15, height: 15 }} />
+            </button>
+
+            {/* Reset North N */}
+            <button
+              type="button"
+              onClick={handleResetNorth}
+              title="Reset to North (0°)"
+              aria-label="Reset to North (0°)"
+              style={{
+                width: 32,
+                height: 32,
+                background: 'white',
+                border: '1px solid #e5e7eb',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 800,
+                color: '#EF4444',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                userSelect: 'none',
+              }}
+            >
+              N
+            </button>
+
+            {/* Counter-Clockwise ↺ */}
+            <button
+              type="button"
+              onClick={handleRotateCounterClockwise}
+              title="Rotate counter-clockwise (-15°)"
+              aria-label="Rotate counter-clockwise (-15°)"
+              style={{
+                width: 32,
+                height: 32,
+                background: 'white',
+                border: '1px solid #e5e7eb',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: '#374151',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                userSelect: 'none',
+              }}
+            >
+              <RotateCcw style={{ width: 15, height: 15 }} />
+            </button>
+          </div>
+
           {/* Follow Direction Floating Button */}
           <button
             type="button"

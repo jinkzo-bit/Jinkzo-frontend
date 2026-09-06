@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MapPin, Loader, Layers, Crosshair } from 'lucide-react';
+import { MapPin, Loader, Layers, Crosshair, RotateCw, RotateCcw } from 'lucide-react';
 import { useJsApiLoader, GoogleMap, Marker, Polyline, InfoWindow } from '@react-google-maps/api';
 import { io } from 'socket.io-client';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
 import { API_BASE } from '../config/api';
-import MapRotationControls from './maps/MapRotationControls';
 
 // ── Default fallback coords (Nandikotkur, AP) ───────────────────────────────────
 const DEFAULT_CENTER = { lat: 15.8562, lng: 78.2700 };
@@ -243,12 +242,35 @@ export default function GoogleMapContainer({
 
   const mapRef = useRef(null);
   const containerRef = useRef(null);
+  const mapHeadingRef = useRef(0);
   const [mapInstance, setMapInstance] = useState(null);
   const trafficLayerRef = useRef(null);
   const isAutoFollowRef = useRef(true);
   const isUserInteractingRef = useRef(false);
   const previousRiderPosRef = useRef(null);
   const hasFitBoundsInitialRef = useRef(false);
+
+  // ── 15-Degree Map Rotation Controls ───────────────────────────────────────────
+  const setMapHeading = useCallback((heading) => {
+    if (!mapRef.current) return;
+
+    const normalized = ((heading % 360) + 360) % 360;
+    mapHeadingRef.current = normalized;
+
+    mapRef.current.setHeading(normalized);
+  }, []);
+
+  const handleRotateClockwise = useCallback(() => {
+    setMapHeading(mapHeadingRef.current + 15);
+  }, [setMapHeading]);
+
+  const handleRotateCounterClockwise = useCallback(() => {
+    setMapHeading(mapHeadingRef.current - 15);
+  }, [setMapHeading]);
+
+  const handleResetNorth = useCallback(() => {
+    setMapHeading(0);
+  }, [setMapHeading]);
 
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
   const [pickerPos, setPickerPos] = useState(null);
@@ -307,6 +329,7 @@ export default function GoogleMapContainer({
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
+    mapHeadingRef.current = map.getHeading?.() || 0;
     if (window.google) {
       trafficLayerRef.current = new window.google.maps.TrafficLayer();
     }
@@ -318,6 +341,7 @@ export default function GoogleMapContainer({
   }, []);
 
   const onMapUnmount = useCallback(() => {
+    mapHeadingRef.current = 0;
     if (trafficLayerRef.current) {
       trafficLayerRef.current.setMap(null);
       trafficLayerRef.current = null;
@@ -1038,16 +1062,89 @@ export default function GoogleMapContainer({
           </div>
         )}
 
-        {/* ── Map Rotation, Compass & 3D Tilt Controls ── */}
-        <MapRotationControls
-          map={mapInstance}
-          mapRef={mapRef}
-          containerRef={containerRef}
-          position="bottom-right"
-          showStepButtons={false}
-          show3DTilt={true}
-          className={mode === 'tracking' ? '!bottom-[195px] !right-3' : '!bottom-16 !right-3'}
-        />
+        {/* ── Custom 15-Degree Map Rotation Controls (↻, N, ↺) ── */}
+        {mode === 'tracking' && (
+          <div style={{
+            position: 'absolute',
+            bottom: 195,
+            right: 12,
+            zIndex: 20,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}>
+            {/* Clockwise: ↻ (+15°) */}
+            <button
+              onClick={handleRotateClockwise}
+              style={{
+                width: 34,
+                height: 34,
+                background: 'rgba(255, 255, 255, 0.95)',
+                border: '1px solid rgba(229, 231, 235, 0.8)',
+                borderRadius: 8,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: '#374151',
+                userSelect: 'none',
+              }}
+              title="Rotate Clockwise (+15°)"
+              aria-label="Rotate Clockwise (+15°)"
+            >
+              <RotateCw style={{ width: 16, height: 16 }} />
+            </button>
+
+            {/* Reset North: N (0°) */}
+            <button
+              onClick={handleResetNorth}
+              style={{
+                width: 34,
+                height: 34,
+                background: 'rgba(255, 255, 255, 0.95)',
+                border: '1px solid rgba(229, 231, 235, 0.8)',
+                borderRadius: 8,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 800,
+                color: '#EF4444',
+                userSelect: 'none',
+              }}
+              title="Reset North (0°)"
+              aria-label="Reset North (0°)"
+            >
+              N
+            </button>
+
+            {/* Counter-Clockwise: ↺ (-15°) */}
+            <button
+              onClick={handleRotateCounterClockwise}
+              style={{
+                width: 34,
+                height: 34,
+                background: 'rgba(255, 255, 255, 0.95)',
+                border: '1px solid rgba(229, 231, 235, 0.8)',
+                borderRadius: 8,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: '#374151',
+                userSelect: 'none',
+              }}
+              title="Rotate Counter-Clockwise (-15°)"
+              aria-label="Rotate Counter-Clockwise (-15°)"
+            >
+              <RotateCcw style={{ width: 16, height: 16 }} />
+            </button>
+          </div>
+        )}
 
         {/* ── Top-Left: Live GPS Status Badge ── */}
         {mode === 'tracking' && (
