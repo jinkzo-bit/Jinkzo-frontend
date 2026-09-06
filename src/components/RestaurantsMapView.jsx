@@ -4,7 +4,6 @@ import { Loader, MapPin } from 'lucide-react';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
 import { API_BASE } from '../config/api';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
-import MapRotationControls from './maps/MapRotationControls';
 
 const DEFAULT_CENTER = { lat: 15.8601, lng: 78.2618 };
 
@@ -315,16 +314,6 @@ export default function RestaurantsMapView({ restaurants = [], userLocation = nu
           </Marker>
         ))}
       </GoogleMap>
-
-      {/* ── Map Rotation, Compass & 3D Tilt Controls ── */}
-      <MapRotationControls
-        map={mapInstance}
-        mapRef={mapRef}
-        containerRef={containerRef}
-        position="top-right"
-        showStepButtons={true}
-        show3DTilt={true}
-      />
     </div>
   );
 }

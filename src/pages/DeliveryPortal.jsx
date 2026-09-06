@@ -112,21 +112,54 @@ export default function DeliveryPortal() {
     console.log('[GPS SOCKET] Live coordinate streaming activated in Portal for order:', selectedOrder._id);
 
     let watchId;
+    let lastEmittedPos = null;
+
     if (navigator.geolocation) {
       watchId = navigator.geolocation.watchPosition(
         (position) => {
-          const { latitude, longitude } = position.coords;
-          console.log('[GPS SOCKET] Dispatching coordinate update from Portal:', latitude, longitude);
-          socket.emit('updateLocation', {
-            orderId: selectedOrder._id,
-            lat: latitude,
-            lng: longitude
-          });
+          const { latitude, longitude, heading, speed, accuracy } = position.coords;
+          if (accuracy && accuracy > 2000) {
+            console.warn('[GPS SOCKET] Ignored low accuracy point in Portal:', accuracy, 'm');
+            return;
+          }
+
+          const now = Date.now();
+          let shouldEmit = false;
+
+          if (!lastEmittedPos) {
+            shouldEmit = true;
+          } else {
+            const timeDiff = now - lastEmittedPos.time;
+            const R = 6371e3;
+            const dLat = (latitude - lastEmittedPos.lat) * Math.PI / 180;
+            const dLng = (longitude - lastEmittedPos.lng) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lastEmittedPos.lat * Math.PI / 180) * Math.cos(latitude * Math.PI / 180) *
+                      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+            const dist = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            if (dist >= 8 || (timeDiff >= 4000 && dist >= 1)) {
+              shouldEmit = true;
+            }
+          }
+
+          if (shouldEmit) {
+            lastEmittedPos = { lat: latitude, lng: longitude, time: now };
+            console.log('[GPS SOCKET] Dispatching throttled coordinate update from Portal:', latitude, longitude, 'accuracy:', accuracy);
+            socket.emit('updateLocation', {
+              orderId: selectedOrder._id,
+              lat: latitude,
+              lng: longitude,
+              heading: heading || 0,
+              speed: speed || 0,
+              accuracy: accuracy || 0
+            });
+          }
         },
         (err) => {
           console.error('[GPS SOCKET] Geolocation error in Portal:', err);
         },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
       );
     } else {
       console.warn('[GPS SOCKET] Geolocation is not supported by this browser.');

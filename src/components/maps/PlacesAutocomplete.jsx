@@ -1,7 +1,5 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
-import { useJsApiLoader } from '@react-google-maps/api';
 import { MapPin, Loader, Search, X, AlertCircle } from 'lucide-react';
-import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMapsLoader';
 import { API_BASE } from '../../config/api';
 
 /**
@@ -22,8 +20,6 @@ export default function PlacesAutocomplete({
   className = '',
   country = 'in',
 }) {
-  const { isLoaded } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
-
   const [query, setQuery] = useState('');
   const [predictions, setPredictions] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -32,6 +28,7 @@ export default function PlacesAutocomplete({
 
   const debounceRef = useRef(null);
   const sessionTokenRef = useRef(null);
+  const activeQueryIdRef = useRef(0);
 
   // Initialize session token for cost optimization
   const createSessionToken = () => {
@@ -64,6 +61,8 @@ export default function PlacesAutocomplete({
       return;
     }
 
+    const currentQueryId = ++activeQueryIdRef.current;
+
     debounceRef.current = setTimeout(async () => {
       setIsSearching(true);
       try {
@@ -77,6 +76,12 @@ export default function PlacesAutocomplete({
 
         const res = await fetch(`${API_BASE}/maps/autocomplete?${params.toString()}`);
         const data = await res.json();
+
+        // Discard result if user has typed a newer query in the meantime
+        if (currentQueryId !== activeQueryIdRef.current) {
+          return;
+        }
+
         setIsSearching(false);
 
         if (data.success) {
@@ -99,8 +104,10 @@ export default function PlacesAutocomplete({
           setNoResults(true);
         }
       } catch (err) {
-        setIsSearching(false);
-        setError('Search failed. Please check your connection.');
+        if (currentQueryId === activeQueryIdRef.current) {
+          setIsSearching(false);
+          setError('Search failed. Please check your connection.');
+        }
       }
     }, 300);
   };
@@ -160,6 +167,7 @@ export default function PlacesAutocomplete({
 
   // ── Clear input ────────────────────────────────────────────────────────────
   const handleClear = () => {
+    activeQueryIdRef.current++;
     setQuery('');
     setPredictions([]);
     setNoResults(false);
@@ -167,36 +175,6 @@ export default function PlacesAutocomplete({
     clearTimeout(debounceRef.current);
     resetSessionToken();
   };
-
-  // ── Not loaded yet ─────────────────────────────────────────────────────────
-  if (!isLoaded) {
-    return (
-      <div className={`relative w-full ${className}`}>
-        <div className="relative">
-          <Search
-            className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${
-              darkMode ? 'text-white/30' : 'text-muted'
-            }`}
-          />
-          <input
-            type="text"
-            disabled
-            placeholder="Loading search..."
-            className={
-              darkMode
-                ? 'w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-10 py-2.5 text-[13px] text-white/30 placeholder:text-white/20 outline-none font-medium cursor-not-allowed'
-                : 'w-full bg-base border border-line rounded-xl pl-10 pr-10 py-3 text-xs text-muted placeholder:text-muted outline-none font-semibold cursor-not-allowed'
-            }
-          />
-          <Loader
-            className={`absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin ${
-              darkMode ? 'text-violet-400' : 'text-primary'
-            }`}
-          />
-        </div>
-      </div>
-    );
-  }
 
   // ── Styles ─────────────────────────────────────────────────────────────────
   const inputCls = darkMode

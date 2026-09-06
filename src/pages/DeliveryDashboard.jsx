@@ -557,6 +557,8 @@ export default function DeliveryDashboard() {
     console.log('[GPS SOCKET] Live coordinate streaming activated for order:', selectedOrder._id);
 
     let watchId;
+    let lastEmittedPos = null;
+
     if (navigator.geolocation) {
       setGpsStatus('locating');
 
@@ -564,32 +566,14 @@ export default function DeliveryDashboard() {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude, heading, speed, accuracy } = position.coords;
-          if (accuracy && accuracy > 500) {
-            console.warn('[GPS SOCKET] Ignored initial low accuracy point:', accuracy, 'm');
+          if (accuracy && accuracy > 2000) {
+            console.warn('[GPS SOCKET] Ignored initial extreme low accuracy point:', accuracy, 'm');
             return;
           }
           console.log('[GPS SOCKET] Immediate initial location:', latitude, longitude);
           setRiderLoc({ lat: latitude, lng: longitude, heading, speed, accuracy });
           setGpsStatus('live');
-        },
-        (err) => {
-          console.warn('[GPS SOCKET] Initial getCurrentPosition warning:', err.message);
-          // Do not fail hard on initial timeout; watchPosition will continue trying
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      );
-
-      // Continuous GPS tracking
-      watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const { latitude, longitude, heading, speed, accuracy } = position.coords;
-          if (accuracy && accuracy > 350) {
-            console.warn('[GPS SOCKET] Ignored low accuracy point:', accuracy, 'm');
-            return;
-          }
-          console.log('[GPS SOCKET] Dispatching coordinate update:', latitude, longitude, 'accuracy:', accuracy);
-          setRiderLoc({ lat: latitude, lng: longitude, heading, speed, accuracy });
-          setGpsStatus('live');
+          lastEmittedPos = { lat: latitude, lng: longitude, time: Date.now() };
 
           socket.emit('updateLocation', {
             orderId: selectedOrder._id,
@@ -599,6 +583,60 @@ export default function DeliveryDashboard() {
             speed: speed || 0,
             accuracy: accuracy || 0
           });
+        },
+        (err) => {
+          console.warn('[GPS SOCKET] Initial getCurrentPosition warning:', err.message);
+          // Do not fail hard on initial timeout; watchPosition will continue trying
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+
+      // Continuous GPS tracking with intelligent displacement/time throttling
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude, heading, speed, accuracy } = position.coords;
+          if (accuracy && accuracy > 2000) {
+            console.warn('[GPS SOCKET] Ignored low accuracy reading:', accuracy, 'm');
+            return;
+          }
+
+          // Always update local UI state immediately for responsive local marker
+          setRiderLoc({ lat: latitude, lng: longitude, heading, speed, accuracy });
+          setGpsStatus('live');
+
+          const now = Date.now();
+          let shouldEmit = false;
+
+          if (!lastEmittedPos) {
+            shouldEmit = true;
+          } else {
+            const timeDiff = now - lastEmittedPos.time;
+            const R = 6371e3;
+            const dLat = (latitude - lastEmittedPos.lat) * Math.PI / 180;
+            const dLng = (longitude - lastEmittedPos.lng) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lastEmittedPos.lat * Math.PI / 180) * Math.cos(latitude * Math.PI / 180) *
+                      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+            const dist = 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            // Emit if moved >= 8 meters OR (at least 4000ms passed and moved >= 1 meter)
+            if (dist >= 8 || (timeDiff >= 4000 && dist >= 1)) {
+              shouldEmit = true;
+            }
+          }
+
+          if (shouldEmit) {
+            lastEmittedPos = { lat: latitude, lng: longitude, time: now };
+            console.log('[GPS SOCKET] Dispatching throttled coordinate update:', latitude, longitude, 'accuracy:', accuracy);
+            socket.emit('updateLocation', {
+              orderId: selectedOrder._id,
+              lat: latitude,
+              lng: longitude,
+              heading: heading || 0,
+              speed: speed || 0,
+              accuracy: accuracy || 0
+            });
+          }
         },
         (err) => {
           console.error('[GPS SOCKET] Geolocation error:', err);

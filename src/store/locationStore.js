@@ -20,6 +20,7 @@ export const useLocationStore = create(
       state: '',
       pincode: '',
       source: null, // 'GPS' | 'MANUAL' | 'SAVED'
+      gpsTimestamp: null,
       isDetecting: false,
       permissionStatus: 'prompt', // 'prompt' | 'granted' | 'denied' | 'unavailable'
       errorMessage: null,
@@ -55,6 +56,7 @@ export const useLocationStore = create(
           state,
           pincode,
           source,
+          gpsTimestamp: source === 'GPS' ? (locationData.gpsTimestamp || Date.now()) : null,
           isDetecting: false,
           errorMessage: null,
         });
@@ -123,6 +125,7 @@ export const useLocationStore = create(
                   state,
                   pincode,
                   source: 'GPS',
+                  gpsTimestamp: Date.now(),
                   isDetecting: false,
                   permissionStatus: 'granted',
                   errorMessage: null,
@@ -138,6 +141,7 @@ export const useLocationStore = create(
                   address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
                   formattedAddress: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
                   source: 'GPS',
+                  gpsTimestamp: Date.now(),
                   isDetecting: false,
                   permissionStatus: 'granted',
                   errorMessage: null,
@@ -155,6 +159,7 @@ export const useLocationStore = create(
                 address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
                 formattedAddress: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
                 source: 'GPS',
+                gpsTimestamp: Date.now(),
                 isDetecting: false,
                 permissionStatus: 'granted',
               });
@@ -177,6 +182,16 @@ export const useLocationStore = create(
           { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
       },
+
+      // Helper to check if GPS coordinate is stale (defaults to 12 hours)
+      // Note: Manually selected and saved addresses are NEVER marked as stale.
+      isGpsStale: (maxAgeHours = 12) => {
+        const state = get();
+        if (state.source !== 'GPS') return false;
+        if (!state.gpsTimestamp) return true;
+        const maxAgeMs = maxAgeHours * 60 * 60 * 1000;
+        return Date.now() - state.gpsTimestamp > maxAgeMs;
+      },
     }),
     {
       name: 'jinkzo-customer-location',
@@ -193,6 +208,7 @@ export const useLocationStore = create(
         state: state.state,
         pincode: state.pincode,
         source: state.source,
+        gpsTimestamp: state.gpsTimestamp,
       }),
     }
   )

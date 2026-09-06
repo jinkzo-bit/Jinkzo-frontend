@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MapPin, Loader, Layers, Crosshair, RotateCw, RotateCcw } from 'lucide-react';
+import { MapPin, Loader, Layers, Crosshair } from 'lucide-react';
 import { useJsApiLoader, GoogleMap, Marker, Polyline, InfoWindow } from '@react-google-maps/api';
 import { io } from 'socket.io-client';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
@@ -192,6 +192,21 @@ const VEG_SVG = `
   </g>
 </svg>`;
 
+// Haversine geographic distance in meters
+function getHaversineDistanceMeters(lat1, lon1, lat2, lon2) {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return Infinity;
+  const R = 6371e3; // metres
+  const φ1 = (Number(lat1) * Math.PI) / 180;
+  const φ2 = (Number(lat2) * Math.PI) / 180;
+  const Δφ = ((Number(lat2) - Number(lat1)) * Math.PI) / 180;
+  const Δλ = ((Number(lon2) - Number(lon1)) * Math.PI) / 180;
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 // Convert SVG string to Google Maps icon object
 const svgToIcon = (svgString, width, height, anchorX, anchorY, rotation = 0) => {
   let finalSvg = svgString;
@@ -242,7 +257,6 @@ export default function GoogleMapContainer({
 
   const mapRef = useRef(null);
   const containerRef = useRef(null);
-  const mapHeadingRef = useRef(0);
   const [mapInstance, setMapInstance] = useState(null);
   const trafficLayerRef = useRef(null);
   const isAutoFollowRef = useRef(true);
@@ -250,38 +264,19 @@ export default function GoogleMapContainer({
   const previousRiderPosRef = useRef(null);
   const hasFitBoundsInitialRef = useRef(false);
 
-  // ── 15-Degree Map Rotation Controls ───────────────────────────────────────────
-  const setMapHeading = useCallback((heading) => {
-    if (!mapRef.current) return;
-
-    const normalized = ((heading % 360) + 360) % 360;
-    mapHeadingRef.current = normalized;
-
-    mapRef.current.setHeading(normalized);
-  }, []);
-
-  const handleRotateClockwise = useCallback(() => {
-    setMapHeading(mapHeadingRef.current + 15);
-  }, [setMapHeading]);
-
-  const handleRotateCounterClockwise = useCallback(() => {
-    setMapHeading(mapHeadingRef.current - 15);
-  }, [setMapHeading]);
-
-  const handleResetNorth = useCallback(() => {
-    setMapHeading(0);
-  }, [setMapHeading]);
-
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
   const [pickerPos, setPickerPos] = useState(null);
   const [restaurantPos, setRestaurantPos] = useState(null);
   const [customerPos, setCustomerPos] = useState(null);
   const [riderPos, setRiderPos] = useState(null);
   
-  // Multi-stop routes state
+  // Multi-stop routes state & tracking refs
   const [routeSegments, setRouteSegments] = useState([]);
   const [multiRouteTotals, setMultiRouteTotals] = useState({ distanceKm: 0, durationMinutes: 0 });
   const lastMultiRouteCalcHashRef = useRef('');
+  const lastRiderCalcPosRef = useRef(null);
+  const isRouteFetchingRef = useRef(false);
+  const routeRequestIdRef = useRef(0);
 
   const [activePopup, setActivePopup] = useState(null);
   const [error, setError] = useState(null);
@@ -290,23 +285,34 @@ export default function GoogleMapContainer({
 
   const isRideOrder = isRide || deliveryMethod === 'Ride';
 
-  // ── Build SVG icons ────────────────────────────────────────────────────────
-  const restaurantIcon = isLoaded 
-    ? (isRideOrder ? svgToIcon(PICKUP_SVG, 44, 56, 22, 52) : svgToIcon(RESTAURANT_SVG, 44, 56, 22, 52))
-    : undefined;
-    
-  const homeIcon = isLoaded
-    ? (isRideOrder ? svgToIcon(DROP_SVG, 44, 56, 22, 52) : svgToIcon(HOME_SVG, 44, 56, 22, 52))
-    : undefined;
+  // ── Memoized SVG icons (avoids recreating Google Maps Size/Point objects on every render) ──
+  const restaurantIcon = React.useMemo(() => {
+    if (!isLoaded) return undefined;
+    return isRideOrder ? svgToIcon(PICKUP_SVG, 44, 56, 22, 52) : svgToIcon(RESTAURANT_SVG, 44, 56, 22, 52);
+  }, [isLoaded, isRideOrder]);
 
-  const storeIcon   = isLoaded ? svgToIcon(STORE_SVG, 44, 56, 22, 52) : undefined;
-  const groceryIcon = isLoaded ? svgToIcon(GROCERY_SVG, 44, 56, 22, 52) : undefined;
-  const meatIcon    = isLoaded ? svgToIcon(MEAT_SVG, 44, 56, 22, 52) : undefined;
-  const bakeryIcon  = isLoaded ? svgToIcon(BAKERY_SVG, 44, 56, 22, 52) : undefined;
-  const vegIcon     = isLoaded ? svgToIcon(VEG_SVG, 44, 56, 22, 52) : undefined;
-  const riderIcon   = isLoaded ? svgToIcon(RIDER_SVG, 52, 52, 26, 26, riderBearing)  : undefined;
-  const rideIcon    = isLoaded ? svgToIcon(RIDE_SVG, 52, 52, 26, 26, riderBearing)   : undefined;
-  const pickerIcon  = isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50) : undefined;
+  const homeIcon = React.useMemo(() => {
+    if (!isLoaded) return undefined;
+    return isRideOrder ? svgToIcon(DROP_SVG, 44, 56, 22, 52) : svgToIcon(HOME_SVG, 44, 56, 22, 52);
+  }, [isLoaded, isRideOrder]);
+
+  const storeIcon   = React.useMemo(() => isLoaded ? svgToIcon(STORE_SVG, 44, 56, 22, 52) : undefined, [isLoaded]);
+  const groceryIcon = React.useMemo(() => isLoaded ? svgToIcon(GROCERY_SVG, 44, 56, 22, 52) : undefined, [isLoaded]);
+  const meatIcon    = React.useMemo(() => isLoaded ? svgToIcon(MEAT_SVG, 44, 56, 22, 52) : undefined, [isLoaded]);
+  const bakeryIcon  = React.useMemo(() => isLoaded ? svgToIcon(BAKERY_SVG, 44, 56, 22, 52) : undefined, [isLoaded]);
+  const vegIcon     = React.useMemo(() => isLoaded ? svgToIcon(VEG_SVG, 44, 56, 22, 52) : undefined, [isLoaded]);
+  const pickerIcon  = React.useMemo(() => isLoaded ? svgToIcon(PICKER_SVG, 40, 52, 20, 50) : undefined, [isLoaded]);
+
+  const quantizedBearing = Math.round((riderBearing || 0) / 5) * 5;
+  const riderIcon = React.useMemo(() => {
+    if (!isLoaded) return undefined;
+    return svgToIcon(RIDER_SVG, 52, 52, 26, 26, quantizedBearing);
+  }, [isLoaded, quantizedBearing]);
+
+  const rideIcon = React.useMemo(() => {
+    if (!isLoaded) return undefined;
+    return svgToIcon(RIDE_SVG, 52, 52, 26, 26, quantizedBearing);
+  }, [isLoaded, quantizedBearing]);
 
   const getStopIcon = useCallback((category = '', sourceType = 'supplier') => {
     const cat = (category || '').toLowerCase();
@@ -329,7 +335,6 @@ export default function GoogleMapContainer({
   const onMapLoad = useCallback((map) => {
     mapRef.current = map;
     setMapInstance(map);
-    mapHeadingRef.current = map.getHeading?.() || 0;
     if (window.google) {
       trafficLayerRef.current = new window.google.maps.TrafficLayer();
     }
@@ -341,7 +346,6 @@ export default function GoogleMapContainer({
   }, []);
 
   const onMapUnmount = useCallback(() => {
-    mapHeadingRef.current = 0;
     if (trafficLayerRef.current) {
       trafficLayerRef.current.setMap(null);
       trafficLayerRef.current = null;
@@ -609,7 +613,15 @@ export default function GoogleMapContainer({
     return { orderedStopsWithCoords: valid, addressOnlyStops: noCoords };
   }, [pickupStops, routeSequence, restaurantPos, restaurantName, restaurantAddress, status, supplierDeliveries]);
 
-  // ── Multi-Stop Road Routing Calculation ───────────────────────────────────────
+  // ── Reset route calculation & camera framing on order change ────────────────
+  useEffect(() => {
+    hasFitBoundsInitialRef.current = false;
+    lastRiderCalcPosRef.current = null;
+    lastMultiRouteCalcHashRef.current = '';
+    isRouteFetchingRef.current = false;
+  }, [orderId]);
+
+  // ── Multi-Stop Road Routing Calculation (Intelligently Throttled) ───────────
   useEffect(() => {
     if (!isLoaded || mode !== 'tracking') return;
 
@@ -650,14 +662,47 @@ export default function GoogleMapContainer({
     if (waypoints.length < 2) {
       setRouteSegments([]);
       setMultiRouteTotals({ distanceKm: 0, durationMinutes: 0 });
+      lastRiderCalcPosRef.current = null;
+      lastMultiRouteCalcHashRef.current = '';
       return;
     }
 
-    const calcHash = `${orderId}_${waypoints.map(w => `${w.lat.toFixed(4)},${w.lng.toFixed(4)}`).join('|')}`;
-    if (lastMultiRouteCalcHashRef.current === calcHash) {
+    // Static stops hash (destinations/stops/order changes)
+    const staticStopsHash = `${orderId}_${orderedStopsWithCoords.map(s => `${s.id}:${s.lat.toFixed(5)},${s.lng.toFixed(5)}`).join(';')}_${customerPos ? `${customerPos.lat.toFixed(5)},${customerPos.lng.toFixed(5)}` : ''}`;
+    const stopsChanged = lastMultiRouteCalcHashRef.current !== staticStopsHash;
+
+    // Evaluate rider displacement since last road route calculation
+    let riderMovedFarEnough = false;
+    if (riderPos) {
+      if (!lastRiderCalcPosRef.current) {
+        riderMovedFarEnough = true;
+      } else {
+        const displacement = getHaversineDistanceMeters(
+          lastRiderCalcPosRef.current.lat,
+          lastRiderCalcPosRef.current.lng,
+          riderPos.lat,
+          riderPos.lng
+        );
+        // Phase 1 requirement: minimum ~250m rider movement before recalculating road route
+        if (displacement >= 250) {
+          riderMovedFarEnough = true;
+        }
+      }
+    }
+
+    // Initial route needed if routeSegments is empty
+    const needsInitialRoute = routeSegments.length === 0;
+
+    // Only fetch if stops changed, initial route needed, or rider moved >= 250m
+    if (!stopsChanged && !needsInitialRoute && !riderMovedFarEnough) {
       return;
     }
-    lastMultiRouteCalcHashRef.current = calcHash;
+
+    // Prevent duplicate concurrent requests
+    if (isRouteFetchingRef.current) return;
+    isRouteFetchingRef.current = true;
+
+    const currentRequestId = ++routeRequestIdRef.current;
 
     const fetchMultiRoutes = async () => {
       try {
@@ -667,12 +712,22 @@ export default function GoogleMapContainer({
           body: JSON.stringify({ waypoints, travelMode: 'DRIVE' })
         });
         const data = await res.json();
+
+        // Check if a newer request was dispatched while this one was in flight
+        if (currentRequestId !== routeRequestIdRef.current) {
+          return;
+        }
+
         if (data.success && data.data && Array.isArray(data.data.segments)) {
           setRouteSegments(data.data.segments);
           setMultiRouteTotals({
             distanceKm: data.data.totalDistanceKm,
             durationMinutes: data.data.totalDurationMinutes
           });
+          lastMultiRouteCalcHashRef.current = staticStopsHash;
+          if (riderPos) {
+            lastRiderCalcPosRef.current = { lat: riderPos.lat, lng: riderPos.lng };
+          }
           if (onRouteInfo) {
             onRouteInfo({
               segments: data.data.segments,
@@ -683,16 +738,19 @@ export default function GoogleMapContainer({
         }
       } catch (err) {
         console.error('[GoogleMapContainer] Multi-stop routes fetch failed:', err);
+      } finally {
+        isRouteFetchingRef.current = false;
       }
     };
 
     fetchMultiRoutes();
-  }, [isLoaded, mode, riderPos, orderedStopsWithCoords, customerPos, customerName, orderId, onRouteInfo]);
+  }, [isLoaded, mode, riderPos, orderedStopsWithCoords, customerPos, customerName, orderId, onRouteInfo, routeSegments.length]);
 
-  // ── Auto-fit Camera Bounds around all coordinate-valid points ───────────────
+  // ── Auto-fit Camera Bounds around all coordinate-valid points (Initial only) ──
   useEffect(() => {
     if (!isLoaded || mode !== 'tracking' || !mapRef.current || !window.google) return;
-    if (hasFitBoundsInitialRef.current && isUserInteractingRef.current) return;
+    // Do NOT run fitBounds again once initially framed, or if user is interacting
+    if (hasFitBoundsInitialRef.current || isUserInteractingRef.current) return;
 
     const bounds = new window.google.maps.LatLngBounds();
     let count = 0;
@@ -722,11 +780,14 @@ export default function GoogleMapContainer({
       });
       hasFitBoundsInitialRef.current = true;
     }
-  }, [isLoaded, mode, orderId, orderedStopsWithCoords, customerPos, riderPos]);
+  }, [isLoaded, mode, orderId, orderedStopsWithCoords, customerPos]);
 
-  // ── Socket.IO Live location subscriber (for secondary GPS sync) ─────────────
+  // ── Socket.IO Live location subscriber (secondary fallback ONLY when parent does not supply coordinates) ──
   useEffect(() => {
     if (!isLoaded || !orderId || mode !== 'tracking') return;
+    // If parent supplies riderLat/riderLng (e.g. OrderTracking, DeliveryDashboard, AdminDashboard),
+    // skip internal socket subscription to prevent duplicate network traffic and renders.
+    if (riderLat != null && riderLng != null) return;
 
     const token = sessionStorage.getItem('qb-auth-token');
     const socket = io(socketHost, {
@@ -751,7 +812,7 @@ export default function GoogleMapContainer({
     return () => {
       socket.disconnect();
     };
-  }, [isLoaded, orderId, mode]);
+  }, [isLoaded, orderId, mode, riderLat, riderLng]);
 
   // ── Render: Error / Loading ────────────────────────────────────────────────
   if (loadError || error) {
@@ -1062,89 +1123,7 @@ export default function GoogleMapContainer({
           </div>
         )}
 
-        {/* ── Custom 15-Degree Map Rotation Controls (↻, N, ↺) ── */}
-        {mode === 'tracking' && (
-          <div style={{
-            position: 'absolute',
-            bottom: 195,
-            right: 12,
-            zIndex: 20,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-          }}>
-            {/* Clockwise: ↻ (+15°) */}
-            <button
-              onClick={handleRotateClockwise}
-              style={{
-                width: 34,
-                height: 34,
-                background: 'rgba(255, 255, 255, 0.95)',
-                border: '1px solid rgba(229, 231, 235, 0.8)',
-                borderRadius: 8,
-                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                color: '#374151',
-                userSelect: 'none',
-              }}
-              title="Rotate Clockwise (+15°)"
-              aria-label="Rotate Clockwise (+15°)"
-            >
-              <RotateCw style={{ width: 16, height: 16 }} />
-            </button>
 
-            {/* Reset North: N (0°) */}
-            <button
-              onClick={handleResetNorth}
-              style={{
-                width: 34,
-                height: 34,
-                background: 'rgba(255, 255, 255, 0.95)',
-                border: '1px solid rgba(229, 231, 235, 0.8)',
-                borderRadius: 8,
-                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                fontSize: 13,
-                fontWeight: 800,
-                color: '#EF4444',
-                userSelect: 'none',
-              }}
-              title="Reset North (0°)"
-              aria-label="Reset North (0°)"
-            >
-              N
-            </button>
-
-            {/* Counter-Clockwise: ↺ (-15°) */}
-            <button
-              onClick={handleRotateCounterClockwise}
-              style={{
-                width: 34,
-                height: 34,
-                background: 'rgba(255, 255, 255, 0.95)',
-                border: '1px solid rgba(229, 231, 235, 0.8)',
-                borderRadius: 8,
-                boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                color: '#374151',
-                userSelect: 'none',
-              }}
-              title="Rotate Counter-Clockwise (-15°)"
-              aria-label="Rotate Counter-Clockwise (-15°)"
-            >
-              <RotateCcw style={{ width: 16, height: 16 }} />
-            </button>
-          </div>
-        )}
 
         {/* ── Top-Left: Live GPS Status Badge ── */}
         {mode === 'tracking' && (
