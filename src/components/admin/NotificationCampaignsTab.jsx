@@ -9,31 +9,39 @@ import { formatAppDateTime } from '../../utils/dateUtils';
 const QUICK_TEMPLATES = [
   {
     name: '🎉 Festival Special',
-    title: '🎉 Festival Feast Offer!',
-    body: 'Enjoy special festive discounts up to 50% off on your favorite restaurants!',
-    targetAudience: 'customer',
-    link: '/restaurants'
+    title: 'Happy Diwali 🎉',
+    body: 'Team Jinkzo wishes you and your family a joyful, bright, and prosperous Diwali!',
+    targetAudience: 'all',
+    notificationType: 'ANNOUNCEMENT',
+    action: 'NONE',
+    soundPreference: 'NORMAL'
   },
   {
     name: '🍛 Today\'s Special',
-    title: '🍛 Today\'s Special Menu!',
-    body: 'Check out top biryani and food deals fresh from local kitchens in your city.',
+    title: 'Hungry? Order Biryani Today!',
+    body: 'Try today\'s special hot and aromatic dum biryani with fast delivery.',
     targetAudience: 'customer',
-    link: '/restaurants'
+    notificationType: 'PROMOTION',
+    action: 'OPEN_RESTAURANT',
+    soundPreference: 'NORMAL'
   },
   {
-    name: '🎁 Special Offer',
-    title: '🎁 Flash Discount Alert!',
-    body: 'Order now and get free delivery on orders above ₹199!',
+    name: '🍕 Category Promo',
+    title: 'Craving Fast Food & Pizza?',
+    body: 'Explore top rated pizza and fast food spots near you with great deals!',
     targetAudience: 'customer',
-    link: '/cart'
+    notificationType: 'PROMOTION',
+    action: 'OPEN_CATEGORY',
+    soundPreference: 'NORMAL'
   },
   {
     name: '📢 Announcement',
     title: '📢 Jinkzo Platform Update',
     body: 'We have updated our app with faster delivery times and new store categories!',
     targetAudience: 'all',
-    link: '/'
+    notificationType: 'ANNOUNCEMENT',
+    action: 'NONE',
+    soundPreference: 'NORMAL'
   }
 ];
 
@@ -44,6 +52,11 @@ export default function NotificationCampaignsTab({ token }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   
+  // Dynamic Target lists from API
+  const [availableRestaurants, setAvailableRestaurants] = useState([]);
+  const [availableCategories, setAvailableCategories] = useState([]);
+  const [availableProducts, setAvailableProducts] = useState([]);
+
   // Selected campaign for viewing logs
   const [selectedCampaignForLogs, setSelectedCampaignForLogs] = useState(null);
 
@@ -52,6 +65,11 @@ export default function NotificationCampaignsTab({ token }) {
     title: '',
     body: '',
     targetAudience: 'customer',
+    notificationType: 'PROMOTION', // PROMOTION | ANNOUNCEMENT | ORDER | RIDE | SYSTEM
+    action: 'OPEN_RESTAURANT', // OPEN_RESTAURANT | OPEN_PRODUCT | OPEN_CATEGORY | NONE
+    entityType: 'RESTAURANT',
+    entityId: '',
+    soundPreference: 'NORMAL', // NORMAL | ATTENTION | SILENT
     topic: '',
     imageUrl: '',
     link: '/restaurants',
@@ -87,13 +105,50 @@ export default function NotificationCampaignsTab({ token }) {
     if (token) fetchCampaigns();
   }, [token]);
 
+  // Fetch restaurants, categories, and products for admin selector
+  useEffect(() => {
+    const fetchEntities = async () => {
+      try {
+        const [rRes, cRes, pRes] = await Promise.all([
+          fetch(`${API_BASE}/restaurants`),
+          fetch(`${API_BASE}/restaurants/categories`),
+          fetch(`${API_BASE}/restaurants/dishes/search`)
+        ]);
+        if (rRes.ok) {
+          const rData = await rRes.json();
+          const rList = Array.isArray(rData) ? rData : (rData.data || []);
+          setAvailableRestaurants(rList);
+          if (rList.length > 0 && !form.entityId) {
+            setForm(prev => prev.action === 'OPEN_RESTAURANT' && !prev.entityId ? { ...prev, entityId: rList[0]._id } : prev);
+          }
+        }
+        if (cRes.ok) {
+          const cData = await cRes.json();
+          setAvailableCategories(Array.isArray(cData) ? cData : []);
+        }
+        if (pRes.ok) {
+          const pData = await pRes.json();
+          setAvailableProducts(Array.isArray(pData) ? pData : (pData.data || []));
+        }
+      } catch (err) {
+        console.warn('[NotificationCampaignsTab] Error fetching target entities:', err);
+      }
+    };
+    fetchEntities();
+  }, []);
+
   const applyTemplate = (tpl) => {
     setForm(prev => ({
       ...prev,
       title: tpl.title,
       body: tpl.body,
       targetAudience: tpl.targetAudience,
-      link: tpl.link || '/restaurants'
+      notificationType: tpl.notificationType || 'PROMOTION',
+      action: tpl.action || 'NONE',
+      entityType: tpl.action === 'OPEN_RESTAURANT' ? 'RESTAURANT' : (tpl.action === 'OPEN_CATEGORY' ? 'CATEGORY' : null),
+      entityId: tpl.action === 'OPEN_RESTAURANT' ? (availableRestaurants[0]?._id || '') : (tpl.action === 'OPEN_CATEGORY' ? (availableCategories[0]?.name || '') : ''),
+      soundPreference: tpl.soundPreference || 'NORMAL',
+      link: tpl.link || (tpl.action === 'NONE' ? '' : '/restaurants')
     }));
     setSuccessMsg(`Applied template: "${tpl.name}"`);
     setTimeout(() => setSuccessMsg(''), 3000);
@@ -108,6 +163,22 @@ export default function NotificationCampaignsTab({ token }) {
     if (!sendImmediately && form.scheduleType === 'SCHEDULE_ONCE' && !form.scheduledAtDate) {
       setErrorMsg('Please select a scheduled date and time.');
       return;
+    }
+
+    // Target validation
+    if (form.notificationType === 'PROMOTION') {
+      if (form.action === 'OPEN_RESTAURANT' && !form.entityId) {
+        setErrorMsg('Please select a restaurant to open when the customer taps this notification.');
+        return;
+      }
+      if (form.action === 'OPEN_PRODUCT' && !form.entityId) {
+        setErrorMsg('Please select a product/dish to open when the customer taps this notification.');
+        return;
+      }
+      if (form.action === 'OPEN_CATEGORY' && !form.entityId) {
+        setErrorMsg('Please select a category to open when the customer taps this notification.');
+        return;
+      }
     }
 
     try {
@@ -158,13 +229,49 @@ export default function NotificationCampaignsTab({ token }) {
         daysOfWeek: form.repeatDays
       } : undefined;
 
+      let resolvedSoundType = 'GENERAL';
+      let resolvedPriority = 'NORMAL';
+      if (form.soundPreference === 'ATTENTION') {
+        resolvedSoundType = 'GENERAL';
+        resolvedPriority = 'HIGH';
+      } else if (form.soundPreference === 'SILENT') {
+        resolvedSoundType = 'SILENT';
+        resolvedPriority = 'LOW';
+      }
+
+      let resolvedLink = form.link;
+      let resolvedEntityType = form.entityType;
+      let resolvedEntityId = form.entityId;
+
+      if (form.action === 'NONE' || form.notificationType === 'ANNOUNCEMENT') {
+        resolvedLink = null;
+        resolvedEntityType = null;
+        resolvedEntityId = null;
+      } else if (form.action === 'OPEN_RESTAURANT' && form.entityId) {
+        resolvedLink = `/restaurant/${form.entityId}`;
+        resolvedEntityType = 'RESTAURANT';
+      } else if (form.action === 'OPEN_PRODUCT' && form.entityId) {
+        resolvedEntityType = 'PRODUCT';
+        const prod = availableProducts.find(p => p._id === form.entityId);
+        resolvedLink = prod?.restaurantId ? `/restaurant/${prod.restaurantId}` : `/restaurants?search=${encodeURIComponent(prod?.name || form.entityId)}`;
+      } else if (form.action === 'OPEN_CATEGORY' && form.entityId) {
+        resolvedEntityType = 'CATEGORY';
+        resolvedLink = `/restaurants?category=${encodeURIComponent(form.entityId)}`;
+      }
+
       const payload = {
         title: form.title.trim(),
         message: form.body.trim(),
         targetAudience: form.targetAudience,
-        topic: form.topic.trim() || undefined,
-        imageUrl: form.imageUrl.trim() || undefined,
-        link: form.link.trim() || undefined,
+        notificationType: form.notificationType,
+        action: form.notificationType === 'ANNOUNCEMENT' ? 'NONE' : form.action,
+        entityType: resolvedEntityType,
+        entityId: resolvedEntityId,
+        soundType: resolvedSoundType,
+        priority: resolvedPriority,
+        topic: form.topic?.trim() || undefined,
+        imageUrl: form.imageUrl?.trim() || undefined,
+        link: resolvedLink || undefined,
         mode,
         scheduleType: sendImmediately ? 'SEND_NOW' : form.scheduleType,
         sendNow: sendImmediately,
@@ -386,15 +493,208 @@ export default function NotificationCampaignsTab({ token }) {
 
               <div>
                 <label className="block text-xs font-extrabold text-main mb-1">
-                  App Route / Link
+                  Notification Type
                 </label>
-                <input
-                  type="text"
-                  value={form.link}
-                  onChange={(e) => setForm({ ...form, link: e.target.value })}
-                  placeholder="/restaurants or /cart"
+                <select
+                  value={form.notificationType}
+                  onChange={(e) => {
+                    const nt = e.target.value;
+                    let defaultAction = 'NONE';
+                    let defaultEntityType = null;
+                    let defaultEntityId = '';
+                    if (nt === 'PROMOTION') {
+                      defaultAction = 'OPEN_RESTAURANT';
+                      defaultEntityType = 'RESTAURANT';
+                      defaultEntityId = availableRestaurants[0]?._id || '';
+                    } else if (nt === 'ORDER') {
+                      defaultAction = 'OPEN_ORDER';
+                      defaultEntityType = 'ORDER';
+                    } else if (nt === 'RIDE') {
+                      defaultAction = 'OPEN_RIDE';
+                      defaultEntityType = 'RIDE';
+                    }
+                    setForm(prev => ({
+                      ...prev,
+                      notificationType: nt,
+                      action: defaultAction,
+                      entityType: defaultEntityType,
+                      entityId: defaultEntityId
+                    }));
+                  }}
                   className="w-full p-3 rounded-2xl bg-base border border-line text-xs font-bold text-main focus:outline-none focus:border-primary"
-                />
+                >
+                  <option value="PROMOTION">🏷️ PROMOTION (Actionable Marketing)</option>
+                  <option value="ANNOUNCEMENT">📢 ANNOUNCEMENT (Festival / Info - No Navigation)</option>
+                  <option value="ORDER">📦 ORDER (Transactional Order Context)</option>
+                  <option value="RIDE">🚖 RIDE (Transactional Ride Context)</option>
+                  <option value="SYSTEM">⚙️ SYSTEM (Informational System Alert)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Tap Action & Dynamic Target Selector */}
+            <div className="p-3.5 bg-base/60 rounded-2xl border border-line space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-extrabold text-main">
+                  Notification Tap Action
+                </label>
+                {form.notificationType === 'ANNOUNCEMENT' && (
+                  <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800">
+                    Locked to NONE for Announcements
+                  </span>
+                )}
+              </div>
+
+              {form.notificationType === 'ANNOUNCEMENT' ? (
+                <div className="p-3 bg-surface rounded-xl border border-line text-xs font-medium text-muted flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>
+                    <strong>NONE</strong> — Users tap to mark read and stay on their current screen. No page redirects occur.
+                  </span>
+                </div>
+              ) : form.notificationType === 'PROMOTION' ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { id: 'OPEN_RESTAURANT', label: '🏪 Restaurant' },
+                      { id: 'OPEN_PRODUCT', label: '🍛 Dish / Item' },
+                      { id: 'OPEN_CATEGORY', label: '🍕 Category' },
+                      { id: 'NONE', label: '🚫 No Navigation' }
+                    ].map((act) => (
+                      <button
+                        key={act.id}
+                        type="button"
+                        onClick={() => {
+                          let defaultEntType = null;
+                          let defaultEntId = '';
+                          if (act.id === 'OPEN_RESTAURANT') {
+                            defaultEntType = 'RESTAURANT';
+                            defaultEntId = availableRestaurants[0]?._id || '';
+                          } else if (act.id === 'OPEN_PRODUCT') {
+                            defaultEntType = 'PRODUCT';
+                            defaultEntId = availableProducts[0]?._id || '';
+                          } else if (act.id === 'OPEN_CATEGORY') {
+                            defaultEntType = 'CATEGORY';
+                            defaultEntId = availableCategories[0]?.name || '';
+                          }
+                          setForm(prev => ({
+                            ...prev,
+                            action: act.id,
+                            entityType: defaultEntType,
+                            entityId: defaultEntId
+                          }));
+                        }}
+                        className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all text-center cursor-pointer border ${
+                          form.action === act.id
+                            ? 'bg-primary text-white border-primary shadow-xs'
+                            : 'bg-surface text-muted border-line hover:text-main'
+                        }`}
+                      >
+                        {act.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Dynamic Target Selectors */}
+                  {form.action === 'OPEN_RESTAURANT' && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-main mb-1">
+                        Select Destination Restaurant <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={form.entityId}
+                        onChange={(e) => setForm(prev => ({ ...prev, entityId: e.target.value, entityType: 'RESTAURANT' }))}
+                        className="w-full p-2.5 rounded-xl bg-surface border border-line text-xs font-bold text-main focus:outline-none focus:border-primary"
+                      >
+                        <option value="">-- Choose a restaurant --</option>
+                        {availableRestaurants.map(r => (
+                          <option key={r._id} value={r._id}>
+                            {r.name} {r.address ? `• ${r.address}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {form.action === 'OPEN_PRODUCT' && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-main mb-1">
+                        Select Destination Dish / Product <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={form.entityId}
+                        onChange={(e) => setForm(prev => ({ ...prev, entityId: e.target.value, entityType: 'PRODUCT' }))}
+                        className="w-full p-2.5 rounded-xl bg-surface border border-line text-xs font-bold text-main focus:outline-none focus:border-primary"
+                      >
+                        <option value="">-- Choose a dish / item --</option>
+                        {availableProducts.map(p => (
+                          <option key={p._id} value={p._id}>
+                            {p.name} {p.price ? `(₹${p.price})` : ''} {p.category ? `• ${p.category}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {form.action === 'OPEN_CATEGORY' && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-main mb-1">
+                        Select Destination Category <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={form.entityId}
+                        onChange={(e) => setForm(prev => ({ ...prev, entityId: e.target.value, entityType: 'CATEGORY' }))}
+                        className="w-full p-2.5 rounded-xl bg-surface border border-line text-xs font-bold text-main focus:outline-none focus:border-primary"
+                      >
+                        <option value="">-- Choose a category --</option>
+                        {availableCategories.map(c => (
+                          <option key={c._id || c.name} value={c.name}>
+                            {c.name} {c.dashboardType ? `(${c.dashboardType})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {form.action === 'NONE' && (
+                    <div className="p-2.5 bg-surface rounded-xl border border-line text-xs text-muted flex items-center gap-2">
+                      <Info className="w-4 h-4 text-blue-500 shrink-0" />
+                      <span>Tap will mark notification as read and leave user on current page.</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-2.5 bg-surface rounded-xl border border-line text-xs text-muted">
+                  Action: <strong>{form.action}</strong>
+                </div>
+              )}
+            </div>
+
+            {/* Notification Sound & Priority Control (Part AG) */}
+            <div>
+              <label className="block text-xs font-extrabold text-main mb-1">
+                Notification Sound Level
+              </label>
+              <div className="grid grid-cols-3 gap-2 p-1 bg-base rounded-2xl border border-line">
+                {[
+                  { id: 'NORMAL', label: '🔔 Normal (Soft)', desc: 'Standard chime' },
+                  { id: 'ATTENTION', label: '⚡ Attention', desc: 'Higher priority' },
+                  { id: 'SILENT', label: '🔕 Silent', desc: 'No audio chime' }
+                ].map(snd => (
+                  <button
+                    key={snd.id}
+                    type="button"
+                    onClick={() => setForm({ ...form, soundPreference: snd.id })}
+                    className={`py-2 px-2 rounded-xl text-center transition-all cursor-pointer ${
+                      form.soundPreference === snd.id
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-muted hover:text-main'
+                    }`}
+                  >
+                    <div className="text-xs font-bold">{snd.label}</div>
+                    <div className="text-[9px] opacity-80">{snd.desc}</div>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -409,6 +709,65 @@ export default function NotificationCampaignsTab({ token }) {
                 placeholder="https://api.jinkzo.com/uploads/banner.jpg"
                 className="w-full p-3 rounded-2xl bg-base border border-line text-xs font-medium text-main focus:outline-none focus:border-primary"
               />
+            </div>
+
+            {/* Live Interactive Notification Preview (Part R) */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-500/5 via-purple-500/5 to-pink-500/5 border border-line space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wider text-primary">
+                <span>📱 Live Notification Preview</span>
+                <span className="flex items-center gap-1 font-black">
+                  <Bell className="w-3.5 h-3.5 text-amber-500" /> Jinkzo 🔔
+                </span>
+              </div>
+
+              <div className="bg-surface rounded-2xl p-3.5 shadow-sm border border-line space-y-2">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+                    JZ
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-black text-xs text-main flex items-center justify-between">
+                      <span className="truncate">{form.title || 'Notification Title'}</span>
+                      <span className="text-[10px] text-muted font-normal">now</span>
+                    </div>
+                    <p className="text-[11px] text-muted mt-0.5 line-clamp-2 leading-relaxed">
+                      {form.body || 'Notification message text will appear here...'}
+                    </p>
+
+                    {form.imageUrl && (
+                      <div className="mt-2 rounded-xl overflow-hidden max-h-32 border border-line">
+                        <img 
+                          src={form.imageUrl} 
+                          alt="Notification preview" 
+                          className="w-full h-auto object-cover" 
+                          onError={(e) => e.target.style.display = 'none'} 
+                        />
+                      </div>
+                    )}
+
+                    <div className="mt-2.5 pt-2 border-t border-line/60 flex items-center justify-between text-[10px] font-bold">
+                      <span className="text-muted">Tap Action:</span>
+                      <span className={`px-2 py-0.5 rounded-md ${
+                        form.action === 'NONE' || form.notificationType === 'ANNOUNCEMENT' 
+                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' 
+                          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                      }`}>
+                        {form.action === 'NONE' || form.notificationType === 'ANNOUNCEMENT'
+                          ? 'Tap → Stays on current page'
+                          : `Tap → Opens ${
+                              form.action === 'OPEN_RESTAURANT'
+                                ? (availableRestaurants.find(r => r._id === form.entityId)?.name || 'Selected Restaurant')
+                                : form.action === 'OPEN_PRODUCT'
+                                  ? (availableProducts.find(p => p._id === form.entityId)?.name || 'Selected Product')
+                                  : form.action === 'OPEN_CATEGORY'
+                                    ? `${form.entityId || 'Category'}`
+                                    : 'Destination'
+                            }`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

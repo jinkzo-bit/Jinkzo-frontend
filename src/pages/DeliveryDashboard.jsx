@@ -6,7 +6,6 @@ import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import InteractiveMap from '../components/InteractiveMap';
 import { io } from 'socket.io-client';
-import NotificationCenter from '../components/NotificationCenter';
 import OrderDetailsModal from '../components/OrderDetailsModal';
 import { formatAppDateOnly, formatAppTimeOnly, formatAppDateTime } from '../utils/dateUtils';
 import { getOrderFinancialBreakdown, formatCurrency, formatDistance, formatRating, normalizeRiderRun, getOrderPlacedAt, getOrderDeliveredAt, getOrderSourceDisplayNames } from '../utils/orderUtils';
@@ -157,6 +156,33 @@ export default function DeliveryDashboard() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedOrderRestaurantAddress, setSelectedOrderRestaurantAddress] = useState('');
   const [isOrdersLoading, setIsOrdersLoading] = useState(true);
+
+  // Deep-link context handler for rider food orders & ride requests
+  const orderIdFromUrl = searchParams.get('order') || searchParams.get('ride');
+  useEffect(() => {
+    if (orderIdFromUrl) {
+      const availMatch = (availableOrders || []).find(o => String(o._id) === String(orderIdFromUrl) || String(o.orderNumber) === String(orderIdFromUrl));
+      if (availMatch) {
+        setSelectedOrder(availMatch);
+        setSelectedDetailsOrder(availMatch);
+        setActiveSubTabState('pool');
+        return;
+      }
+      const activeMatch = (activeOrders || []).find(o => String(o._id) === String(orderIdFromUrl) || String(o.orderNumber) === String(orderIdFromUrl));
+      if (activeMatch) {
+        setSelectedOrder(activeMatch);
+        setSelectedDetailsOrder(activeMatch);
+        setActiveSubTabState('orders');
+        return;
+      }
+      const histMatch = (historyOrders || []).find(o => String(o._id) === String(orderIdFromUrl) || String(o.orderNumber) === String(orderIdFromUrl));
+      if (histMatch) {
+        setSelectedDetailsOrder(histMatch);
+        setActiveSubTabState('history');
+        return;
+      }
+    }
+  }, [orderIdFromUrl, availableOrders, activeOrders, historyOrders]);
 
   // Global History Filter for Delivery Partner Runs
   const historyFilter = useHistoryFilter(historyOrders, {
@@ -1086,7 +1112,6 @@ export default function DeliveryDashboard() {
         {/* Availability & Capabilities Switches */}
         {user?.kycStatus === 'Approved' && (
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-surface border border-line p-4 rounded-2xl shadow-2xs">
-            <NotificationCenter userId={user?._id} role="delivery" />
             {/* Duty Toggle */}
             <div className="flex items-center gap-2.5 pr-4 sm:border-r sm:border-gray-150">
               <span className={`text-xs font-bold ${isAvailable ? 'text-green-600' : 'text-gray-450'}`}>

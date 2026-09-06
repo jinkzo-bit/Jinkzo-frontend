@@ -85,24 +85,77 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
+  const action = (data.action || '').toUpperCase();
 
-  // Resolve target route based on payload data
-  let targetRoute = '/';
-  if (data.link) {
-    targetRoute = data.link;
+  // Strict requirement: Announcements, greetings, and NONE actions close notification without navigating
+  if (action === 'NONE' || data.notificationType === 'ANNOUNCEMENT') {
+    return;
+  }
+
+  // Resolve target route based on structured metadata
+  let targetRoute = null;
+
+  if (action === 'OPEN_ORDER') {
+    const id = data.entityId || data.orderId;
+    if (id) targetRoute = `/order-tracking/${id}`;
+  } else if (action === 'OPEN_RIDE') {
+    const id = data.entityId || data.rideId;
+    if (id) targetRoute = `/order-tracking/${id}`;
+  } else if (action === 'OPEN_RESTAURANT') {
+    const id = data.entityId || data.restaurantId;
+    if (id) targetRoute = `/restaurant/${id}`;
+  } else if (action === 'OPEN_PRODUCT') {
+    if (data.restaurantId) targetRoute = `/restaurant/${data.restaurantId}`;
+    else if (data.entityId) targetRoute = `/restaurants?search=${encodeURIComponent(data.entityId)}`;
+  } else if (action === 'OPEN_CATEGORY') {
+    if (data.entityId) targetRoute = `/restaurants?category=${encodeURIComponent(data.entityId)}`;
+  } else if (action === 'OPEN_RESTAURANT_ORDER') {
+    const id = data.entityId || data.orderId;
+    targetRoute = id ? `/restaurant-dashboard?tab=orders&order=${id}` : '/restaurant-dashboard';
+  } else if (action === 'OPEN_RIDER_ORDER') {
+    const id = data.entityId || data.orderId;
+    targetRoute = id ? `/delivery-dashboard?tab=orders&order=${id}` : '/delivery-dashboard';
+  } else if (action === 'OPEN_RIDER_RIDE') {
+    const id = data.entityId || data.rideId;
+    targetRoute = id ? `/delivery-dashboard?tab=orders&ride=${id}` : '/delivery-dashboard';
+  } else if (action === 'OPEN_ADMIN_ORDER') {
+    const id = data.entityId || data.orderId;
+    targetRoute = id ? `/admin-dashboard?tab=orders&order=${id}` : '/admin-dashboard?tab=orders';
+  } else if (action === 'OPEN_ADMIN_RESTAURANT') {
+    const id = data.entityId || data.restaurantId;
+    targetRoute = id ? `/admin-dashboard?tab=suppliers_items&restaurant=${id}` : '/admin-dashboard?tab=suppliers_items';
+  }
+
+  // Fallback to explicit deepLink / link
+  if (!targetRoute && (data.deepLink || data.link)) {
+    targetRoute = data.deepLink || data.link;
     if (targetRoute.startsWith('/order/')) {
       targetRoute = `/order-tracking/${data.orderId || data.rideId || targetRoute.replace('/order/', '')}`;
     }
-  } else if (data.recipientRole === 'restaurant' || data.screen === 'restaurant-orders' || data.notificationType === 'NEW_ORDER_RESTAURANT') {
-    targetRoute = '/restaurant-dashboard';
-  } else if (data.recipientRole === 'delivery' || data.screen === 'rider-orders' || data.notificationType === 'DELIVERY_ASSIGNED_RIDER') {
-    targetRoute = '/delivery-dashboard';
-  } else if (data.recipientRole === 'admin' || data.screen === 'admin-orders') {
-    targetRoute = '/admin-dashboard';
-  } else if (data.orderId || data.rideId) {
-    targetRoute = `/order-tracking/${data.orderId || data.rideId}`;
-  } else if (data.restaurantId) {
-    targetRoute = `/restaurant/${data.restaurantId}`;
+  }
+
+  // Fallback for legacy role-based notifications
+  if (!targetRoute) {
+    if (data.orderId || data.rideId) {
+      if (data.recipientRole === 'restaurant') {
+        targetRoute = `/restaurant-dashboard?tab=orders&order=${data.orderId}`;
+      } else if (data.recipientRole === 'delivery') {
+        targetRoute = `/delivery-dashboard?tab=orders&${data.rideId ? 'ride' : 'order'}=${data.rideId || data.orderId}`;
+      } else {
+        targetRoute = `/order-tracking/${data.orderId || data.rideId}`;
+      }
+    } else if (data.recipientRole === 'restaurant' || data.screen === 'restaurant-orders' || data.notificationType === 'NEW_ORDER_RESTAURANT') {
+      targetRoute = '/restaurant-dashboard';
+    } else if (data.recipientRole === 'delivery' || data.screen === 'rider-orders' || data.notificationType === 'DELIVERY_ASSIGNED_RIDER') {
+      targetRoute = '/delivery-dashboard';
+    } else if (data.recipientRole === 'admin' || data.screen === 'admin-orders') {
+      targetRoute = '/admin-dashboard';
+    }
+  }
+
+  // If still no valid target route, close and do not open generic page
+  if (!targetRoute) {
+    return;
   }
 
   // Construct absolute target URL

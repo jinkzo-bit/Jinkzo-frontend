@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { API_BASE } from '../config/api';
+import { isValidGpsFix } from '../utils/coordinates';
 
 export const useLocationStore = create(
   persist(
@@ -80,15 +81,36 @@ export const useLocationStore = create(
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
             const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+
+            // Reject invalid, non-finite, or absurdly inaccurate GPS fixes (e.g. 2000000m)
+            if (!isValidGpsFix(lat, lng, accuracy)) {
+              console.warn('[LocationStore] Discarded unusable GPS fix:', { lat, lng, accuracy });
+              set({
+                isDetecting: false,
+                permissionStatus: 'granted',
+                errorMessage: 'Unable to get a precise location. Please select manually.',
+              });
+              return;
+            }
+
             let accuracyLevel = 'Good';
             let accuracyWarning = null;
             if (accuracy !== undefined && accuracy !== null) {
-              if (accuracy <= 20) accuracyLevel = 'Excellent';
-              else if (accuracy <= 50) accuracyLevel = 'Good';
-              else if (accuracy <= 100) accuracyLevel = 'Moderate';
-              else {
+              if (accuracy <= 20) {
+                accuracyLevel = 'Excellent';
+              } else if (accuracy <= 50) {
+                accuracyLevel = 'Good';
+              } else if (accuracy <= 100) {
+                accuracyLevel = 'Moderate';
+              } else if (accuracy <= 500) {
+                accuracyLevel = 'Approximate';
+                accuracyWarning = `Approximate location (±${Math.round(accuracy)}m). Please verify on map.`;
+              } else if (accuracy <= 2000) {
                 accuracyLevel = 'Low';
-                accuracyWarning = `Location accuracy is approximate (±${Math.round(accuracy)}m). Please verify on map.`;
+                accuracyWarning = `Low accuracy (±${Math.round(accuracy)}m). Move pin manually to exact location.`;
+              } else {
+                accuracyLevel = 'Very Low';
+                accuracyWarning = 'Very low accuracy — move pin manually to exact location.';
               }
             }
 

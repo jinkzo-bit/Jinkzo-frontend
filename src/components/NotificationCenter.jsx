@@ -5,14 +5,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config/api';
 import { useAuthStore } from '../store/authStore';
 import { setupForegroundNotificationListener } from '../services/firebaseMessaging';
+import { handleNotificationNavigation } from '../utils/notificationRouter';
+import { playNotificationSound } from '../utils/audio';
 
 const NotificationCenter = ({ role, userId, restaurantId }) => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const audioRef = useRef(null);
   const { token } = useAuthStore();
+  const processedNotifIds = useRef(new Set());
   
   useEffect(() => {
     fetchNotifications();
@@ -33,20 +35,31 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
       if ((role === 'customer' || role === 'user') && userId) socket.emit('join', `customer_${userId}`);
     });
 
-    const SOUND_NOTIFICATION_TYPES = new Set([
-      'NEW_ORDER_RESTAURANT',
-      'ORDER_REJECTED_CUSTOMER',
-      'DELIVERY_ASSIGNED_RIDER'
-    ]);
-
     socket.on('notification:new', (notif) => {
       console.log('[NotificationCenter] Received new notification', notif);
-      setNotifications(prev => [notif, ...prev]);
-      setUnreadCount(prev => prev + 1);
-      
-      if (SOUND_NOTIFICATION_TYPES.has(notif.type)) {
-        playNotificationSound();
+      const notifId = String(notif._id || notif.id || notif.eventId || '');
+
+      // Strict client deduplication: ignore if already processed
+      if (notifId && processedNotifIds.current.has(notifId)) {
+        console.log('[NotificationCenter] Deduplicated socket event for ID:', notifId);
+        return;
       }
+      if (notifId) {
+        processedNotifIds.current.add(notifId);
+      }
+
+      setNotifications(prev => {
+        if (notifId && prev.some(n => String(n._id || n.id || n.eventId || '') === notifId)) {
+          return prev;
+        }
+        return [notif, ...prev];
+      });
+
+      if (!notif.read) {
+        setUnreadCount(prev => prev + 1);
+      }
+
+      playNotificationSound(notif.soundType, notif.priority, notifId);
     });
 
     // Also attach foreground Web Push listener
@@ -75,18 +88,16 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.notifications || []);
+        list.forEach(n => {
+          const id = String(n._id || n.id || n.eventId || '');
+          if (id) processedNotifIds.current.add(id);
+        });
         setNotifications(list);
         const unread = typeof data.unreadCount === 'number' ? data.unreadCount : list.filter(n => !n.read).length;
         setUnreadCount(unread);
       }
     } catch (err) {
       console.error('Failed to fetch notifications', err);
-    }
-  };
-
-  const playNotificationSound = () => {
-    if (audioRef.current) {
-      audioRef.current.play().catch(e => console.log('Audio play failed (browser policy)', e));
     }
   };
 
@@ -123,31 +134,18 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
   };
 
   const handleNotificationClick = (notif) => {
-    if (!notif.read) {
-      markAsRead(notif._id);
-    }
-    const meta = notif.metadata || notif.data || {};
-    const orderId = notif.orderId || meta.orderId || notif.rideId || meta.rideId;
-    const recipientRole = notif.recipientRole || meta.recipientRole || role;
-
-    if (recipientRole === 'restaurant' || meta.screen === 'restaurant-orders') {
-      navigate('/restaurant-dashboard');
-    } else if (recipientRole === 'delivery' || meta.screen === 'rider-orders') {
-      navigate('/delivery-dashboard');
-    } else if (recipientRole === 'admin' || meta.screen === 'admin-orders') {
-      navigate('/admin-dashboard');
-    } else if (orderId) {
-      navigate(`/order-tracking/${orderId}`);
-    } else if (notif.link || meta.link) {
-      navigate(notif.link || meta.link);
-    }
-    setIsOpen(false);
+    handleNotificationNavigation(notif, navigate, {
+      onMarkRead: (id) => {
+        setNotifications(prev => prev.map(n => n._id === id ? { ...n, read: true } : n));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      },
+      onClose: () => setIsOpen(false),
+      token
+    });
   };
 
   return (
     <div className="relative z-50">
-      {/* Audio element for notification sound */}
-      <audio ref={audioRef} src="/notification.mp3" preload="auto" />
 
       <button 
         onClick={() => setIsOpen(!isOpen)}

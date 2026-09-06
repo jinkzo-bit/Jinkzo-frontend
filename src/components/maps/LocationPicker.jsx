@@ -3,7 +3,7 @@ import { MapPin, Navigation, Compass, Loader, Check, Copy } from 'lucide-react';
 import { useJsApiLoader, GoogleMap } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMapsLoader';
 import { parseAddressComponents } from '../../utils/parseAddressComponents';
-import { isValidCoordinates } from '../../utils/coordinates';
+import { isValidCoordinates, isValidGpsFix, getGpsAccuracyTier } from '../../utils/coordinates';
 import { API_BASE } from '../../config/api';
 import PlacesAutocomplete from './PlacesAutocomplete';
 
@@ -437,6 +437,14 @@ export default function LocationPicker({
       (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
         
+        // Reject invalid, non-finite, or absurdly inaccurate GPS fixes (e.g. 2000000m)
+        if (!isValidGpsFix(lat, lng, accuracy)) {
+          console.warn('[GPS] Discarded unusable GPS fix:', { lat, lng, accuracy });
+          setIsLocating(false);
+          alert('Unable to get a precise location. Please move the pin manually or search your area.');
+          return;
+        }
+
         // Authoritative device GPS coordinates
         setSelectedLocation(prev => ({
           ...prev,
@@ -720,54 +728,46 @@ export default function LocationPicker({
           </div>
         )}
 
-        {/* Accuracy Circle */}
-        {selectedLocation.accuracy && selectedLocation.lat && selectedLocation.lng && (
-          <>
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{ transform: 'translate(-50%, -50%)', left: '50%', top: '50%' }}
-            >
-              <div
-                style={{
-                  width: `${Math.min(selectedLocation.accuracy * 2, 800)}px`,
-                  height: `${Math.min(selectedLocation.accuracy * 2, 800)}px`,
-                  borderRadius: '50%', border: '2px solid #7c3aed',
-                  background: 'rgba(124, 58, 237, 0.08)',
-                  transform: 'translate(-50%, -50%)', pointerEvents: 'none',
-                }}
-              />
-            </div>
-            {!isDirectionActive && (
-              <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-1">
-                <div className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg ${
-                  selectedLocation.accuracy <= 20
-                    ? 'bg-emerald-600'
-                    : selectedLocation.accuracy <= 50
-                      ? 'bg-violet-600'
-                      : selectedLocation.accuracy <= 100
-                        ? 'bg-amber-600'
-                        : 'bg-red-600'
-                }`}>
-                  <MapPin className="w-3 h-3" />
-                  ±{Math.round(selectedLocation.accuracy)}m ({
-                    selectedLocation.accuracy <= 20
-                      ? 'Excellent'
-                      : selectedLocation.accuracy <= 50
-                        ? 'Good'
-                        : selectedLocation.accuracy <= 100
-                          ? 'Moderate'
-                          : 'Low accuracy'
-                  })
+        {/* Accuracy Circle & Status Badge (Validated, non-absurd values only) */}
+        {(() => {
+          const tier = getGpsAccuracyTier(selectedLocation.accuracy);
+          if (!tier || !selectedLocation.lat || !selectedLocation.lng) return null;
+          return (
+            <>
+              {tier.showRadius && (
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ transform: 'translate(-50%, -50%)', left: '50%', top: '50%' }}
+                >
+                  <div
+                    style={{
+                      width: `${Math.min(selectedLocation.accuracy * 2, 600)}px`,
+                      height: `${Math.min(selectedLocation.accuracy * 2, 600)}px`,
+                      borderRadius: '50%',
+                      border: '2px solid #7c3aed',
+                      background: 'rgba(124, 58, 237, 0.08)',
+                      transform: 'translate(-50%, -50%)',
+                      pointerEvents: 'none',
+                    }}
+                  />
                 </div>
-                {selectedLocation.accuracy > 100 && (
-                  <div className="bg-black/80 backdrop-blur-sm text-amber-300 text-[9px] font-medium px-2 py-0.5 rounded-md shadow-md max-w-[200px] text-right">
-                    Move pin manually to exact location
+              )}
+              {!isDirectionActive && (
+                <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-1">
+                  <div className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg ${tier.colorClass}`}>
+                    <MapPin className="w-3 h-3" />
+                    <span>{tier.text}</span>
                   </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
+                  {tier.warning && (
+                    <div className="bg-black/80 backdrop-blur-sm text-amber-300 text-[9px] font-medium px-2 py-0.5 rounded-md shadow-md max-w-[220px] text-right">
+                      {tier.warning}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {/* Map Floating Controls (Bottom-Right) */}
         <div style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>

@@ -1,7 +1,7 @@
 import { API_BASE } from '../config/api';
 import { io } from 'socket.io-client';
 import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ShieldAlert, DollarSign, ShoppingBag, Users, Store, Bike, CheckCircle, Check,
   XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare,
@@ -173,9 +173,17 @@ const normalizeSettings = (incoming) => {
 export default function AdminDashboard() {
   const { user, token } = useAuthStore();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  const [activeSubTab, setActiveSubTab] = useState('analytics'); // 'analytics', 'kyc', 'users', 'withdrawals', 'complaints', 'coupons', 'settings'
+  const tabFromUrl = searchParams.get('tab');
+  const [activeSubTab, setActiveSubTab] = useState(tabFromUrl || 'analytics'); // 'analytics', 'kyc', 'users', 'withdrawals', 'complaints', 'coupons', 'settings'
   const [selectedDetailsOrder, setSelectedDetailsOrder] = useState(null);
+
+  useEffect(() => {
+    if (tabFromUrl) {
+      setActiveSubTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   // States
   const [metrics, setMetrics] = useState(null);
@@ -277,6 +285,19 @@ export default function AdminDashboard() {
   // Orders history
   const [allOrders, setAllOrders] = useState([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState(true);
+
+  // Deep-link context handler for admin orders
+  const orderIdFromUrl = searchParams.get('order');
+  useEffect(() => {
+    if (orderIdFromUrl && allOrders.length > 0) {
+      const match = allOrders.find(o => String(o._id) === String(orderIdFromUrl) || String(o.orderNumber) === String(orderIdFromUrl));
+      if (match) {
+        setSelectedDetailsOrder(match);
+        setActiveSubTab('orders');
+      }
+    }
+  }, [orderIdFromUrl, allOrders]);
+
   const [riderAssignmentFilter, setRiderAssignmentFilter] = useState('all'); // 'all', 'assigned', 'waiting', 'rejected'
   const [assignRiderOrder, setAssignRiderOrder] = useState(null);
   const [isReassigning, setIsReassigning] = useState(false);

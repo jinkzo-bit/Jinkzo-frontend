@@ -1,8 +1,9 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Search, SlidersHorizontal, ArrowUpDown, AlertTriangle, Heart, ShoppingBag, Store, Sparkles, X, MapPin } from 'lucide-react';
+import { Search, SlidersHorizontal, AlertTriangle, Heart, ShoppingBag, Store, Sparkles, X, MapPin } from 'lucide-react';
 import RestaurantCard from '../components/RestaurantCard';
+import FoodDietaryFilter from '../components/FoodDietaryFilter';
 import { useCartStore } from '../store/cartStore';
 import { useFavoriteStore } from '../store/favoriteStore';
 import { useTranslation } from '../store/languageStore';
@@ -37,20 +38,26 @@ export default function RestaurantListing() {
   const [activeSearchTab, setActiveSearchTab] = useState('all');
 
   // Identify Active Dashboard for Browsing Mode
+  const normCategory = (categoryParam || '').toLowerCase().trim();
+  const isFoodCategory = !normCategory || normCategory === 'food';
+
   let activeDashboard = 'food';
   let defaultCategories = foodCategories;
 
-  if (categoryParam === 'beverages' || categoryParam === 'hot_cool' || categoryParam === 'cool_hot') {
+  if (normCategory === 'beverages' || normCategory === 'hot_cool' || normCategory === 'cool_hot') {
     activeDashboard = 'cool_hot';
     defaultCategories = [];
-  } else if (categoryParam === 'grocery') {
+  } else if (normCategory === 'grocery') {
     activeDashboard = 'grocery';
     defaultCategories = [];
-  } else if (categoryParam === 'meat') {
+  } else if (normCategory === 'meat') {
     activeDashboard = 'meat';
     defaultCategories = [];
-  } else if (categoryParam === 'fruits-vegetables' || categoryParam === 'veg_fruits') {
+  } else if (normCategory === 'fruits-vegetables' || normCategory === 'veg_fruits') {
     activeDashboard = 'veg_fruits';
+    defaultCategories = [];
+  } else if (normCategory && normCategory !== 'food') {
+    activeDashboard = normCategory;
     defaultCategories = [];
   }
 
@@ -77,11 +84,25 @@ export default function RestaurantListing() {
 
   const activeCategories = (dynamicCategories && dynamicCategories.length > 0) ? dynamicCategories : defaultCategories;
 
-  // Filter and sort states
+  // Filter states
   const [searchQuery, setSearchQuery] = useState(searchParam);
   const [selectedCuisine, setSelectedCuisine] = useState(searchParams.get('cuisine') || 'All');
-  const [isPureVeg, setIsPureVeg] = useState(searchParams.get('veg') === 'true');
-  const [activeSort, setActiveSort] = useState(searchParams.get('sort') || 'rating');
+
+  // Dietary filter state: 'all' | 'veg' | 'non-veg' (Active ONLY for Food category)
+  const [dietFilter, setDietFilter] = useState(() => {
+    if (!isFoodCategory) return 'all';
+    const d = searchParams.get('diet');
+    if (d === 'veg' || d === 'non-veg') return d;
+    if (searchParams.get('veg') === 'true') return 'veg';
+    return 'all';
+  });
+
+  // Automatically reset Food dietary filter when switching away from Food
+  useEffect(() => {
+    if (!isFoodCategory) {
+      setDietFilter('all');
+    }
+  }, [isFoodCategory]);
 
   // Zustand Stores
   const cartItems = useCartStore((state) => state.items);
@@ -107,9 +128,20 @@ export default function RestaurantListing() {
     const paramSearch = searchParams.get('search') || '';
     setSearchQuery(paramSearch);
     setSelectedCuisine(searchParams.get('cuisine') || 'All');
-    setIsPureVeg(searchParams.get('veg') === 'true');
-    setActiveSort(searchParams.get('sort') || 'rating');
-  }, [searchParams]);
+
+    if (isFoodCategory) {
+      const d = searchParams.get('diet');
+      if (d === 'veg' || d === 'non-veg') {
+        setDietFilter(d);
+      } else if (searchParams.get('veg') === 'true') {
+        setDietFilter('veg');
+      } else {
+        setDietFilter('all');
+      }
+    } else {
+      setDietFilter('all');
+    }
+  }, [searchParams, isFoodCategory]);
 
   // Fetch category-services availability list
   useEffect(() => {
@@ -173,21 +205,33 @@ export default function RestaurantListing() {
             try {
               const dishParams = new URLSearchParams();
               dishParams.set('search', searchQuery.trim());
-              if (isPureVeg) dishParams.set('veg', 'true');
+              if (dietFilter === 'veg') dishParams.set('veg', 'true');
 
               const [dishesRes, restRes] = await Promise.allSettled([
                 fetch(`${API_BASE}/restaurants/dishes/search?${dishParams.toString()}`),
-                fetch(`${API_BASE}/restaurants?search=${encodeURIComponent(searchQuery.trim())}`)
+                fetch(`${API_BASE}/restaurants?search=${encodeURIComponent(searchQuery.trim())}${dietFilter === 'veg' ? '&veg=true' : ''}`)
               ]);
 
               if (dishesRes.status === 'fulfilled' && dishesRes.value.ok) {
                 const dData = await dishesRes.value.json();
-                fetchedFoodDishes = Array.isArray(dData) ? dData : (dData.dishes || dData.data || []);
+                let rawDishes = Array.isArray(dData) ? dData : (dData.dishes || dData.data || []);
+                if (dietFilter === 'veg') {
+                  rawDishes = rawDishes.filter(d => d.isVeg === true);
+                } else if (dietFilter === 'non-veg') {
+                  rawDishes = rawDishes.filter(d => d.isVeg === false);
+                }
+                fetchedFoodDishes = rawDishes;
               }
 
               if (restRes.status === 'fulfilled' && restRes.value.ok) {
                 const rData = await restRes.value.json();
-                fetchedFoodRestaurants = Array.isArray(rData) ? rData : (rData.restaurants || rData.data || []);
+                let rawRest = Array.isArray(rData) ? rData : (rData.restaurants || rData.data || []);
+                if (dietFilter === 'veg') {
+                  rawRest = rawRest.filter(r => r.isPureVeg === true);
+                } else if (dietFilter === 'non-veg') {
+                  rawRest = rawRest.filter(r => r.isPureVeg === false);
+                }
+                fetchedFoodRestaurants = rawRest;
               }
             } catch (err) {
               console.error('Error searching food items:', err);
@@ -285,14 +329,19 @@ export default function RestaurantListing() {
           if (activeDashboard === 'food') {
             const queryParams = new URLSearchParams();
             if (selectedCuisine && selectedCuisine !== 'All') queryParams.set('cuisine', selectedCuisine);
-            if (isPureVeg) queryParams.set('veg', 'true');
+            if (dietFilter === 'veg') queryParams.set('veg', 'true');
 
             if (selectedCuisine !== 'All') {
               const url = `${API_BASE}/restaurants/dishes/search?${queryParams.toString()}`;
               const res = await fetch(url);
               if (res.ok) {
                 const data = await res.json();
-                const list = Array.isArray(data) ? data : (data.dishes || data.data || []);
+                let list = Array.isArray(data) ? data : (data.dishes || data.data || []);
+                if (dietFilter === 'veg') {
+                  list = list.filter(d => d.isVeg === true);
+                } else if (dietFilter === 'non-veg') {
+                  list = list.filter(d => d.isVeg === false);
+                }
                 if (!isCancelled) {
                   setDishes(list.map(d => ({ ...d, service: 'food', serviceName: 'Food' })));
                   setRestaurants([]);
@@ -302,13 +351,18 @@ export default function RestaurantListing() {
                 setRestaurants([]);
               }
             } else {
-              if (activeSort) queryParams.set('sort', activeSort);
               const url = `${API_BASE}/restaurants?${queryParams.toString()}`;
               const res = await fetch(url);
               if (res.ok) {
                 const data = await res.json();
+                let list = Array.isArray(data) ? data : (data.restaurants || data.data || []);
+                if (dietFilter === 'veg') {
+                  list = list.filter(r => r.isPureVeg === true);
+                } else if (dietFilter === 'non-veg') {
+                  list = list.filter(r => r.isPureVeg === false);
+                }
                 if (!isCancelled) {
-                  setRestaurants(Array.isArray(data) ? data : (data.restaurants || data.data || []));
+                  setRestaurants(list);
                   setDishes([]);
                 }
               } else if (!isCancelled) {
@@ -408,7 +462,7 @@ export default function RestaurantListing() {
     return () => {
       isCancelled = true;
     };
-  }, [activeDashboard, searchQuery, isGlobalSearch, selectedCuisine, isPureVeg, activeSort, allCategoryServices]);
+  }, [activeDashboard, searchQuery, isGlobalSearch, selectedCuisine, dietFilter, allCategoryServices]);
 
   // URL sync helper
   const updateUrlParam = (key, value) => {
@@ -427,16 +481,20 @@ export default function RestaurantListing() {
     updateUrlParam('cuisine', nextVal);
   };
 
-  const handleVegToggle = () => {
-    const nextVal = !isPureVeg;
-    setIsPureVeg(nextVal);
-    updateUrlParam('veg', nextVal ? 'true' : null);
-  };
-
-  const handleSortChange = (e) => {
-    const val = e.target.value;
-    setActiveSort(val);
-    updateUrlParam('sort', val);
+  const handleDietFilterChange = (newDiet) => {
+    setDietFilter(newDiet);
+    const newParams = new URLSearchParams(searchParams);
+    if (newDiet === 'veg') {
+      newParams.set('diet', 'veg');
+      newParams.delete('veg');
+    } else if (newDiet === 'non-veg') {
+      newParams.set('diet', 'non-veg');
+      newParams.delete('veg');
+    } else {
+      newParams.delete('diet');
+      newParams.delete('veg');
+    }
+    setSearchParams(newParams);
   };
 
   const handleClearSearch = () => {
@@ -519,7 +577,7 @@ export default function RestaurantListing() {
     return matched.reduce((acc, curr) => acc + (curr.quantity || 0), 0);
   };
 
-  // Sorted and filtered dishes
+  // Filtered dishes
   const sortedDishes = useMemo(() => {
     if (!Array.isArray(dishes)) return [];
     let list = [...dishes];
@@ -529,18 +587,17 @@ export default function RestaurantListing() {
       list = list.filter(item => item.service === activeSearchTab);
     }
 
-    if (activeSort === 'costAsc') {
-      list.sort((a, b) => a.price - b.price);
-    } else if (activeSort === 'costDesc') {
-      list.sort((a, b) => b.price - a.price);
-    } else if (activeSort === 'rating') {
-      list.sort((a, b) => (b.restaurant?.rating || 0) - (a.restaurant?.rating || 0));
-    } else if (activeSort === 'deliveryTime') {
-      list.sort((a, b) => (a.restaurant?.deliveryTime || 0) - (b.restaurant?.deliveryTime || 0));
+    // In global search, apply diet filter to food items
+    if (isGlobalSearch && (activeSearchTab === 'all' || activeSearchTab === 'food')) {
+      if (dietFilter === 'veg') {
+        list = list.filter(item => item.service !== 'food' || item.isVeg === true);
+      } else if (dietFilter === 'non-veg') {
+        list = list.filter(item => item.service !== 'food' || item.isVeg === false);
+      }
     }
 
     return list;
-  }, [dishes, isGlobalSearch, activeSearchTab, activeSort]);
+  }, [dishes, isGlobalSearch, activeSearchTab, dietFilter]);
 
   // Group dishes by Store / Supplier for Catalog Categories
   const storeGroups = useMemo(() => {
@@ -949,38 +1006,15 @@ export default function RestaurantListing() {
               )}
             </div>
 
-            {/* Pure Veg (Food / All only) + Sort Controls */}
-            <div className="flex items-center gap-3 flex-shrink-0">
-              {(activeSearchTab === 'all' || activeSearchTab === 'food') && (
-                <button
-                  onClick={handleVegToggle}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-                    isPureVeg
-                      ? 'bg-green-50 dark:bg-green-950/40 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 font-extrabold'
-                      : 'bg-base dark:bg-[#1C2233] border-line text-muted hover:border-line-strong'
-                  }`}
-                >
-                  <span className={`w-3.5 h-3.5 border-2 rounded-sm flex items-center justify-center ${isPureVeg ? 'border-green-600 dark:border-green-400' : 'border-gray-400'}`}>
-                    {isPureVeg && <span className="w-1.5 h-1.5 bg-green-600 dark:bg-green-400 rounded-xs" />}
-                  </span>
-                  <span>{t('restaurant.pureVeg', 'Pure Veg')}</span>
-                </button>
-              )}
-
-              <div className="flex items-center gap-2 text-muted border border-line bg-base dark:bg-[#1C2233] rounded-2xl px-3 py-2 text-xs font-bold shadow-2xs">
-                <ArrowUpDown className="w-3.5 h-3.5 text-muted flex-shrink-0" />
-                <select
-                  value={activeSort}
-                  onChange={handleSortChange}
-                  className="bg-transparent outline-none border-none text-main dark:text-white cursor-pointer text-xs font-bold pr-1"
-                >
-                  <option value="rating" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Rating (High to Low)</option>
-                  <option value="deliveryTime" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Delivery Time</option>
-                  <option value="costAsc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Price (Low to High)</option>
-                  <option value="costDesc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">Price (High to Low)</option>
-                </select>
+            {/* FOOD ONLY: Segmented Dietary Filter [ ALL ] [ 🟢 VEG ] [ 🔴 NON-VEG ] in search */}
+            {(activeSearchTab === 'all' || activeSearchTab === 'food') && (
+              <div className="flex items-center flex-shrink-0">
+                <FoodDietaryFilter
+                  value={dietFilter}
+                  onChange={handleDietFilterChange}
+                />
               </div>
-            </div>
+            )}
           </div>
         </section>
       ) : (
@@ -1047,38 +1081,15 @@ export default function RestaurantListing() {
             </div>
           )}
 
-          {/* Pure Veg (Food only) + Sort Controls */}
-          <div className="flex flex-row lg:flex-col items-stretch justify-end gap-3 flex-shrink-0 pt-3 lg:pt-0 lg:pl-6 border-t lg:border-t-0 lg:border-l border-line">
-            {activeDashboard === 'food' && (
-              <button
-                onClick={handleVegToggle}
-                className={`flex items-center justify-center lg:justify-start gap-2 px-4 py-2.5 rounded-2xl border text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-                  isPureVeg
-                    ? 'bg-green-50 dark:bg-green-950/40 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 font-extrabold'
-                    : 'bg-base dark:bg-[#1C2233] border-line text-muted hover:border-line-strong'
-                }`}
-              >
-                <span className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center ${isPureVeg ? 'border-green-600 dark:border-green-400' : 'border-gray-400'}`}>
-                  {isPureVeg && <span className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-xs" />}
-                </span>
-                <span>{t('restaurant.pureVeg', 'Pure Veg')}</span>
-              </button>
-            )}
-
-            <div className="flex items-center gap-2 text-muted border border-line bg-base dark:bg-[#1C2233] rounded-2xl px-3.5 py-2.5 text-xs font-bold shadow-2xs">
-              <ArrowUpDown className="w-4 h-4 text-muted flex-shrink-0" />
-              <select
-                value={activeSort}
-                onChange={handleSortChange}
-                className="bg-transparent outline-none border-none text-main dark:text-white cursor-pointer text-xs font-bold pr-1 w-full"
-              >
-                <option value="rating" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortRating', 'Sort by: Rating (High to Low)')}</option>
-                <option value="deliveryTime" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortDeliveryTime', 'Sort by: Delivery Time')}</option>
-                <option value="costAsc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortPriceLowHigh', 'Sort by: Price (Low to High)')}</option>
-                <option value="costDesc" className="bg-surface text-main dark:bg-[#141926] dark:text-white">{t('restaurant.sortPriceHighLow', 'Sort by: Price (High to Low)')}</option>
-              </select>
+          {/* FOOD ONLY: Segmented Dietary Filter [ ALL ] [ 🟢 VEG ] [ 🔴 NON-VEG ] */}
+          {isFoodCategory && (
+            <div className="flex items-center justify-end flex-shrink-0 pt-3 lg:pt-0 lg:pl-6 border-t lg:border-t-0 lg:border-l border-line">
+              <FoodDietaryFilter
+                value={dietFilter}
+                onChange={handleDietFilterChange}
+              />
             </div>
-          </div>
+          )}
         </section>
       )}
 
@@ -1158,12 +1169,12 @@ export default function RestaurantListing() {
                 We checked across all active services (Food, Grocery, Meat, Veg & Fruits, Bakery & Beverages) for "{searchQuery}".
               </p>
               <div className="flex items-center gap-3 mt-3">
-                {isPureVeg && (
+                {dietFilter !== 'all' && (
                   <button
-                    onClick={() => setIsPureVeg(false)}
+                    onClick={() => handleDietFilterChange('all')}
                     className="bg-base text-main border border-line font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer hover:border-line-strong"
                   >
-                    Turn Off Pure Veg
+                    Show All Food
                   </button>
                 )}
                 <button
@@ -1193,8 +1204,7 @@ export default function RestaurantListing() {
               <button
                 onClick={() => {
                   setSelectedCuisine('All');
-                  setIsPureVeg(false);
-                  setActiveSort('rating');
+                  setDietFilter('all');
                   setSearchParams({});
                 }}
                 className="bg-primary text-white font-bold text-xs px-5 py-2.5 rounded-xl mt-3 shadow-md cursor-pointer hover:bg-primary-hover"
@@ -1261,8 +1271,6 @@ export default function RestaurantListing() {
               <button
                 onClick={() => {
                   setSelectedCuisine('All');
-                  setIsPureVeg(false);
-                  setActiveSort('rating');
                   setSearchParams({ category: categoryParam });
                 }}
                 className="bg-primary text-white font-bold text-xs px-5 py-2.5 rounded-xl mt-3 shadow-md cursor-pointer hover:bg-primary-hover"
@@ -1287,8 +1295,7 @@ export default function RestaurantListing() {
               <button
                 onClick={() => {
                   setSelectedCuisine('All');
-                  setIsPureVeg(false);
-                  setActiveSort('rating');
+                  setDietFilter('all');
                   setSearchParams({});
                 }}
                 className="bg-primary text-white font-bold text-xs px-5 py-2.5 rounded-xl mt-3 shadow-md cursor-pointer hover:bg-primary-hover"

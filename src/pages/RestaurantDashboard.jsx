@@ -2,13 +2,12 @@ import { API_BASE } from '../config/api';
 import { io } from 'socket.io-client';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Bell, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus, Pencil, AlertTriangle, ArrowLeft, FolderTree, FolderPlus, Star } from 'lucide-react';
+import { Store, Plus, Edit2, Trash2, ShoppingBag, DollarSign, List, Shield, Check, Tag, Clock, MapPin, X, ArrowUpRight, Calendar, ImagePlus, Pencil, AlertTriangle, ArrowLeft, FolderTree, FolderPlus, Star } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
 import { getOrderFinancialBreakdown, formatCurrency, formatDistance, formatRating, getOrderPlacedAt, getOrderDeliveredAt } from '../utils/orderUtils';
 import LocationPickerModal from '../components/LocationPickerModal';
-import NotificationCenter from '../components/NotificationCenter';
 import VegBadge from '../components/VegBadge';
 import ImageUploadInput from '../components/common/ImageUploadInput';
 import OrderDetailsModal from '../components/OrderDetailsModal';
@@ -197,6 +196,25 @@ export default function RestaurantDashboard() {
   
   // Orders Pipeline sub-tabs and Date filtering
   const [orderPipelineTab, setOrderPipelineTab] = useState('new'); // 'new', 'ongoing', 'completed'
+
+  // Deep-link context handler: auto-open and highlight specific order when ?order=ORDER_ID is present
+  const orderIdFromUrl = searchParams.get('order');
+  useEffect(() => {
+    if (orderIdFromUrl && orders.length > 0) {
+      const match = orders.find(o => String(o._id) === String(orderIdFromUrl) || String(o.orderNumber) === String(orderIdFromUrl));
+      if (match) {
+        setSelectedDetailsOrder(match);
+        setActiveSubTabState('orders');
+        if (['Pending', 'Placed'].includes(match.status)) {
+          setOrderPipelineTab('new');
+        } else if (['Preparing', 'Ready', 'Out for Delivery', 'Accepted', 'Ready_for_Pickup'].includes(match.status)) {
+          setOrderPipelineTab('ongoing');
+        } else {
+          setOrderPipelineTab('completed');
+        }
+      }
+    }
+  }, [orderIdFromUrl, orders]);
 
   // Global History Filter for Restaurant
   const historyFilter = useHistoryFilter(orders, {
@@ -1069,9 +1087,6 @@ export default function RestaurantDashboard() {
               </button>
             </div>
           )}
-
-          {/* Notification Center Bell */}
-          <NotificationCenter role="restaurant" userId={user?._id} restaurantId={restaurantProfile?._id} />
 
           {/* KYC Status Badge */}
           <div className="flex items-center gap-2">
