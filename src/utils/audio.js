@@ -132,13 +132,27 @@ export const playNotificationSound = (soundType = 'GENERAL', priority = 'NORMAL'
 
   let soundFile = '/sounds/general_notification.wav';
   if (st === 'NEW_ORDER') {
-    soundFile = '/sounds/restaurant_new_order.wav';
+    soundFile = '/sounds/new_order.wav';
   } else if (st === 'NEW_RIDE') {
-    soundFile = '/sounds/rider_new_order.wav';
-  } else if (['ORDER_PLACED', 'ORDER_ACCEPTED', 'ORDER_DELIVERED', 'RIDER_ASSIGNED', 'RIDE_ACCEPTED'].includes(st)) {
-    soundFile = '/sounds/customer_order.wav';
-  } else if (['ORDER_REJECTED', 'RIDE_REJECTED', 'CANCELLATION'].includes(st)) {
-    soundFile = '/sounds/customer_order.wav';
+    soundFile = '/sounds/new_ride.wav';
+  } else if (st === 'ORDER_PLACED') {
+    soundFile = '/sounds/order_placed.wav';
+  } else if (st === 'ORDER_ACCEPTED') {
+    soundFile = '/sounds/order_accepted.wav';
+  } else if (st === 'ORDER_REJECTED' || st === 'RIDE_REJECTED') {
+    soundFile = '/sounds/order_rejected.wav';
+  } else if (st === 'RIDER_ASSIGNED') {
+    soundFile = '/sounds/rider_assigned.wav';
+  } else if (st === 'ORDER_DELIVERED') {
+    soundFile = '/sounds/order_delivered.wav';
+  } else if (st === 'ORDER_CANCELLED' || st === 'CANCELLATION' || st === 'CUSTOMER_CANCELLED') {
+    soundFile = '/sounds/order_cancelled.wav';
+  } else if (st === 'RIDE_CANCELLED') {
+    soundFile = '/sounds/ride_cancelled.wav';
+  } else if (st === 'RIDE_ACCEPTED') {
+    soundFile = '/sounds/ride_accepted.wav';
+  } else if (st === 'GENERAL' || st === 'ANNOUNCEMENT') {
+    soundFile = '/sounds/general_notification.wav';
   }
 
   // Attempt HTML5 Audio first

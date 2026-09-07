@@ -66,6 +66,16 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
     let unsubscribePush = () => {};
     setupForegroundNotificationListener((payload) => {
       console.log('[NotificationCenter] Foreground FCM push notification:', payload);
+      const data = payload?.data || {};
+      const notifId = String(data.notificationId || data.eventId || data._id || data.id || '');
+      if (notifId && processedNotifIds.current.has(notifId)) {
+        console.log('[NotificationCenter] Deduplicated foreground push for ID:', notifId);
+        return;
+      }
+      if (notifId) {
+        processedNotifIds.current.add(notifId);
+      }
+      playNotificationSound(data.soundType, data.priority, notifId || null);
       fetchNotifications();
     }).then(unsub => {
       if (typeof unsub === 'function') unsubscribePush = unsub;
