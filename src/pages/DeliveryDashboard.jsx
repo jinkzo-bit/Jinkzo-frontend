@@ -9,6 +9,7 @@ import { io } from 'socket.io-client';
 import OrderDetailsModal from '../components/OrderDetailsModal';
 import { formatAppDateOnly, formatAppTimeOnly, formatAppDateTime } from '../utils/dateUtils';
 import { getOrderFinancialBreakdown, formatCurrency, formatDistance, formatRating, normalizeRiderRun, getOrderPlacedAt, getOrderDeliveredAt, getOrderSourceDisplayNames } from '../utils/orderUtils';
+import { playNotificationSound } from '../utils/audio';
 import {
   useHistoryFilter,
   HistoryFilterToolbar,
@@ -699,10 +700,22 @@ export default function DeliveryDashboard() {
     socket.on('connect', () => {
       socket.emit('join', `user_${user._id}`);
       socket.emit('join', `delivery_${user._id}`);
+      socket.emit('join', 'delivery_room');
       if (selectedOrder?._id) {
         socket.emit('join', `order_${selectedOrder._id}`);
         socket.emit('join', `order:${selectedOrder._id}`);
       }
+    });
+
+    // Real-time instant notification handling for rider / delivery partner
+    socket.on('notification:new', (notif) => {
+      console.log('[DeliveryDashboard] Real-time notification received:', notif);
+      playNotificationSound(
+        notif.soundType || 'NEW_ORDER',
+        notif.priority || 'HIGH',
+        notif._id || notif.eventId || notif.orderId || notif.rideId || null
+      );
+      fetchOrdersData();
     });
 
     // Pickup stop updated by restaurant or rider (milestone progression)

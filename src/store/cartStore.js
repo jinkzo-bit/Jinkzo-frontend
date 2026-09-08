@@ -15,6 +15,7 @@ export const useCartStore = create(
   promoCode: null,
   promoDiscount: 0,
   cashbackAmount: 0,
+  cartOwnerId: null,   // userId of the customer who owns this cart — null = guest/unowned
   toasts: [],
   platformSettings: {
     commissionPercent: 15,
@@ -239,7 +240,31 @@ export const useCartStore = create(
       promoCode: null,
       promoDiscount: 0,
       cashbackAmount: 0
+      // cartOwnerId intentionally NOT reset here — caller manages ownership
     });
+  },
+
+  // Stamp the logged-in user as the owner of the current cart.
+  setCartOwner: (userId) => {
+    set({ cartOwnerId: userId ? String(userId) : null });
+  },
+
+  // Guard called at every login entry-point.
+  // Clears the cart ONLY when:
+  //   • a different user is logging in  (isDifferentUser)
+  //   • a legacy/guest cart has no owner (isLegacyOrGuestCart)
+  //   • incomingUserId is null  (logout path — optional, not used by default)
+  // Same user re-logging in: cart is preserved (no-op).
+  clearCartForUser: (incomingUserId) => {
+    const { cartOwnerId, items } = get();
+    const incoming = incomingUserId ? String(incomingUserId) : null;
+    const isDifferentUser      = cartOwnerId !== null && cartOwnerId !== incoming;
+    const isLegacyOrGuestCart  = cartOwnerId === null && items.length > 0;
+
+    if (isDifferentUser || isLegacyOrGuestCart) {
+      get().clearCart();
+    }
+    // Same user → cart survives
   },
 
   applyPromo: (code) => {
@@ -485,11 +510,12 @@ export const useCartStore = create(
   name: 'corior-cart',          // localStorage key
   partialize: (state) => ({
     // Only persist cart data — exclude ephemeral UI state
-    items:         state.items,
-    restaurant:    state.restaurant,
-    promoCode:     state.promoCode,
-    promoDiscount: state.promoDiscount,
+    items:          state.items,
+    restaurant:     state.restaurant,
+    promoCode:      state.promoCode,
+    promoDiscount:  state.promoDiscount,
     cashbackAmount: state.cashbackAmount,
+    cartOwnerId:    state.cartOwnerId,   // persisted so ownership survives page refresh
     // toasts and platformSettings intentionally excluded:
     // toasts   → should not outlive the session
     // platformSettings → always re-fetched from API on app boot

@@ -311,15 +311,15 @@ export default function Cart() {
                   const itemName = item.name || item.itemName || item.productName || item.title || item.foodName || 'Item';
                   return (
                     <div key={item.cartKey || `${item.menuItemId}_${item.unit || ''}`} className="py-3.5 first:pt-1 last:pb-1 flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3.5 max-w-[65%]">
+                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
                         <img
                           src={getImageUrl(item.image, 'food')}
                           alt={itemName}
                           onError={(e) => handleImageError(e, 'food')}
                           className="w-16 h-16 md:w-18 md:h-18 object-cover rounded-2xl bg-base flex-shrink-0 border border-line"
                         />
-                        <div className="flex flex-col gap-0.5">
-                          <h4 className="font-display font-black text-sm md:text-base text-main dark:text-white line-clamp-1 leading-snug">
+                      <div className="flex flex-col gap-0.5 min-w-0 overflow-hidden">
+                          <h4 className="font-display font-black text-sm md:text-black text-gray-900 dark:text-white truncate leading-snug">
                             {itemName}
                           </h4>
                           <div className="flex items-center gap-2 flex-wrap">
