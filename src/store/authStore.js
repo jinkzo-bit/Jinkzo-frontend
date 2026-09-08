@@ -133,22 +133,11 @@ export const useAuthStore = create((set, get) => ({
           role: data?.role,
           id: data?._id
         });
-        // Cart ownership guard: on page refresh, ensure the persisted cart belongs to this user.
-        // Same user → no-op (cart preserved). Legacy/guest cart → cleared safely.
+        console.log('[FCM-DIAGNOSTIC] Stage 1: Calling registerWebPush from initialize()...');
         try {
-          const { useCartStore } = await import('./cartStore');
-          useCartStore.getState().clearCartForUser(data._id);
-          useCartStore.getState().setCartOwner(data._id);
-        } catch (e) {
-          console.error('Cart owner guard failed in initialize:', e);
-        }
-        // Silently register/refresh Web Push token ONLY if permission was already granted by user
-        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-          try {
-            await registerWebPush(currentToken, data, false);
-          } catch (pushErr) {
-            console.warn('[FCM-DIAGNOSTIC] Silent registerWebPush error in initialize:', pushErr);
-          }
+          await registerWebPush(currentToken, data);
+        } catch (pushErr) {
+          console.warn('[FCM-DIAGNOSTIC] registerWebPush error in initialize:', pushErr);
         }
       } else if (res.status === 401 || res.status === 403) {
         get().logout();
@@ -188,16 +177,6 @@ export const useAuthStore = create((set, get) => ({
       }
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
-
-      // Cart ownership guard: clear cart only if a different user is logging in.
-      // Same user re-login → cart preserved. Different user → cart wiped.
-      try {
-        const { useCartStore } = await import('./cartStore');
-        useCartStore.getState().clearCartForUser(data.user._id);
-        useCartStore.getState().setCartOwner(data.user._id);
-      } catch (e) {
-        console.error('Cart owner guard failed in login:', e);
-      }
 
       if (activeToken && data.user) {
         console.log('[FCM-DIAGNOSTIC] Stage 1 (authStore.login): Calling registerWebPush before login resolves...');
@@ -265,15 +244,6 @@ export const useAuthStore = create((set, get) => ({
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
 
-      // Cart ownership guard: new registration always starts with a fresh cart.
-      try {
-        const { useCartStore } = await import('./cartStore');
-        useCartStore.getState().clearCartForUser(data.user._id);
-        useCartStore.getState().setCartOwner(data.user._id);
-      } catch (e) {
-        console.error('Cart owner guard failed in register:', e);
-      }
-
       if (activeToken && data.user) {
         try {
           await registerWebPush(activeToken, data.user);
@@ -315,10 +285,12 @@ export const useAuthStore = create((set, get) => ({
       console.error('Logout request failed:', e);
     }
 
-    // Cart is intentionally NOT cleared on logout.
-    // The cart is user-scoped via cartOwnerId and survives logout so the same
-    // customer's items are restored on re-login. clearCartForUser() in each
-    // login entry-point handles the cross-user guard.
+    try {
+      const { useCartStore } = await import('./cartStore');
+      useCartStore.getState().clearCart();
+    } catch (e) {
+      console.error('Failed to clear cart on logout:', e);
+    }
 
     try {
       const { useFavoriteStore } = await import('./favoriteStore');
@@ -487,15 +459,6 @@ export const useAuthStore = create((set, get) => ({
       }
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
-
-      // Cart ownership guard: same user re-login preserves cart; different user clears it.
-      try {
-        const { useCartStore } = await import('./cartStore');
-        useCartStore.getState().clearCartForUser(data.user._id);
-        useCartStore.getState().setCartOwner(data.user._id);
-      } catch (e) {
-        console.error('Cart owner guard failed in verifyLoginOtp:', e);
-      }
 
       if (activeToken && data.user) {
         try {

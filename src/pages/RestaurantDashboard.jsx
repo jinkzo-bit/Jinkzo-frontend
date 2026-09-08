@@ -7,8 +7,6 @@ import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly } from '../utils/dateUtils';
 import { getOrderFinancialBreakdown, formatCurrency, formatDistance, formatRating, getOrderPlacedAt, getOrderDeliveredAt } from '../utils/orderUtils';
-import { playNotificationSound } from '../utils/audio';
-import { setupForegroundNotificationListener } from '../services/firebaseMessaging';
 import LocationPickerModal from '../components/LocationPickerModal';
 import VegBadge from '../components/VegBadge';
 import ImageUploadInput from '../components/common/ImageUploadInput';
@@ -282,26 +280,6 @@ export default function RestaurantDashboard() {
       withCredentials: true,
       transports: ['websocket', 'polling']
     });
-
-    socket.on('connect', () => {
-      console.log('[RestaurantDashboard] Socket connected');
-      if (user?._id) socket.emit('join', `user_${user._id}`);
-      if (user?.restaurantId) socket.emit('join', `restaurant_${user.restaurantId}`);
-    });
-
-    // Real-time instant notification handling for restaurant events (e.g. NEW_ORDER)
-    socket.on('notification:new', (notif) => {
-      console.log('[RestaurantDashboard] Real-time notification received:', notif);
-      playNotificationSound(
-        notif.soundType || 'NEW_ORDER',
-        notif.priority || 'HIGH',
-        notif._id || notif.eventId || notif.orderId || null
-      );
-      // Immediately refresh orders and metrics without waiting for polling cycle
-      fetchOrders();
-      fetchMetrics();
-    });
-
     socket.on('orderStatusChanged', (data) => {
       if (data && data.order) {
         setOrders(prev => {
@@ -317,25 +295,12 @@ export default function RestaurantDashboard() {
       }
       fetchMetrics();
     });
-
-    let unsubscribeForeground = () => {};
-    setupForegroundNotificationListener((payload) => {
-      console.log('[RestaurantDashboard] Foreground FCM push notification received:', payload);
-      fetchOrders();
-      fetchMetrics();
-    }).then(unsub => {
-      if (typeof unsub === 'function') unsubscribeForeground = unsub;
-    });
-
-    // Polling fallback preserved for reliability
     const interval = setInterval(() => {
       fetchOrders();
       fetchMetrics();
     }, 10000);
-
     return () => {
       socket.disconnect();
-      unsubscribeForeground();
       clearInterval(interval);
     };
   }, [token, user, navigate]);
@@ -2741,8 +2706,6 @@ export default function RestaurantDashboard() {
         order={selectedDetailsOrder}
         role="restaurant"
         token={token}
-        viewerRestaurantId={restaurantProfile?._id}
-        viewerRestaurantName={restaurantProfile?.name}
       />
 
       {/* ── CLEAR HISTORY CONFIRMATION MODAL ─── */}

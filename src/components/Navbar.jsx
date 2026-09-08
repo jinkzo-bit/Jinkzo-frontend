@@ -24,8 +24,7 @@ import { useThemeStore } from '../store/themeStore';
 import { useLocationStore } from '../store/locationStore';
 import { useTranslation } from '../store/languageStore';
 import LocationPickerModal from './LocationPickerModal';
-import { registerWebPush, requestPushPermissionWithGesture, setupForegroundNotificationListener } from '../services/firebaseMessaging';
-import { playNotificationSound } from '../utils/audio';
+import { registerWebPush, setupForegroundNotificationListener } from '../services/firebaseMessaging';
 
 export default function Navbar() {
   const { user, token, logout } = useAuthStore();
@@ -40,41 +39,9 @@ export default function Navbar() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const [pushPermission, setPushPermission] = useState(
-    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
-  );
-  const [pushBannerDismissed, setPushBannerDismissed] = useState(
-    Boolean(typeof sessionStorage !== 'undefined' && sessionStorage.getItem('jinkzo_push_prompt_dismissed_session'))
-  );
-  const [isEnablingPush, setIsEnablingPush] = useState(false);
 
   const profileMenuRef = useRef(null);
   const notifMenuRef = useRef(null);
-
-  const handleEnablePush = async () => {
-    setIsEnablingPush(true);
-    try {
-      const activeToken = token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token') || 'cookie-auth-active';
-      const result = await requestPushPermissionWithGesture(activeToken, user);
-      if (typeof window !== 'undefined' && 'Notification' in window) {
-        setPushPermission(Notification.permission);
-      }
-      if (result.permission === 'granted') {
-        setPushBannerDismissed(true);
-      }
-    } catch (err) {
-      console.warn('[Navbar] Push permission enable error:', err);
-    } finally {
-      setIsEnablingPush(false);
-    }
-  };
-
-  const handleDismissPushBanner = () => {
-    if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem('jinkzo_push_prompt_dismissed_session', 'true');
-    }
-    setPushBannerDismissed(true);
-  };
 
   const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -196,7 +163,6 @@ export default function Navbar() {
         }
         return [notif, ...prev];
       });
-      playNotificationSound(notif.soundType || 'GENERAL', notif.priority || 'NORMAL', notif._id || notif.eventId || null);
     });
 
     let unsubscribe = () => {};
@@ -224,36 +190,6 @@ export default function Navbar() {
 
   return (
     <>
-      {/* Non-intrusive Push Notification Enable Banner */}
-      {user && pushPermission === 'default' && !pushBannerDismissed && (
-        <aside aria-label="Notification prompt" className="max-w-7xl mx-auto w-[96%] sm:w-[94%] lg:w-full px-1 sm:px-4 pt-2">
-          <div className="flex items-center justify-between gap-3 px-4 py-2 bg-gradient-to-r from-[#7C3AED] to-[#5B21B6] text-white rounded-xl shadow-md text-xs font-medium">
-            <div className="flex items-center gap-2 min-w-0">
-              <Bell className="w-4 h-4 flex-shrink-0 text-amber-300 animate-pulse" />
-              <span className="truncate">
-                Enable push notifications to receive instant updates on your orders and rides.
-              </span>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                onClick={handleEnablePush}
-                disabled={isEnablingPush}
-                className="px-3 py-1 bg-white text-[#7C3AED] hover:bg-purple-50 font-bold rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
-              >
-                {isEnablingPush ? 'Enabling...' : 'Enable'}
-              </button>
-              <button
-                onClick={handleDismissPushBanner}
-                className="p-1 hover:bg-white/20 rounded-lg text-white/80 hover:text-white transition-colors cursor-pointer"
-                title="Dismiss for now"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </aside>
-      )}
-
       <header className="sticky top-2 sm:top-3 z-50 max-w-7xl mx-auto w-[96%] sm:w-[94%] lg:w-full px-1 sm:px-4 py-1 sm:py-2">
         <div className="relative bg-white/95 dark:bg-[#141926]/95 backdrop-blur-md rounded-2xl md:rounded-full px-3.5 sm:px-6 py-2.5 sm:py-3 shadow-[0_4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_25px_rgba(0,0,0,0.4)] border border-gray-100 dark:border-white/10 transition-colors duration-300">
 
@@ -492,23 +428,6 @@ export default function Navbar() {
                   </button>
                 )}
               </div>
-              {pushPermission === 'default' && (
-                <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border-b border-purple-100 dark:border-purple-900/30 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Bell className="w-3.5 h-3.5 text-[#7C3AED] dark:text-[#A78BFA] flex-shrink-0" />
-                    <p className="text-[11px] text-purple-900 dark:text-purple-200 font-semibold leading-tight truncate">
-                      Turn on push notifications
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleEnablePush}
-                    disabled={isEnablingPush}
-                    className="px-2.5 py-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-[11px] font-bold rounded-lg shadow-xs transition-colors cursor-pointer flex-shrink-0"
-                  >
-                    {isEnablingPush ? '...' : 'Enable'}
-                  </button>
-                </div>
-              )}
               <div className="max-h-80 overflow-y-auto divide-y divide-gray-50 dark:divide-white/5">
                 {notifications.length === 0 ? (
                   <div className="p-6 text-center text-xs text-gray-400 dark:text-slate-400 font-medium">{t('nav.noNotifications', 'No new notifications')}</div>

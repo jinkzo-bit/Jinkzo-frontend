@@ -51,8 +51,6 @@ export default function OrderDetailsModal({
   order: initialOrder,
   role = 'customer', // 'customer' | 'restaurant' | 'rider' | 'admin' | 'store'
   token,
-  viewerRestaurantId,   // ID of the currently logged-in restaurant (restaurant role only)
-  viewerRestaurantName, // Name of the currently logged-in restaurant (restaurant role only)
   onReorder,
   onRateRider,
   onRateOrder,
@@ -109,20 +107,6 @@ export default function OrderDetailsModal({
   const isDelivered = ['Delivered', 'Completed'].includes(order.status);
   const isCancelled = ['Cancelled', 'Rejected'].includes(order.status);
   const isRejected = order.status === 'Rejected';
-
-  // Effective restaurant ID for item filtering in restaurant role.
-  // Prefer the explicitly passed viewerRestaurantId (the logged-in restaurant's own ID)
-  // so that combined orders are always scoped to only this restaurant's items.
-  const effectiveRestaurantId = viewerRestaurantId || order.restaurantId;
-
-  // isRestaurantView: robust combined check — true when this modal is opened from
-  // the Restaurant Dashboard. Uses BOTH the role prop AND viewerRestaurantId presence
-  // so the multi-outlet suppression works even if the role string were to differ.
-  const isRestaurantView = (role === 'restaurant') || Boolean(viewerRestaurantId);
-
-  // Name to display for the single-source pill in the restaurant view.
-  // Prefer the explicitly passed restaurant name; fall back to the order's restaurant field.
-  const restaurantDisplayName = viewerRestaurantName || order.restaurant?.name || 'Your Restaurant';
 
   // Format Order ID for display
   const shortId = (order._id ? String(order._id).slice(-8) : '00000000').toUpperCase();
@@ -202,12 +186,12 @@ export default function OrderDetailsModal({
                 </span>
               </div>
               <p className="text-[11px] text-muted font-medium mt-0.5">
-                {isRestaurantView
-                  ? 'Restaurant Order Summary'
-                  : role === 'rider'
-                  ? 'Rider Run Information'
-                  : role === 'admin'
-                  ? 'Master System Record'
+                {role === 'restaurant' 
+                  ? 'Restaurant Order Summary' 
+                  : role === 'rider' 
+                  ? 'Rider Run Information' 
+                  : role === 'admin' 
+                  ? 'Master System Record' 
                   : 'Complete Purchase Receipt'}
               </p>
             </div>
@@ -276,14 +260,14 @@ export default function OrderDetailsModal({
             {/* Total Paid / Cost Pill */}
             <div className="text-left sm:text-right flex flex-col items-start sm:items-end">
               <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">
-                {role === 'rider' ? 'Rider Earning' : isRestaurantView ? 'Total Payable to Restaurant' : 'Total Paid'}
+                {role === 'rider' ? 'Rider Earning' : role === 'restaurant' ? 'Total Payable to Restaurant' : 'Total Paid'}
               </span>
               <span className="font-display font-black text-lg sm:text-xl text-primary">
                 {role === 'rider' 
                   ? formatCurrency(isRide ? (order.total ?? order.fare) : (order.pricingSnapshot?.rider?.totalRiderPayout ?? order.riderPayout ?? ((order.deliveryFee || 40) + 20)))
-                  : isRestaurantView
+                  : role === 'restaurant'
                   ? (() => {
-                      const rFin = financials.restaurant?.byRestaurant?.find(r => (!effectiveRestaurantId || String(r.restaurantId) === String(effectiveRestaurantId)));
+                      const rFin = financials.restaurant?.byRestaurant?.find(r => (!order.restaurantId || String(r.restaurantId) === String(order.restaurantId)));
                       const displayPayable = rFin ? rFin.restaurantPayable : (financials.restaurant?.restaurantPayable > 0 ? financials.restaurant.restaurantPayable : (order.subtotal ?? order.total));
                       return formatCurrency(displayPayable);
                     })()
@@ -388,42 +372,32 @@ export default function OrderDetailsModal({
             </div>
           )}
 
-         {/* 2. PICKUP SOURCE
-    Restaurant view hides source list because the restaurant
-    should see only its own order details.
-    Customer/Admin/Rider multi-source behavior remains unchanged. */}
-{!isRestaurantView && (
-  distinctSources.length > 0 && !isRide && (
-    <div className="flex flex-col gap-2">
-      <span className="text-[10px] uppercase font-extrabold text-muted tracking-wider">
-        {distinctSources.length > 1
-          ? `Multiple Pickup Sources (${distinctSources.length} Outlets)`
-          : 'Pickup Source'}
-      </span>
-
-      <div className="flex flex-wrap gap-2">
-        {distinctSources.map((source, sIdx) => {
-          const isSupplier = Boolean(sourceObjMap[source]?.isSupplier);
-
-          return (
-            <span
-              key={sIdx}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-base border border-line text-main"
-            >
-              <span>🏪 {source}</span>
-
-              {order.restaurant?.rating > 0 && distinctSources.length === 1 && (
-                <span className="text-[10px] text-yellow-500 font-bold ml-1">
-                  (★ {formatRating(order.restaurant.rating)})
-                </span>
-              )}
-            </span>
-          );
-        })}
-      </div>
-    </div>
-  )
-)}
+          {/* 2. SOURCES PILL (MULTI-STORE vs SINGLE RESTAURANT) */}
+          {distinctSources.length > 0 && !isRide && (
+            <div className="flex flex-col gap-2">
+              <span className="text-[10px] uppercase font-extrabold text-muted tracking-wider">
+                {distinctSources.length > 1 ? `Multiple Pickup Sources (${distinctSources.length} Outlets)` : 'Pickup Source'}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {distinctSources.map((source, sIdx) => {
+                  const isSupplier = Boolean(sourceObjMap[source]?.isSupplier);
+                  return (
+                    <span 
+                      key={sIdx}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-base border border-line text-main"
+                    >
+                      <span>🏪 {source}</span>
+                      {order.restaurant?.rating > 0 && distinctSources.length === 1 && (
+                        <span className="text-[10px] text-yellow-500 font-bold ml-1">
+                          (★ {formatRating(order.restaurant.rating)})
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* 3. DELIVERED BY RIDER (Customer, Restaurant, Admin views) */}
           {hasRider && (
@@ -752,13 +726,13 @@ export default function OrderDetailsModal({
                 <h4 className="font-display font-extrabold text-xs uppercase tracking-wider text-muted flex items-center gap-1.5">
                   <Package className="w-3.5 h-3.5 text-primary" />
                   <span>Items & Source Breakdown ({(() => {
-                    const displayed = isRestaurantView
-                      ? (Array.isArray(order.items) ? order.items.filter(i => !(i.itemModel === 'CatalogItem' || Boolean(i.supplierId)) && (!effectiveRestaurantId || !i.restaurantId || String(i.restaurantId) === String(effectiveRestaurantId))) : [])
+                    const displayed = role === 'restaurant'
+                      ? (Array.isArray(order.items) ? order.items.filter(i => !(i.itemModel === 'CatalogItem' || Boolean(i.supplierId)) && (!order.restaurantId || !i.restaurantId || String(i.restaurantId) === String(order.restaurantId))) : [])
                       : (order.items || []);
                     return displayed.length;
                   })()})</span>
                 </h4>
-                {isRestaurantView && (
+                {role === 'restaurant' && (
                   <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
                     Restaurant Items Only
                   </span>
@@ -767,8 +741,8 @@ export default function OrderDetailsModal({
 
               {Array.isArray(order.items) && order.items.length > 0 ? (
                 (() => {
-                  const relevantItems = isRestaurantView
-                    ? order.items.filter(i => !(i.itemModel === 'CatalogItem' || Boolean(i.supplierId)) && (!effectiveRestaurantId || !i.restaurantId || String(i.restaurantId) === String(effectiveRestaurantId)))
+                  const relevantItems = role === 'restaurant'
+                    ? order.items.filter(i => !(i.itemModel === 'CatalogItem' || Boolean(i.supplierId)) && (!order.restaurantId || !i.restaurantId || String(i.restaurantId) === String(order.restaurantId)))
                     : order.items;
 
                   // Group items by fulfillment source
@@ -906,10 +880,10 @@ export default function OrderDetailsModal({
                 {role === 'restaurant' ? 'Restaurant Earnings & Bill' : 'Payment Summary'}
               </h4>
 
-              {isRestaurantView ? (
+              {role === 'restaurant' ? (
                 (() => {
                   const relevantItems = Array.isArray(order.items)
-                    ? order.items.filter(i => !(i.itemModel === 'CatalogItem' || Boolean(i.supplierId)) && (!effectiveRestaurantId || !i.restaurantId || String(i.restaurantId) === String(effectiveRestaurantId)))
+                    ? order.items.filter(i => !(i.itemModel === 'CatalogItem' || Boolean(i.supplierId)) && (!order.restaurantId || !i.restaurantId || String(i.restaurantId) === String(order.restaurantId)))
                     : [];
                   const restaurantFoodSubtotal = relevantItems.reduce((sum, it) => {
                     if (it.isCancelled) return sum;
@@ -917,7 +891,7 @@ export default function OrderDetailsModal({
                     const q = parseInt(it.quantity, 10) || 1;
                     return sum + (p * q);
                   }, 0);
-                  const rFin = financials.restaurant?.byRestaurant?.find(r => (!effectiveRestaurantId || String(r.restaurantId) === String(effectiveRestaurantId)));
+                  const rFin = financials.restaurant?.byRestaurant?.find(r => (!order.restaurantId || String(r.restaurantId) === String(order.restaurantId)));
                   const displayPayable = rFin ? rFin.restaurantPayable : (financials.restaurant?.restaurantPayable > 0 ? financials.restaurant.restaurantPayable : (restaurantFoodSubtotal > 0 ? restaurantFoodSubtotal : (order.subtotal || financials.customer.itemsSubtotal)));
 
                   return (

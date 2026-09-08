@@ -1,7 +1,6 @@
 import { getToken, onMessage } from 'firebase/messaging';
 import { getFirebaseMessagingInstance, isFirebaseConfigured, VAPID_KEY, firebaseConfig } from '../config/firebase';
 import { API_BASE } from '../config/api';
-import { playNotificationSound } from '../utils/audio';
 
 const WEB_TOKEN_KEY = 'jinkzo_fcm_web_token';
 const DEVICE_ID_KEY = 'jinkzo_web_device_id';
@@ -37,53 +36,17 @@ export function isPushNotificationSupported() {
     checks.hasPushManager &&
     checks.isFirebaseConfigured
   );
+  console.log('[FCM-DIAGNOSTIC] isPushNotificationSupported check:', { supported, ...checks });
   return supported;
 }
 
 let registrationInFlight = null;
 
 /**
- * Request Web Push permission with a genuine user gesture (e.g. user clicking "Enable Notifications")
- * @param {string} authToken - Current user JWT
- * @param {object} user - Current user object
- */
-export async function requestPushPermissionWithGesture(authToken, user) {
-  if (!isPushNotificationSupported()) {
-    console.warn('[FCM-DIAGNOSTIC] Push notifications not supported in this browser');
-    return { success: false, reason: 'unsupported' };
-  }
-
-  const currentPermission = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
-  if (currentPermission === 'denied') {
-    console.warn('[FCM-DIAGNOSTIC] Notification permission already denied');
-    return { success: false, reason: 'denied' };
-  }
-
-  let permission = currentPermission;
-  if (permission === 'default') {
-    try {
-      // Must be invoked directly from a user gesture
-      permission = await Notification.requestPermission();
-      console.log('[FCM-DIAGNOSTIC] User permission prompt result:', permission);
-    } catch (e) {
-      console.warn('[FCM-DIAGNOSTIC] Notification.requestPermission error:', e);
-      return { success: false, reason: 'error', error: e };
-    }
-  }
-
-  if (permission !== 'granted') {
-    return { success: false, reason: permission };
-  }
-
-  const pushToken = await registerWebPush(authToken, user, false);
-  return { success: Boolean(pushToken), permission: 'granted', token: pushToken };
-}
-
-/**
  * Register Firebase Web Push for the authenticated user
  * @param {string} authToken - Current user JWT
  * @param {object} user - Current user object
- * @param {boolean} forcePrompt - If true, requests browser permission (only pass true on user click)
+ * @param {boolean} forcePrompt - If true, ignores past dismissal and prompts user
  */
 export async function registerWebPush(authToken, user, forcePrompt = false) {
   if (registrationInFlight) {
@@ -93,30 +56,47 @@ export async function registerWebPush(authToken, user, forcePrompt = false) {
 
   registrationInFlight = (async () => {
     try {
+      console.log('[FCM-DIAGNOSTIC] Stage 4: registerWebPush entry', {
+        hasAuthToken: !!authToken,
+        authTokenValue: authToken ? `${String(authToken).substring(0, 15)}...` : 'none',
+        userEmail: user?.email,
+        userRole: user?.role,
+        userId: user?._id || user?.id,
+        currentPermission: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+      });
+
       if (!user) {
+        console.warn('[FCM-DIAGNOSTIC] Early return: missing user object', { user });
         return null;
       }
 
       if (!isPushNotificationSupported()) {
+        console.warn('[FCM-DIAGNOSTIC] Early return: Push notification not supported in this environment');
         return null;
       }
 
       // Handle permission states
       const currentPermission = Notification.permission;
+      console.log('[FCM-DIAGNOSTIC] Stage 5: Notification.permission =', currentPermission);
 
       if (currentPermission === 'denied') {
+        console.warn('[FCM-DIAGNOSTIC] Early return: Permission is DENIED by user in browser settings');
         return null;
       }
 
       if (currentPermission === 'default') {
-        // Do NOT automatically call Notification.requestPermission() without user interaction
-        if (!forcePrompt) {
-          console.log('[FCM-DIAGNOSTIC] Notification permission is default. Waiting for user interaction gesture.');
+        const alreadyPrompted = localStorage.getItem(PERMISSION_REQUESTED_KEY);
+        console.log('[FCM-DIAGNOSTIC] Stage 5: Permission default, alreadyPrompted =', alreadyPrompted, 'forcePrompt =', forcePrompt);
+        if (alreadyPrompted && !forcePrompt) {
+          console.warn('[FCM-DIAGNOSTIC] Early return: default permission already prompted previously');
           return null;
         }
 
+        localStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');
         const requested = await Notification.requestPermission();
+        console.log('[FCM-DIAGNOSTIC] Stage 5: User prompt result =', requested);
         if (requested !== 'granted') {
+          console.warn('[FCM-DIAGNOSTIC] Early return: Permission was not granted on prompt');
           return null;
         }
       }
@@ -257,16 +237,6 @@ export async function setupForegroundNotificationListener(onNotificationReceived
 
     return onMessage(messaging, (payload) => {
       console.log('[WebPush] Foreground push notification received:', payload);
-
-      // Play foreground audio alert matching notification type and priority
-      const foregroundData = payload.data || {};
-      try {
-        playNotificationSound(
-          foregroundData.soundType || 'GENERAL',
-          foregroundData.priority || 'NORMAL',
-          foregroundData.notificationId || foregroundData.eventId || foregroundData.orderId || foregroundData.rideId || null
-        );
-      } catch (audioErr) {}
 
       // Trigger native browser notification popup if permission granted
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {

@@ -29,7 +29,6 @@ import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import { formatAppDate, formatAppDateOnly, formatAppDateTime } from '../utils/dateUtils';
 import { getOrderFinancialBreakdown, formatCurrency, formatDistance, formatRating, getOrderPlacedAt, getOrderDeliveredAt } from '../utils/orderUtils';
-import { playNotificationSound } from '../utils/audio';
 import ImageUploadInput from '../components/common/ImageUploadInput';
 import {
   DEFAULT_OPENING_HOURS,
@@ -481,18 +480,6 @@ export default function AdminDashboard() {
     socket.on('connect', () => {
       socket.emit('join', 'admin_room');
       socket.emit('join', 'admin');
-    });
-
-    // Real-time instant notification handling for Admin
-    socket.on('notification:new', (notif) => {
-      console.log('[AdminDashboard] Real-time notification received:', notif);
-      playNotificationSound(
-        notif.soundType || 'GENERAL',
-        notif.priority || 'NORMAL',
-        notif._id || notif.eventId || null
-      );
-      fetchAllOrders();
-      fetchAnalytics();
     });
 
     socket.on('riderRejectionCreated', () => {
