@@ -25,6 +25,7 @@ import { useLocationStore } from '../store/locationStore';
 import { useTranslation } from '../store/languageStore';
 import LocationPickerModal from './LocationPickerModal';
 import { registerWebPush, setupForegroundNotificationListener } from '../services/firebaseMessaging';
+import { playNotificationSound } from '../utils/audio';
 
 export default function Navbar() {
   const { user, token, logout } = useAuthStore();
@@ -155,14 +156,22 @@ export default function Navbar() {
       if (user?._id) socket.emit('join', `user_${user._id}`);
     });
 
+    const processedNotifIds = new Set();
     socket.on('notification:new', (notif) => {
       console.log('[Navbar] Real-time socket notification received:', notif);
+      if (!notif) return;
+      const notifId = String(notif._id || notif.id || notif.eventId || '');
+      if (notifId && processedNotifIds.has(notifId)) return;
+      if (notifId) processedNotifIds.add(notifId);
+
       setNotifications(prev => {
-        if (prev.some(n => n._id === notif._id || (n.eventId && notif.eventId && n.eventId === notif.eventId))) {
+        if (notifId && prev.some(n => String(n._id || n.id || n.eventId || '') === notifId)) {
           return prev;
         }
         return [notif, ...prev];
       });
+
+      playNotificationSound(notif.soundType || 'GENERAL', notif.priority || 'NORMAL', notifId);
     });
 
     let unsubscribe = () => {};
@@ -174,6 +183,7 @@ export default function Navbar() {
     });
 
     return () => {
+      socket.off('notification:new');
       socket.disconnect();
       unsubscribe();
     };

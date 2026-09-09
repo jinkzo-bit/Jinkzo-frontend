@@ -2,6 +2,7 @@ import { API_BASE } from '../config/api';
 import { io } from 'socket.io-client';
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { playNotificationSound } from '../utils/audio';
 import {
   ShieldAlert, DollarSign, ShoppingBag, Users, Store, Bike, CheckCircle, Check,
   XCircle, Settings, Tag, ShieldCheck, UserX, UserCheck, MessageSquare,
@@ -470,9 +471,10 @@ export default function AdminDashboard() {
     fetchBannerDesigns();
     fetchRejectionsCount();
 
+    const activeToken = token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token');
     const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
     const socket = io(socketHost, {
-      auth: { token },
+      auth: { token: activeToken },
       withCredentials: true,
       transports: ['websocket', 'polling']
     });
@@ -480,6 +482,27 @@ export default function AdminDashboard() {
     socket.on('connect', () => {
       socket.emit('join', 'admin_room');
       socket.emit('join', 'admin');
+      if (user?._id) socket.emit('join', `user_${user._id}`);
+    });
+
+    const processedNotifIds = new Set();
+    socket.on('notification:new', (notif) => {
+      if (!notif) return;
+      const notifId = String(notif._id || notif.id || notif.eventId || '');
+      if (notifId && processedNotifIds.has(notifId)) return;
+      if (notifId) processedNotifIds.add(notifId);
+
+      playNotificationSound(notif.soundType || 'GENERAL', notif.priority || 'NORMAL', notifId);
+
+      const type = String(notif.type || '').toUpperCase();
+      if (notif.orderId || type.includes('ORDER') || type.includes('FOOD') || type.includes('RIDE') || type.includes('DELIVERY')) {
+        fetchAllOrders();
+        fetchAnalytics();
+      } else if (type.includes('KYC')) {
+        fetchPendingKyc();
+      } else if (type.includes('REJECTION')) {
+        fetchRejectionsCount();
+      }
     });
 
     socket.on('riderRejectionCreated', () => {
@@ -520,6 +543,11 @@ export default function AdminDashboard() {
       fetchAnalytics();
     }, 10000);
     return () => {
+      socket.off('notification:new');
+      socket.off('riderRejectionCreated');
+      socket.off('riderRejectionUpdated');
+      socket.off('orderStatusChanged');
+      socket.off('locationUpdated');
       socket.disconnect();
       clearInterval(interval);
     };

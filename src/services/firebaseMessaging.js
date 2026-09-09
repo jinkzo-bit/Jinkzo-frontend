@@ -238,8 +238,10 @@ export async function setupForegroundNotificationListener(onNotificationReceived
     return onMessage(messaging, (payload) => {
       console.log('[WebPush] Foreground push notification received:', payload);
 
-      // Trigger native browser notification popup if permission granted
-      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      // When the document is active/visible, Socket.IO handles the in-app notification UI and sound.
+      // Only show a native OS popup if the tab is hidden or backgrounded.
+      const isDocumentHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+      if (isDocumentHidden && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
         try {
           const title = payload.notification?.title || payload.data?.title || 'Jinkzo Notification';
           const body = payload.notification?.body || payload.data?.body || payload.message || '';

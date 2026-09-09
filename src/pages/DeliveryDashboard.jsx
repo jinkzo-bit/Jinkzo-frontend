@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import InteractiveMap from '../components/InteractiveMap';
 import { io } from 'socket.io-client';
+import { playNotificationSound } from '../utils/audio';
 import OrderDetailsModal from '../components/OrderDetailsModal';
 import { formatAppDateOnly, formatAppTimeOnly, formatAppDateTime } from '../utils/dateUtils';
 import { getOrderFinancialBreakdown, formatCurrency, formatDistance, formatRating, normalizeRiderRun, getOrderPlacedAt, getOrderDeliveredAt, getOrderSourceDisplayNames } from '../utils/orderUtils';
@@ -689,9 +690,10 @@ export default function DeliveryDashboard() {
   useEffect(() => {
     if (!token || !user?._id) return;
 
+    const activeToken = token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token');
     const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
     const socket = io(socketHost, {
-      auth: { token },
+      auth: { token: activeToken },
       withCredentials: true,
       transports: ['websocket', 'polling']
     });
@@ -702,6 +704,22 @@ export default function DeliveryDashboard() {
       if (selectedOrder?._id) {
         socket.emit('join', `order_${selectedOrder._id}`);
         socket.emit('join', `order:${selectedOrder._id}`);
+      }
+    });
+
+    const processedNotifIds = new Set();
+    socket.on('notification:new', (notif) => {
+      if (!notif) return;
+      const notifId = String(notif._id || notif.id || notif.eventId || '');
+      if (notifId && processedNotifIds.has(notifId)) return;
+      if (notifId) processedNotifIds.add(notifId);
+
+      playNotificationSound(notif.soundType || 'RIDER_ASSIGNED', notif.priority || 'HIGH', notifId);
+
+      const type = String(notif.type || '').toUpperCase();
+      const isJobEvent = notif.orderId || notif.rideId || type.includes('ORDER') || type.includes('RIDE') || type.includes('ASSIGN') || type.includes('DELIVERY');
+      if (isJobEvent) {
+        fetchOrdersData();
       }
     });
 
@@ -770,6 +788,13 @@ export default function DeliveryDashboard() {
     window.addEventListener('focus', handleFocus);
 
     return () => {
+      socket.off('notification:new');
+      socket.off('pickupStopUpdated');
+      socket.off('orderUpdated');
+      socket.off('statusUpdated');
+      socket.off('orderStatusChanged');
+      socket.off('auto_ride_opportunity');
+      socket.off('new_order_pool');
       socket.disconnect();
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);

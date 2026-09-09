@@ -36,8 +36,8 @@ if (messaging) {
     const notifTitle = payload.notification?.title || payload.data?.title || 'Jinkzo Notification';
     const notifData = payload.data || {};
     const notifTag = notifData.orderId
-      ? `jinkzo-order-${notifData.orderId}`
-      : (notifData.rideId ? `jinkzo-ride-${notifData.rideId}` : (notifData.notificationType || 'jinkzo-update'));
+      ? `jinkzo-${notifData.orderId}`
+      : (notifData.rideId ? `jinkzo-${notifData.rideId}` : `jinkzo-${notifData.type || notifData.notificationType || 'general'}`);
     const notifOptions = {
       body: payload.notification?.body || notifData.body || 'You have a new update from Jinkzo.',
       icon: payload.notification?.icon || '/jinkzo-pwa-192.png',
@@ -62,8 +62,8 @@ self.addEventListener('push', (event) => {
       const body = rawData.notification?.body || rawData.data?.body || 'New notification received.';
       const notifData = rawData.data || {};
       const notifTag = notifData.orderId
-        ? `jinkzo-order-${notifData.orderId}`
-        : (notifData.rideId ? `jinkzo-ride-${notifData.rideId}` : (notifData.notificationType || 'jinkzo-update'));
+        ? `jinkzo-${notifData.orderId}`
+        : (notifData.rideId ? `jinkzo-${notifData.rideId}` : `jinkzo-${notifData.type || notifData.notificationType || 'general'}`);
       const options = {
         body,
         icon: rawData.notification?.icon || '/jinkzo-pwa-192.png',
@@ -165,8 +165,8 @@ self.addEventListener('notificationclick', (event) => {
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       // Check if an app window is already open
       for (const client of windowClients) {
-        if ('focus' in client) {
-          if ('navigate' in client) {
+        if (client.url && client.url.startsWith(self.location.origin) && 'focus' in client) {
+          if ('navigate' in client && client.url !== targetUrl) {
             client.navigate(targetUrl);
           }
           return client.focus();
