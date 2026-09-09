@@ -2704,6 +2704,7 @@ export default function RestaurantDashboard() {
         onClose={() => setSelectedDetailsOrder(null)}
         order={selectedDetailsOrder}
         role="restaurant"
+        restaurantId={user?.restaurantId}
         token={token}
       />
 

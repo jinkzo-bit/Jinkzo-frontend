@@ -51,6 +51,7 @@ export default function OrderDetailsModal({
   order: initialOrder,
   role = 'customer', // 'customer' | 'restaurant' | 'rider' | 'admin' | 'store'
   token,
+  restaurantId,
   onReorder,
   onRateRider,
   onRateOrder,
@@ -148,6 +149,17 @@ export default function OrderDetailsModal({
 
   // Resolve distinct pickup sources
   const getDistinctSources = () => {
+    if (role === 'restaurant') {
+      const targetRestId = restaurantId ? String(restaurantId) : null;
+      if (!targetRestId) {
+        return [];
+      }
+      const matchingStop = Array.isArray(order.pickupStops)
+        ? order.pickupStops.find(s => s.sourceType === 'restaurant' && String(s.sourceId) === targetRestId)
+        : null;
+      const restName = matchingStop?.sourceName || order.restaurant?.name || '';
+      return restName ? [restName] : [];
+    }
     const sourcesInfo = getOrderSourceDisplayNames(order);
     return sourcesInfo.sources.length > 0 ? sourcesInfo.sources : [order?.restaurant?.name || 'Jinkzo Partner'];
   };
@@ -267,7 +279,9 @@ export default function OrderDetailsModal({
                   ? formatCurrency(isRide ? (order.total ?? order.fare) : (order.pricingSnapshot?.rider?.totalRiderPayout ?? order.riderPayout ?? ((order.deliveryFee || 40) + 20)))
                   : role === 'restaurant'
                   ? (() => {
-                      const rFin = financials.restaurant?.byRestaurant?.find(r => (!order.restaurantId || String(r.restaurantId) === String(order.restaurantId)));
+                      const targetRestId = restaurantId ? String(restaurantId) : null;
+                      if (!targetRestId) return formatCurrency(0);
+                      const rFin = financials.restaurant?.byRestaurant?.find(r => String(r.restaurantId) === targetRestId);
                       const displayPayable = rFin ? rFin.restaurantPayable : (financials.restaurant?.restaurantPayable > 0 ? financials.restaurant.restaurantPayable : (order.subtotal ?? order.total));
                       return formatCurrency(displayPayable);
                     })()
@@ -727,7 +741,13 @@ export default function OrderDetailsModal({
                   <Package className="w-3.5 h-3.5 text-primary" />
                   <span>Items & Source Breakdown ({(() => {
                     const displayed = role === 'restaurant'
-                      ? (Array.isArray(order.items) ? order.items.filter(i => !(i.itemModel === 'CatalogItem' || Boolean(i.supplierId)) && (!order.restaurantId || !i.restaurantId || String(i.restaurantId) === String(order.restaurantId))) : [])
+                      ? (Array.isArray(order.items) ? order.items.filter(i => {
+                          const isCatalog = i.itemModel === 'CatalogItem' || Boolean(i.supplierId);
+                          if (isCatalog) return false;
+                          const targetRestId = restaurantId ? String(restaurantId) : null;
+                          if (!targetRestId) return false;
+                          return Boolean(i.restaurantId && String(i.restaurantId) === targetRestId);
+                        }) : [])
                       : (order.items || []);
                     return displayed.length;
                   })()})</span>
@@ -742,7 +762,13 @@ export default function OrderDetailsModal({
               {Array.isArray(order.items) && order.items.length > 0 ? (
                 (() => {
                   const relevantItems = role === 'restaurant'
-                    ? order.items.filter(i => !(i.itemModel === 'CatalogItem' || Boolean(i.supplierId)) && (!order.restaurantId || !i.restaurantId || String(i.restaurantId) === String(order.restaurantId)))
+                    ? order.items.filter(i => {
+                        const isCatalog = i.itemModel === 'CatalogItem' || Boolean(i.supplierId);
+                        if (isCatalog) return false;
+                        const targetRestId = restaurantId ? String(restaurantId) : null;
+                        if (!targetRestId) return false;
+                        return Boolean(i.restaurantId && String(i.restaurantId) === targetRestId);
+                      })
                     : order.items;
 
                   // Group items by fulfillment source
@@ -882,8 +908,14 @@ export default function OrderDetailsModal({
 
               {role === 'restaurant' ? (
                 (() => {
+                  const targetRestId = restaurantId ? String(restaurantId) : null;
                   const relevantItems = Array.isArray(order.items)
-                    ? order.items.filter(i => !(i.itemModel === 'CatalogItem' || Boolean(i.supplierId)) && (!order.restaurantId || !i.restaurantId || String(i.restaurantId) === String(order.restaurantId)))
+                    ? order.items.filter(i => {
+                        const isCatalog = i.itemModel === 'CatalogItem' || Boolean(i.supplierId);
+                        if (isCatalog) return false;
+                        if (!targetRestId) return false;
+                        return Boolean(i.restaurantId && String(i.restaurantId) === targetRestId);
+                      })
                     : [];
                   const restaurantFoodSubtotal = relevantItems.reduce((sum, it) => {
                     if (it.isCancelled) return sum;
@@ -891,8 +923,8 @@ export default function OrderDetailsModal({
                     const q = parseInt(it.quantity, 10) || 1;
                     return sum + (p * q);
                   }, 0);
-                  const rFin = financials.restaurant?.byRestaurant?.find(r => (!order.restaurantId || String(r.restaurantId) === String(order.restaurantId)));
-                  const displayPayable = rFin ? rFin.restaurantPayable : (financials.restaurant?.restaurantPayable > 0 ? financials.restaurant.restaurantPayable : (restaurantFoodSubtotal > 0 ? restaurantFoodSubtotal : (order.subtotal || financials.customer.itemsSubtotal)));
+                  const rFin = targetRestId ? financials.restaurant?.byRestaurant?.find(r => String(r.restaurantId) === targetRestId) : null;
+                  const displayPayable = rFin ? rFin.restaurantPayable : (financials.restaurant?.restaurantPayable > 0 ? financials.restaurant.restaurantPayable : (restaurantFoodSubtotal > 0 ? restaurantFoodSubtotal : 0));
 
                   return (
                     <div className="flex flex-col gap-3">
