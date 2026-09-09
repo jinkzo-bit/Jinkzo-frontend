@@ -279,19 +279,8 @@ export default function RestaurantDashboard() {
       withCredentials: true,
       transports: ['websocket', 'polling']
     });
-    socket.on('orderStatusChanged', (data) => {
-      if (data && data.order) {
-        setOrders(prev => {
-          const exists = prev.find(o => o._id === data.orderId);
-          if (exists) {
-            return prev.map(o => o._id === data.orderId ? { ...o, ...data.order } : o);
-          }
-          fetchOrders();
-          return prev;
-        });
-      } else {
-        fetchOrders();
-      }
+    socket.on('orderStatusChanged', () => {
+      fetchOrders();
       fetchMetrics();
     });
     const interval = setInterval(() => {
@@ -706,12 +695,17 @@ export default function RestaurantDashboard() {
         // into the restaurant's order list.
         fetchOrders();
         fetchMetrics();
+        return true;
       } else {
         const errData = await res.json().catch(() => ({}));
         console.error('[RESTAURANT] Order status update failed:', errData.message);
+        alert(errData.message || (nextStatus === 'Rejected' ? 'Failed to reject order. Please try again.' : 'Failed to update order status. Please try again.'));
+        return false;
       }
     } catch (err) {
       console.error(err);
+      alert(nextStatus === 'Rejected' ? 'Failed to reject order. Please check your network connection and try again.' : 'Failed to update order status.');
+      return false;
     } finally {
       setUpdatingOrderId(null);
     }
@@ -2682,7 +2676,22 @@ export default function RestaurantDashboard() {
             </div>
             <div className="flex gap-2 mt-4">
               <button type="button" onClick={() => { setRejectingOrderId(null); setRejectionReason(''); setCustomRejectionReason(''); }} className="flex-1 py-2.5 border border-line-strong text-xs font-bold text-muted rounded-xl hover:bg-base cursor-pointer">Cancel</button>
-              <button type="button" disabled={!rejectionReason || (rejectionReason === 'Other' && !customRejectionReason)} onClick={() => { handleUpdateOrderStatus(rejectingOrderId, 'Rejected', rejectionReason === 'Other' ? customRejectionReason : rejectionReason); setRejectingOrderId(null); setRejectionReason(''); setCustomRejectionReason(''); }} className="flex-1 py-2.5 bg-red-600 text-white text-xs font-bold rounded-xl hover:bg-red-700 cursor-pointer disabled:opacity-50">Confirm Rejection</button>
+              <button
+                type="button"
+                disabled={!rejectionReason || (rejectionReason === 'Other' && !customRejectionReason) || updatingOrderId === rejectingOrderId}
+                onClick={async () => {
+                  const reasonText = rejectionReason === 'Other' ? customRejectionReason : rejectionReason;
+                  const success = await handleUpdateOrderStatus(rejectingOrderId, 'Rejected', reasonText);
+                  if (success) {
+                    setRejectingOrderId(null);
+                    setRejectionReason('');
+                    setCustomRejectionReason('');
+                  }
+                }}
+                className="flex-1 py-2.5 bg-red-600 text-white text-xs font-bold rounded-xl hover:bg-red-700 cursor-pointer disabled:opacity-50"
+              >
+                {updatingOrderId === rejectingOrderId ? 'Rejecting...' : 'Confirm Rejection'}
+              </button>
             </div>
           </div>
         </div>
