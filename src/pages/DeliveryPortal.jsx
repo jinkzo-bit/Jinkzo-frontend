@@ -1,4 +1,4 @@
-import { API_BASE } from '../config/api';
+import { API_BASE, SOCKET_URL } from '../config/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Bike, MapPin, Store, DollarSign, Clock, ShieldCheck, CheckCircle, AlertCircle, Phone, Navigation, Camera, X, MessageSquare, Send, Bell, ChevronRight, RefreshCw, ShoppingBag, FileText } from 'lucide-react';
@@ -101,8 +101,7 @@ export default function DeliveryPortal() {
   useEffect(() => {
     if (!selectedOrder || selectedOrder.status !== 'Out for Delivery' || !token) return;
 
-    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
-    const socket = io(socketHost, {
+    const socket = io(SOCKET_URL, {
       auth: { token },
       withCredentials: true,
       transports: ['websocket', 'polling']

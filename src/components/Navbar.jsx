@@ -16,7 +16,7 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 import { io } from 'socket.io-client';
-import { API_BASE } from '../config/api';
+import { API_BASE, SOCKET_URL } from '../config/api';
 import jinkzoLogo from '../assets/branding/jinkzo-logo.png';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
@@ -144,8 +144,7 @@ export default function Navbar() {
       });
     }
 
-    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
-    const socket = io(socketHost, {
+    const socket = io(SOCKET_URL, {
       auth: { token: activeToken },
       withCredentials: true,
       transports: ['websocket', 'polling']

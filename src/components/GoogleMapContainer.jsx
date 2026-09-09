@@ -3,11 +3,10 @@ import { MapPin, Loader, Layers, Crosshair } from 'lucide-react';
 import { useJsApiLoader, GoogleMap, Marker, Polyline, InfoWindow } from '@react-google-maps/api';
 import { io } from 'socket.io-client';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../config/googleMapsLoader';
-import { API_BASE } from '../config/api';
+import { API_BASE, SOCKET_URL } from '../config/api';
 
 // ── Default fallback coords (Nandikotkur, AP) ───────────────────────────────────
 const DEFAULT_CENTER = { lat: 15.8562, lng: 78.2700 };
-const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
 
 // ── Map container style — Guaranteed full container expansion ────────────────
 const MAP_CONTAINER_STYLE = { 
@@ -790,7 +789,7 @@ export default function GoogleMapContainer({
     if (riderLat != null && riderLng != null) return;
 
     const token = sessionStorage.getItem('qb-auth-token');
-    const socket = io(socketHost, {
+    const socket = io(SOCKET_URL, {
       auth: { token },
       withCredentials: true,
       transports: ['websocket', 'polling']

@@ -7,6 +7,9 @@ import { checkRestaurantOpenStatus, checkItemAvailability, normalizeMenuItem } f
 
 // NC16 FIX: Wrap store with persist middleware so cart survives page refreshes.
 // Only cart data is persisted — toasts and platformSettings are always re-fetched fresh.
+let platformSettingsPromise = null;
+let platformSettingsFetched = false;
+
 export const useCartStore = create(
   persist(
     (set, get) => ({
@@ -335,17 +338,33 @@ export const useCartStore = create(
     get().showToast('Promo code removed', 'info');
   },
 
-  fetchPlatformSettings: async () => {
-    try {
-      const res = await fetch(`${API_BASE}/auth/platform-settings`);
-
-      if (res.ok) {
-        const data = await res.json();
-        set({ platformSettings: data });
-      }
-    } catch (err) {
-      console.error('Error fetching platform settings:', err);
+  fetchPlatformSettings: async (force = false) => {
+    if (!force && platformSettingsFetched) {
+      return get().platformSettings;
     }
+
+    if (platformSettingsPromise) {
+      return platformSettingsPromise;
+    }
+
+    platformSettingsPromise = (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/auth/platform-settings`);
+
+        if (res.ok) {
+          const data = await res.json();
+          platformSettingsFetched = true;
+          set({ platformSettings: data });
+          return data;
+        }
+      } catch (err) {
+        console.error('Error fetching platform settings:', err);
+      }
+    })().finally(() => {
+      platformSettingsPromise = null;
+    });
+
+    return platformSettingsPromise;
   },
 
   getCalculationsWithoutPromo: (distanceKm = null) => {

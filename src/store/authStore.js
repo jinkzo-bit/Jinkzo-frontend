@@ -57,6 +57,8 @@ const safeJson = async (res) => {
   };
 };
 
+let initializePromise = null;
+
 export const useAuthStore = create((set, get) => ({
   user: null,
   isAuthenticated: localStorage.getItem(ACCESS_KEY) !== null,
@@ -92,64 +94,72 @@ export const useAuthStore = create((set, get) => ({
 
   // ── Session initialisation on page load ────────────────────────────────────
   initialize: async () => {
-    const sessionToken = localStorage.getItem(ACCESS_KEY) || localStorage.getItem('token');
-    console.log('[FCM-DIAGNOSTIC] Stage 1 (authStore.initialize started):', {
-      hasSessionToken: !!sessionToken,
-      hasAccessKey: !!localStorage.getItem(ACCESS_KEY),
-      hasTokenKey: !!localStorage.getItem('token')
-    });
+    if (initializePromise) {
+      return initializePromise;
+    }
 
-    set({ loading: true });
-    try {
-      const headers = {};
-      if (sessionToken && sessionToken !== 'cookie-auth-active') {
-        headers['Authorization'] = `Bearer ${sessionToken}`;
-      }
-
-      let res = await fetch(`${API_BASE}/auth/me`, {
-        headers,
-        credentials: 'include',
+    initializePromise = (async () => {
+      const sessionToken = localStorage.getItem(ACCESS_KEY) || localStorage.getItem('token');
+      console.log('[FCM-DIAGNOSTIC] Stage 1 (authStore.initialize started):', {
+        hasSessionToken: !!sessionToken,
+        hasAccessKey: !!localStorage.getItem(ACCESS_KEY),
+        hasTokenKey: !!localStorage.getItem('token')
       });
 
-      if (res.status === 401) {
-        console.log('[FCM-DIAGNOSTIC] /auth/me returned 401, trying silent token refresh...');
-        const newToken = await get().refreshAccessToken();
-        if (newToken) {
-          res = await fetch(`${API_BASE}/auth/me`, {
-            headers: { Authorization: `Bearer ${newToken}` },
-            credentials: 'include',
-          });
+      set({ loading: true });
+      try {
+        const headers = {};
+        if (sessionToken && sessionToken !== 'cookie-auth-active') {
+          headers['Authorization'] = `Bearer ${sessionToken}`;
         }
-      }
 
-      console.log('[FCM-DIAGNOSTIC] /auth/me HTTP status:', res.status);
-
-      if (res.ok) {
-        const data = await safeJson(res);
-        const currentToken = get().token || sessionToken || 'cookie-auth-active';
-        set({ user: data, token: currentToken, isAuthenticated: true, error: null });
-        console.log('[FCM-DIAGNOSTIC] Stage 1: User session verified via /auth/me:', {
-          email: data?.email,
-          role: data?.role,
-          id: data?._id
+        let res = await fetch(`${API_BASE}/auth/me`, {
+          headers,
+          credentials: 'include',
         });
-        console.log('[FCM-DIAGNOSTIC] Stage 1: Calling registerWebPush from initialize()...');
-        try {
-          await registerWebPush(currentToken, data);
-        } catch (pushErr) {
-          console.warn('[FCM-DIAGNOSTIC] registerWebPush error in initialize:', pushErr);
+
+        if (res.status === 401) {
+          console.log('[FCM-DIAGNOSTIC] /auth/me returned 401, trying silent token refresh...');
+          const newToken = await get().refreshAccessToken();
+          if (newToken) {
+            res = await fetch(`${API_BASE}/auth/me`, {
+              headers: { Authorization: `Bearer ${newToken}` },
+              credentials: 'include',
+            });
+          }
         }
-      } else if (res.status === 401 || res.status === 403) {
-        get().logout();
-      } else {
-        set({ error: 'Session initialization failed', isAuthenticated: false });
+
+        console.log('[FCM-DIAGNOSTIC] /auth/me HTTP status:', res.status);
+
+        if (res.ok) {
+          const data = await safeJson(res);
+          const currentToken = get().token || sessionToken || 'cookie-auth-active';
+          set({ user: data, token: currentToken, isAuthenticated: true, error: null });
+          console.log('[FCM-DIAGNOSTIC] Stage 1: User session verified via /auth/me:', {
+            email: data?.email,
+            role: data?.role,
+            id: data?._id
+          });
+          console.log('[FCM-DIAGNOSTIC] Stage 1: Calling registerWebPush from initialize()...');
+          registerWebPush(currentToken, data).catch((pushErr) => {
+            console.warn('[FCM-DIAGNOSTIC] registerWebPush error in initialize:', pushErr);
+          });
+        } else if (res.status === 401 || res.status === 403) {
+          get().logout();
+        } else {
+          set({ error: 'Session initialization failed', isAuthenticated: false });
+        }
+      } catch (err) {
+        console.error('Session initialization failed:', err);
+        set({ error: err.message, isAuthenticated: false });
+      } finally {
+        set({ loading: false });
       }
-    } catch (err) {
-      console.error('Session initialization failed:', err);
-      set({ error: err.message, isAuthenticated: false });
-    } finally {
-      set({ loading: false });
-    }
+    })().finally(() => {
+      initializePromise = null;
+    });
+
+    return initializePromise;
   },
 
   // ── Email + Password Login ──────────────────────────────────────────────────

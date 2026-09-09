@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { API_BASE } from '../config/api';
+import { API_BASE, SOCKET_URL } from '../config/api';
 import { useAuthStore } from '../store/authStore';
 import { setupForegroundNotificationListener } from '../services/firebaseMessaging';
 import { handleNotificationNavigation } from '../utils/notificationRouter';
@@ -19,8 +19,7 @@ const NotificationCenter = ({ role, userId, restaurantId }) => {
   useEffect(() => {
     fetchNotifications();
 
-    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
-    const socket = io(socketHost, {
+    const socket = io(SOCKET_URL, {
       auth: { token: token || localStorage.getItem('qb-auth-token') || localStorage.getItem('token') },
       withCredentials: true,
       transports: ['websocket', 'polling']

@@ -7,7 +7,7 @@ import {
   Lock,
   Clock
 } from 'lucide-react';
-import { API_BASE } from '../config/api';
+import { API_BASE, SOCKET_URL } from '../config/api';
 import { useTranslation } from '../store/languageStore';
 import { useCartStore } from '../store/cartStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
@@ -141,7 +141,7 @@ export default function Home() {
   );
 
   // Design Loading & Readiness State (prevents default-design swap flash if no cache exists)
-  const [isHomeDesignLoading, setIsHomeDesignLoading] = useState(!cachedDesign || !cachedDesign.homeHeroBanners || cachedDesign.homeHeroBanners.length === 0);
+  const [isHomeDesignLoading, setIsHomeDesignLoading] = useState(!cachedDesign);
 
   // Mobile Touch Swipe Handling
   const [touchStart, setTouchStart] = useState(0);
@@ -261,8 +261,7 @@ export default function Home() {
     // Listen to real-time socket category updates
     let socket;
     try {
-      const socketUrl = API_BASE.replace('/api', '');
-      socket = io(socketUrl);
+      socket = io(SOCKET_URL);
       socket.on('categoryStatusChanged', (data) => {
         if (data) {
           const catId = data.categoryId || (data.category && data.category.id);

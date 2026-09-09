@@ -1,4 +1,4 @@
-import { API_BASE } from '../config/api';
+import { API_BASE, SOCKET_URL } from '../config/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Phone, Star, Shield, ArrowLeft, RefreshCw, Calendar, ShoppingBag, Check, Send, FileText, ShieldAlert } from 'lucide-react';
@@ -250,8 +250,7 @@ export default function OrderTracking() {
   useEffect(() => {
     if (!id || !token) return;
 
-    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
-    const socket = io(socketHost, {
+    const socket = io(SOCKET_URL, {
       auth: { token },
       withCredentials: true,
       transports: ['websocket', 'polling']

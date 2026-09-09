@@ -1,4 +1,4 @@
-import { API_BASE } from '../config/api';
+import { API_BASE, SOCKET_URL } from '../config/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, XCircle, ChevronRight, AlertCircle, ShoppingBag, Eye, LogOut, Send, FileText, Star, MessageSquare, Heart, Phone, Pencil, AlertTriangle, Camera, ArrowLeft, Sparkles } from 'lucide-react';
@@ -572,8 +572,7 @@ export default function DeliveryDashboard() {
       return;
     }
 
-    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
-    const socket = io(socketHost, {
+    const socket = io(SOCKET_URL, {
       auth: { token },
       withCredentials: true,
       transports: ['websocket', 'polling']
@@ -689,8 +688,7 @@ export default function DeliveryDashboard() {
   useEffect(() => {
     if (!token || !user?._id) return;
 
-    const socketHost = (import.meta.env.VITE_API_BASE || 'http://localhost:5000/api').replace('/api', '');
-    const socket = io(socketHost, {
+    const socket = io(SOCKET_URL, {
       auth: { token },
       withCredentials: true,
       transports: ['websocket', 'polling']
