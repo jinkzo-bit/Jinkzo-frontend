@@ -12,8 +12,7 @@ import {
   Store,
   ShieldAlert,
   Moon,
-  Sun,
-  SlidersHorizontal
+  Sun
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { API_BASE, SOCKET_URL } from '../config/api';
@@ -289,14 +288,6 @@ export default function Navbar() {
                   placeholder={t('nav.searchPlaceholder', 'Search for food, grocery, items...')}
                   className="w-full bg-gray-50 dark:bg-[#1C2233] hover:bg-gray-100/70 dark:hover:bg-[#232B40] focus:bg-white dark:focus:bg-[#1E2538] text-gray-800 dark:text-white text-xs font-medium pl-10 pr-10 py-2 rounded-full border border-gray-200/80 dark:border-white/10 focus:border-[#7C3AED] dark:focus:border-[#A78BFA] focus:ring-2 focus:ring-purple-100 dark:focus:ring-purple-900/30 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500 shadow-inner"
                 />
-                <button
-                  type="button"
-                  onClick={() => navigate('/restaurants')}
-                  className="absolute right-3 text-gray-400 dark:text-slate-400 hover:text-[#7C3AED] dark:hover:text-[#A78BFA] transition-colors"
-                  title="Filters"
-                >
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                </button>
               </div>
             </form>
 
@@ -352,14 +343,6 @@ export default function Navbar() {
                   placeholder={t('nav.searchPlaceholder', 'Search for food, grocery, items...')}
                   className="w-full bg-gray-50 dark:bg-[#1C2233] hover:bg-gray-100/70 dark:hover:bg-[#232B40] focus:bg-white dark:focus:bg-[#1E2538] text-gray-800 dark:text-white text-xs sm:text-sm font-medium pl-11 pr-11 py-2.5 sm:py-3 rounded-full border border-gray-200/80 dark:border-white/10 focus:border-[#7C3AED] dark:focus:border-[#A78BFA] focus:ring-2 focus:ring-purple-100 dark:focus:ring-purple-900/30 outline-none transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500 shadow-inner"
                 />
-                <button
-                  type="button"
-                  onClick={() => navigate('/restaurants')}
-                  className="absolute right-3.5 text-gray-400 dark:text-slate-400 hover:text-[#7C3AED] dark:hover:text-[#A78BFA] transition-colors"
-                  title="Filters"
-                >
-                  <SlidersHorizontal className="w-4 h-4" />
-                </button>
               </div>
             </form>
 
