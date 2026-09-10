@@ -47,10 +47,8 @@ const getCachedHomeDesign = () => {
       typeof parsed.homeBackgroundConfig === 'object' &&
       parsed.homeBackgroundConfig !== null
     ) {
-      // Invalidate cache if older than 5 minutes (300,000 ms) to guarantee fresh published state
-      if (parsed.timestamp && (Date.now() - parsed.timestamp > 5 * 60 * 1000)) {
-        return null;
-      }
+      // Authoritative cached design returned for instant first paint and resilient fallback.
+      // Revalidation runs asynchronously on every mount via fetchAvailabilityAndBanners.
       return parsed;
     }
   } catch (e) {
@@ -62,12 +60,30 @@ const getCachedHomeDesign = () => {
 const setCachedHomeDesign = (data) => {
   try {
     if (!data) return;
+
+    // Read existing cache to defend against partial or empty overwrites
+    let existing = null;
+    try {
+      const raw = localStorage.getItem(HOME_DESIGN_CACHE_KEY);
+      if (raw) existing = JSON.parse(raw);
+    } catch (_) {}
+
+    // FRONTEND SAFETY DEFENSE (VALID DATA > EMPTY DATA):
+    // Only adopt hero banners if they are non-empty valid banners.
+    // If incoming data has no valid banners, preserve valid existing banners and never poison cache with [].
+    let heroBanners = existing?.homeHeroBanners || [];
+    if (Array.isArray(data.homeHeroBanners) && data.homeHeroBanners.length > 0) {
+      heroBanners = data.homeHeroBanners;
+    } else if (data.allowEmptyHeroBanners === true) {
+      heroBanners = [];
+    }
+
     const payload = {
       v: 2,
       timestamp: Date.now(),
-      homeHeroBanners: Array.isArray(data.homeHeroBanners) ? data.homeHeroBanners : [],
-      homeBackgroundConfig: data.homeBackgroundConfig || { type: 'default' },
-      categoryDesigns: data.categoryDesigns || DEFAULT_CATEGORY_DESIGNS
+      homeHeroBanners: heroBanners,
+      homeBackgroundConfig: data.homeBackgroundConfig || existing?.homeBackgroundConfig || { type: 'default' },
+      categoryDesigns: data.categoryDesigns || existing?.categoryDesigns || DEFAULT_CATEGORY_DESIGNS
     };
     localStorage.setItem(HOME_DESIGN_CACHE_KEY, JSON.stringify(payload));
   } catch (e) {
@@ -150,6 +166,7 @@ export default function Home() {
   // Mobile Touch Swipe Handling
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
+  const [heroFetchFailed, setHeroFetchFailed] = useState(false);
 
   useEffect(() => {
     const fetchAvailabilityAndBanners = async () => {
@@ -168,12 +185,51 @@ export default function Home() {
         let updatedBgConfig = cachedDesign?.homeBackgroundConfig || { type: 'default' };
         let updatedCategoryDesigns = cachedDesign?.categoryDesigns || DEFAULT_CATEGORY_DESIGNS;
 
+        let heroFetchSuccess = false;
         if (heroBannersRes.status === 'fulfilled' && heroBannersRes.value.ok) {
-          const heroData = await heroBannersRes.value.json();
-          if (Array.isArray(heroData)) {
-            updatedHeroBanners = heroData;
-            setHomeHeroBanners(heroData);
+          try {
+            const heroData = await heroBannersRes.value.json();
+            if (Array.isArray(heroData) && heroData.length > 0) {
+              heroFetchSuccess = true;
+              updatedHeroBanners = heroData;
+              setHomeHeroBanners(heroData);
+              setHeroFetchFailed(false);
+            }
+            // NOTE: An HTTP 200 + [] response is NOT treated as a valid successful
+            // production response (often caused by transient backend db.json fallback).
+            // If updatedHeroBanners already has valid cached banners, they are preserved
+            // (VALID DATA > EMPTY DATA). If no cached banners exist, heroFetchSuccess
+            // remains false so retry and safe skeleton protection are triggered.
+          } catch (e) {
+            // Malformed JSON response treated as failure
           }
+        }
+
+        // If initial hero request failed or returned empty, and we have no cached banners, attempt a single fast retry
+        // to gracefully recover from transient cold-start / network glitches without flashing fallback
+        if (!heroFetchSuccess && (!updatedHeroBanners || updatedHeroBanners.length === 0)) {
+          try {
+            const retryHeroRes = await fetch(`${API_BASE}/home-hero-banners/active`, { headers: requestHeaders });
+            if (retryHeroRes.ok) {
+              const retryData = await retryHeroRes.json();
+              if (Array.isArray(retryData) && retryData.length > 0) {
+                updatedHeroBanners = retryData;
+                setHomeHeroBanners(retryData);
+                setHeroFetchFailed(false);
+                heroFetchSuccess = true;
+              }
+            }
+          } catch (_) {
+            // retry failed
+          }
+        }
+
+        // If we still do not have valid hero banners (from fresh API, retry, or cache),
+        // mark heroFetchFailed = true so the UI renders the safe Hero skeleton instead of the obsolete fallback
+        if (!updatedHeroBanners || updatedHeroBanners.length === 0) {
+          setHeroFetchFailed(true);
+        } else {
+          setHeroFetchFailed(false);
         }
 
         if (bgRes.status === 'fulfilled' && bgRes.value.ok) {
@@ -307,9 +363,10 @@ export default function Home() {
         fetch(`${API_BASE}/home-hero-banners/active`)
           .then(res => res.json())
           .then(data => {
-            if (Array.isArray(data)) {
+            if (Array.isArray(data) && data.length > 0) {
               setHomeHeroBanners(data);
-              setCachedHomeDesign({ homeHeroBanners: data, homeBackgroundConfig, categoryDesigns });
+              setHeroFetchFailed(false);
+              setCachedHomeDesign({ homeHeroBanners: data });
             }
           })
           .catch(() => {});
@@ -509,6 +566,13 @@ export default function Home() {
         {/* 1. HERO ADVERTISEMENT CAROUSEL (NEW HOME HERO CAROUSEL WITH FALLBACK TO OLD CAROUSEL) */}
         {homeHeroBanners && homeHeroBanners.length > 0 ? (
           <HomeHeroCarousel banners={homeHeroBanners} />
+        ) : heroFetchFailed ? (
+          /* Safe loading skeleton when hero API temporarily fails without cached data (Case D) */
+          <div className="w-full aspect-[16/6] sm:aspect-[16/5] rounded-3xl sm:rounded-[32px] bg-surface/80 border border-line animate-pulse flex flex-col justify-end p-6 gap-3 shadow-xs">
+            <div className="w-1/3 h-5 sm:h-7 rounded-xl bg-base" />
+            <div className="w-2/3 h-7 sm:h-10 rounded-xl bg-base" />
+            <div className="w-28 sm:w-36 h-8 sm:h-10 rounded-2xl bg-primary/20 mt-2" />
+          </div>
         ) : (
           <section
             onMouseEnter={() => setIsPaused(true)}
