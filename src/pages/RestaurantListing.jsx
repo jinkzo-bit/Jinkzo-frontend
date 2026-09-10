@@ -10,17 +10,6 @@ import { useTranslation } from '../store/languageStore';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
 import VegBadge from '../components/VegBadge';
 
-// ─── 1. FOOD CATEGORIES ───
-const foodCategories = [
-  { name: 'Biryani', image: 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Burgers', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Pizza', image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Sushi', image: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Salads', image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Dosa', image: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Desserts', image: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=200&h=200&q=80' },
-  { name: 'Noodles', image: 'https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&w=200&h=200&q=80' }
-];
 
 export default function RestaurantListing() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -42,47 +31,49 @@ export default function RestaurantListing() {
   const isFoodCategory = !normCategory || normCategory === 'food';
 
   let activeDashboard = 'food';
-  let defaultCategories = foodCategories;
 
   if (normCategory === 'beverages' || normCategory === 'hot_cool' || normCategory === 'cool_hot') {
     activeDashboard = 'cool_hot';
-    defaultCategories = [];
   } else if (normCategory === 'grocery') {
     activeDashboard = 'grocery';
-    defaultCategories = [];
   } else if (normCategory === 'meat') {
     activeDashboard = 'meat';
-    defaultCategories = [];
   } else if (normCategory === 'fruits-vegetables' || normCategory === 'veg_fruits') {
     activeDashboard = 'veg_fruits';
-    defaultCategories = [];
   } else if (normCategory && normCategory !== 'food') {
     activeDashboard = normCategory;
-    defaultCategories = [];
   }
 
   const [dynamicCategories, setDynamicCategories] = useState([]);
+  const [isCategoriesLoading, setIsCategoriesLoading] = useState(true);
 
   // Fetch dynamic categories from Super Admin backend for browse mode
   useEffect(() => {
     let isMounted = true;
+    setIsCategoriesLoading(true);
     fetch(`${API_BASE}/categories?service=${activeDashboard}`)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
-        if (isMounted && Array.isArray(data) && data.length > 0) {
-          setDynamicCategories(data);
-        } else if (isMounted) {
-          setDynamicCategories([]);
+        if (isMounted) {
+          if (Array.isArray(data) && data.length > 0) {
+            setDynamicCategories(data);
+          } else {
+            setDynamicCategories([]);
+          }
+          setIsCategoriesLoading(false);
         }
       })
       .catch(err => {
         console.error('Categories fetch error:', err);
-        if (isMounted) setDynamicCategories([]);
+        if (isMounted) {
+          setDynamicCategories([]);
+          setIsCategoriesLoading(false);
+        }
       });
     return () => { isMounted = false; };
   }, [activeDashboard]);
 
-  const activeCategories = (dynamicCategories && dynamicCategories.length > 0) ? dynamicCategories : defaultCategories;
+  const activeCategories = dynamicCategories;
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState(searchParam);
@@ -1022,7 +1013,25 @@ export default function RestaurantListing() {
             B. SERVICE-SPECIFIC BROWSING HEADER ("WHAT'S ON YOUR MIND?")
            ═══════════════════════════════════════════════════════════════════════ */
         <section className="bg-surface rounded-3xl p-5 sm:p-6 shadow-2xs border border-line flex flex-col lg:flex-row lg:items-center justify-between gap-6 transition-colors">
-          {activeCategories && activeCategories.length > 0 ? (
+          {isCategoriesLoading ? (
+            <div className="flex-1 flex flex-col gap-4 min-w-0">
+              <div className="flex items-center justify-between">
+                <h2 className="font-display font-black text-lg sm:text-xl text-main tracking-tight">
+                  {t('restaurant.whatsOnYourMind', "What's on your mind?")}
+                </h2>
+              </div>
+
+              {/* Circular Categories Skeleton Row */}
+              <div className="flex items-center gap-4 sm:gap-5 overflow-x-auto no-scrollbar py-1">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="flex flex-col items-center gap-1.5 flex-shrink-0">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-base/80 border-2 border-line/40 animate-pulse shadow-2xs" />
+                    <div className="w-12 sm:w-14 h-3 rounded-md bg-base/60 animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : activeCategories && activeCategories.length > 0 ? (
             <div className="flex-1 flex flex-col gap-4 min-w-0">
               <div className="flex items-center justify-between">
                 <h2 className="font-display font-black text-lg sm:text-xl text-main tracking-tight">
