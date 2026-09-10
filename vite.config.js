@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => ({
           // React core — cached separately, rarely changes
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           // UI libraries
-          'vendor-ui': ['framer-motion', 'lucide-react'],
+          'vendor-ui': ['lucide-react'],
           // State management
           'vendor-state': ['zustand'],
         }
