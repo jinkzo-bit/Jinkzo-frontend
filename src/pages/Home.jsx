@@ -31,7 +31,7 @@ const DEFAULT_BANNER_SLIDES = [
   }
 ];
 
-const HOME_DESIGN_CACHE_KEY = 'jinkzo_home_design_cache_v2';
+const HOME_DESIGN_CACHE_KEY = 'jinkzo_home_design_cache_v3';
 
 const getCachedHomeDesign = () => {
   try {
@@ -141,7 +141,11 @@ export default function Home() {
   );
 
   // Design Loading & Readiness State (prevents default-design swap flash if no cache exists)
-  const [isHomeDesignLoading, setIsHomeDesignLoading] = useState(!cachedDesign);
+  const [isHomeDesignLoading, setIsHomeDesignLoading] = useState(
+    !cachedDesign ||
+    !cachedDesign.homeHeroBanners ||
+    cachedDesign.homeHeroBanners.length === 0
+  );
 
   // Mobile Touch Swipe Handling
   const [touchStart, setTouchStart] = useState(0);
