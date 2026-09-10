@@ -1,14 +1,14 @@
 import { API_BASE, SOCKET_URL } from '../config/api';
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, XCircle, ChevronRight, AlertCircle, ShoppingBag, Eye, LogOut, Send, FileText, Star, MessageSquare, Heart, Phone, Pencil, AlertTriangle, Camera, ArrowLeft, Sparkles } from 'lucide-react';
+import { Bike, DollarSign, Clock, ShieldCheck, MapPin, Store, CheckCircle, XCircle, ChevronRight, AlertCircle, ShoppingBag, Eye, LogOut, Send, FileText, Star, MessageSquare, Heart, Phone, Pencil, AlertTriangle, Camera, ArrowLeft, Sparkles, Navigation, Package, ExternalLink } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { uploadFileToBackend, getImageUrl, handleImageError } from '../utils/uploadUtil';
 import InteractiveMap from '../components/InteractiveMap';
 import { io } from 'socket.io-client';
 import OrderDetailsModal from '../components/OrderDetailsModal';
 import { formatAppDateOnly, formatAppTimeOnly, formatAppDateTime } from '../utils/dateUtils';
-import { getOrderFinancialBreakdown, formatCurrency, formatDistance, formatRating, normalizeRiderRun, getOrderPlacedAt, getOrderDeliveredAt, getOrderSourceDisplayNames } from '../utils/orderUtils';
+import { getOrderFinancialBreakdown, getOrderBillingBreakdown, getOrderFulfillmentSources, formatCurrency, formatDistance, formatRating, normalizeRiderRun, getOrderPlacedAt, getOrderDeliveredAt, getOrderSourceDisplayNames, getStopItems, getStopSubtotal } from '../utils/orderUtils';
 import {
   useHistoryFilter,
   HistoryFilterToolbar,
@@ -50,7 +50,7 @@ export default function DeliveryDashboard() {
     setIsSavingProfile(true);
     try {
       let profileImageUrl = riderProfile?.profileImage || user?.profileImage || '';
-      
+
       if (editProfileImage) {
         try {
           profileImageUrl = await uploadFileToBackend(editProfileImage);
@@ -141,7 +141,7 @@ export default function DeliveryDashboard() {
     setActiveSubTabState(tab);
     setSearchParams({ tab }, { replace: true });
   };
-  
+
   // Rider specific profile & availability
   const [riderProfile, setRiderProfile] = useState(null);
   const [isAvailable, setIsAvailable] = useState(false);
@@ -155,6 +155,7 @@ export default function DeliveryDashboard() {
   const [historyOrders, setHistoryOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedOrderRestaurantAddress, setSelectedOrderRestaurantAddress] = useState('');
+  const [routeInfo, setRouteInfo] = useState(null);
   const [isOrdersLoading, setIsOrdersLoading] = useState(true);
 
   // Deep-link context handler for rider food orders & ride requests
@@ -829,7 +830,7 @@ export default function DeliveryDashboard() {
         const updated = await res.json();
         const fresh = updated.order || updated;
         setSelectedOrder(fresh);
-        
+
         if (['Delivered', 'Completed'].includes(fresh.status)) {
           setActiveOrders(prev => prev.filter(o => String(o._id) !== String(orderId)));
           setHistoryOrders(prev => [fresh, ...prev.filter(o => String(o._id) !== String(orderId))]);
@@ -894,7 +895,7 @@ export default function DeliveryDashboard() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           status: 'Rider_Rejected',
           rejectionReason: rejectionReason === 'Other' ? customRejectionReason : rejectionReason
         }),
@@ -1073,7 +1074,7 @@ export default function DeliveryDashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 pb-32 animate-fade-in flex flex-col gap-8 w-full mt-4">
-      
+
       {/* Rider Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-line pb-5">
         <div className="flex items-center gap-3">
@@ -1230,7 +1231,7 @@ export default function DeliveryDashboard() {
 
       {/* Tabs */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-        
+
         {/* Left Side: Navigation sidebar on desktop (mobile uses fixed bottom navigation bar) */}
         <div className="hidden lg:flex lg:col-span-1 bg-surface border border-line shadow-2xs p-2 rounded-3xl flex-col gap-1.5">
           {[
@@ -1268,814 +1269,957 @@ export default function DeliveryDashboard() {
 
         {/* Right Side: Tab Panel view */}
         <div className="lg:col-span-3">
-          
-          {/* CLAIMED RUNS / ORDERS TAB */}
+
+                    {/* CLAIMED RUNS / ORDERS TAB */}
           {activeSubTab === 'orders' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
-              
-              {/* Claimed orders list */}
-              <div className="md:col-span-1 flex flex-col gap-3">
-                <h3 className="font-display font-extrabold text-sm text-main uppercase tracking-wider pb-1">Claimed Runs</h3>
-                {activeOrders.length > 0 ? (
-                  activeOrders.map(order => {
-                    const sourcesInfo = getOrderSourceDisplayNames(order);
-                    const custName = order.customerName || order.user?.name || order.userId?.name || order.address?.name || 'Customer';
-                    const dropAddress = order.customerLocation?.formattedAddress || (order.address?.street ? `${order.address.street}${order.address.city ? `, ${order.address.city}` : ''}` : (order.address?.formattedAddress || 'Customer Location'));
-                    const placedTime = getOrderPlacedAt(order);
-
-                    return (
-                      <div
-                        key={order._id}
-                        onClick={() => setSelectedOrder(order)}
-                        className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2.5 ${
-                          selectedOrder?._id === order._id ? 'border-primary bg-violet-50/15' : 'border-line bg-surface'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center text-[9px] font-bold text-muted">
-                          <span className="font-mono">#{order._id.substr(-8).toUpperCase()}</span>
-                          {(() => {
-                            const restStops = Array.isArray(order.pickupStops) ? order.pickupStops.filter(s => s.sourceType === 'restaurant') : [];
-                            const isCancelled = order.status === 'Cancelled' || order.status === 'Rejected';
-                            if (isCancelled) {
-                              return <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">Cancelled / Restaurant Rejected</span>;
-                            }
-                            if (order.status === 'Delivered' || order.status === 'Completed') {
-                              return <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700 border-green-200">Delivered</span>;
-                            }
-                            if (['Out_for_Delivery', 'Out for Delivery'].includes(order.status)) {
-                              return <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border-purple-200 animate-pulse">Out for Delivery</span>;
-                            }
-                            if (order.orderType === 'food' && restStops.length > 0) {
-                              if (restStops.every(s => s.status === 'Ready' || s.status === 'Collected')) {
-                                return <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold">🟢 Ready for Pickup</span>;
-                              }
-                              if (restStops.some(s => s.status === 'Preparing')) {
-                                return <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 font-bold">🟠 Preparing</span>;
-                              }
-                              return <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200 font-black">🔴 Awaiting Restaurant</span>;
-                            }
-                            return <span className={`px-1.5 py-0.5 rounded ${getStatusBadge(order.status)}`}>{order.status}</span>;
-                          })()}
-                        </div>
-
-                        {order.orderType === 'ride' ? (
-                          <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] font-black text-yellow-600">🏍️ BIKE RIDE</span>
-                            <span className="text-[10px] font-bold text-main">
-                              Customer: <strong className="text-main font-extrabold">{custName}</strong>
-                            </span>
-                            <div className="flex flex-col gap-1 mt-1 bg-gray-50 p-2 rounded-lg border border-gray-150 text-[10px]">
-                              <span className="text-[9px] font-extrabold text-gray-500">FROM</span>
-                              <span className="font-bold text-main truncate">
-                                {order.pickupLocation?.formattedAddress || order.pickupAddress?.street || order.pickupAddress?.city || 'Selected Pickup'}
-                              </span>
-                              <span className="text-[9px] font-extrabold text-gray-500 mt-0.5">TO</span>
-                              <span className="font-bold text-main truncate">
-                                {order.dropLocation?.formattedAddress || order.address?.street || 'Drop Location'}
-                              </span>
-                            </div>
-                            {placedTime && (
-                              <div className="flex items-center gap-1 text-[9px] text-muted font-medium">
-                                <Clock className="w-3 h-3 text-primary shrink-0" />
-                                <span>Placed: {formatAppDateTime(placedTime)}</span>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-1 text-[10px]">
-                            <div className="text-xs font-bold text-main">
-                              Customer: <strong className="font-extrabold">{custName}</strong>
-                            </div>
-                            <div className="font-bold text-primary flex items-start gap-1">
-                              <Store className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary" />
-                              <span className="line-clamp-1">
-                                {sourcesInfo.count > 1 ? `Pickups: ${sourcesInfo.summary}` : `Pickup: ${sourcesInfo.summary}`}
-                              </span>
-                            </div>
-                            <div className="text-muted font-medium flex items-start gap-1">
-                              <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted" />
-                              <span className="line-clamp-1">Deliver To: {dropAddress}</span>
-                            </div>
-                            {placedTime && (
-                              <div className="flex items-center gap-1 text-[9px] text-muted font-medium mt-0.5">
-                                <Clock className="w-3 h-3 text-primary shrink-0" />
-                                <span>Placed: {formatAppDateTime(placedTime)}</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        <div className="border-t border-line pt-2 flex justify-between items-center text-[10px] font-bold text-muted">
-                          <span>Grand Total: {formatCurrency(order.total ?? order.fare)}</span>
-                          <span className="text-primary flex items-center gap-0.5">Track <ChevronRight className="w-3 h-3" /></span>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="bg-surface rounded-2xl p-6 text-center border border-line flex flex-col items-center gap-1.5">
-                    <Bike className="w-8 h-8 text-gray-300" />
-                    <h4 className="text-xs font-bold text-main">No active dispatches</h4>
-                    <p className="text-[10px] text-muted">Claim runs from the "Requests Pool" tab.</p>
+            <div className="flex flex-col gap-6">
+              {/* If no active orders */}
+              {activeOrders.length === 0 ? (
+                <div className="bg-surface rounded-3xl border border-line p-12 text-center flex flex-col items-center justify-center gap-3 shadow-2xs">
+                  <div className="w-16 h-16 rounded-2xl bg-violet-50 flex items-center justify-center text-primary mb-2">
+                    <Bike className="w-8 h-8" />
                   </div>
-                )}
-              </div>
+                  <h4 className="font-display font-extrabold text-base text-main">No Active Deliveries</h4>
+                  <p className="text-xs text-muted max-w-sm leading-relaxed">
+                    You don't have any claimed deliveries in progress right now. Head over to the Requests Pool to accept and claim available orders.
+                  </p>
+                  <button
+                    onClick={() => setActiveSubTab('pool')}
+                    className="mt-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold py-2.5 px-5 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-2"
+                  >
+                    <Package className="w-4 h-4" />
+                    <span>View Requests Pool ({availableOrders.length})</span>
+                  </button>
+                </div>
+              ) : (
+                (() => {
+                  const currentOrder = selectedOrder || activeOrders[0];
+                  if (!currentOrder) return null;
 
-              {/* Active map and controls */}
-              <div className="md:col-span-2">
-                {selectedOrder ? (
-                  <div className="bg-surface rounded-3xl p-5 border border-line shadow-2xs flex flex-col gap-4 animate-scale-up">
-                    <div className="flex justify-between items-center border-b border-line pb-3">
-                      <div>
-                        <h4 className="font-display font-extrabold text-sm text-main">
-                          {selectedOrder.orderType === 'ride' ? '🏍️ BIKE RIDE' : 'Dispatch Details'}
-                        </h4>
-                        <div className="flex flex-wrap items-center gap-2 text-[9px] text-muted font-medium mt-0.5">
-                          <span className="font-mono font-bold">ID: #{selectedOrder._id.substr(-8).toUpperCase()}</span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1 font-semibold text-main">
-                            <Clock className="w-3 h-3 text-primary shrink-0" />
-                            Placed: {formatAppDateTime(selectedOrder.createdAt)}
+                  const isCancelled = currentOrder.status === 'Cancelled' || currentOrder.status === 'Rejected';
+                  const isDelivered = currentOrder.status === 'Delivered' || currentOrder.status === 'Completed';
+                  const isDelivering = ['Out_for_Delivery', 'Out for Delivery', 'Rider_At_Customer', 'Delivered', 'Completed'].includes(currentOrder.status);
+                  const custName = currentOrder.customerName || currentOrder.user?.name || currentOrder.userId?.name || currentOrder.address?.name || 'Customer';
+                  const dropAddress = currentOrder.customerLocation?.formattedAddress || (currentOrder.address?.street ? `${currentOrder.address.street}${currentOrder.address.city ? `, ${currentOrder.address.city}` : ''}${currentOrder.address.state ? `, ${currentOrder.address.state}` : ''}${currentOrder.address.zip ? ` - ${currentOrder.address.zip}` : ''}` : (currentOrder.address?.formattedAddress || 'Customer Location'));
+                  const custPhone = currentOrder.customerPhone || currentOrder.user?.phone || currentOrder.userId?.phone;
+                  const breakdown = getOrderFinancialBreakdown(currentOrder);
+                  const billing = getOrderBillingBreakdown(currentOrder);
+                  const stopsProgress = getPickupStopsProgress(currentOrder);
+                  const activeStops = (currentOrder.pickupStops || []).filter(s => !s.isNoSupplier && s.status !== 'Rejected' && s.status !== 'Cancelled' && s.latitude != null && s.longitude != null);
+                  const collectedStops = activeStops.filter(s => s.status === 'Collected');
+                  const allActiveCollected = activeStops.length > 0 && collectedStops.length === activeStops.length;
+                  const nextRiderAction = getNextRiderAction(currentOrder.status, currentOrder.orderType, currentOrder);
+                  const sourcesInfo = getOrderSourceDisplayNames(currentOrder);
+
+                  const getOrderTypeBadge = () => {
+                    if (currentOrder.orderType === 'ride') {
+                      return <span className="text-[10px] font-black px-2.5 py-1 rounded-lg bg-yellow-100 text-yellow-800 border border-yellow-200">🏍️ BIKE RIDE</span>;
+                    }
+                    if (sourcesInfo.count > 1) {
+                      return <span className="text-[10px] font-black px-2.5 py-1 rounded-lg bg-violet-100 text-primary border border-violet-200 uppercase tracking-wider">🛍️ MIXED ORDER</span>;
+                    }
+                    return <span className="text-[10px] font-black px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">🍴 FOOD ORDER</span>;
+                  };
+
+                  return (
+                    <div className="flex flex-col gap-5">
+                      {/* Active Deliveries Switcher Bar (when rider has multiple claimed runs) */}
+                      {activeOrders.length > 1 && (
+                        <div className="bg-surface border border-line rounded-2xl p-3 flex items-center gap-2 overflow-x-auto scrollbar-thin shadow-2xs">
+                          <span className="text-[10px] font-black text-muted uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
+                            <Bike className="w-3.5 h-3.5 text-primary" /> Active Runs ({activeOrders.length}):
                           </span>
+                          {activeOrders.map((ord) => {
+                            const isSelected = currentOrder._id === ord._id;
+                            const ordCust = ord.customerName || ord.user?.name || ord.userId?.name || 'Customer';
+                            return (
+                              <button
+                                key={ord._id}
+                                onClick={() => setSelectedOrder(ord)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-primary text-white border-primary shadow-xs'
+                                    : 'bg-base hover:bg-surface text-main border-line'
+                                }`}
+                              >
+                                <span className="font-mono text-[11px]">#{ord._id.substr(-6).toUpperCase()}</span>
+                                <span className="opacity-60">•</span>
+                                <span className="truncate max-w-[100px]">{ordCust}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-extrabold ${isSelected ? 'bg-white/20 text-white' : 'bg-violet-100 text-primary'}`}>
+                                  {formatCurrency(ord.total ?? ord.fare)}
+                                </span>
+                              </button>
+                            );
+                          })}
                         </div>
-                      </div>
-                      {(() => {
-                        const restStops = Array.isArray(selectedOrder.pickupStops) ? selectedOrder.pickupStops.filter(s => s.sourceType === 'restaurant') : [];
-                        const isCancelled = selectedOrder.status === 'Cancelled' || selectedOrder.status === 'Rejected';
-                        if (isCancelled) {
-                          return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-700">Cancelled / Restaurant Rejected</span>;
-                        }
-                        if (selectedOrder.status === 'Delivered' || selectedOrder.status === 'Completed') {
-                          return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">Delivered</span>;
-                        }
-                        if (['Out_for_Delivery', 'Out for Delivery'].includes(selectedOrder.status)) {
-                          return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700 animate-pulse">Out for Delivery</span>;
-                        }
-                        if (selectedOrder.orderType === 'food' && restStops.length > 0) {
-                          if (restStops.every(s => s.status === 'Ready' || s.status === 'Collected')) {
-                            return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">🟢 Ready for Pickup</span>;
-                          }
-                          if (restStops.some(s => s.status === 'Preparing')) {
-                            return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">🟠 Preparing</span>;
-                          }
-                          return <span className="text-[10px] font-black px-2 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">🔴 Awaiting Restaurant</span>;
-                        }
-                        return <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${getStatusBadge(selectedOrder.status)}`}>{selectedOrder.status}</span>;
-                      })()}
-                    </div>
+                      )}
 
-                    {/* Real Google Maps tracking map using exact order location snapshots */}
-                    {!['Delivered', 'Completed'].includes(selectedOrder.status) && (
-                      <InteractiveMap 
-                        status={selectedOrder.status} 
-                        restaurantName={selectedOrder.orderType === 'ride' ? 'Pickup Point' : (selectedOrderRestaurantName || 'Restaurant')}
-                        restaurantAddress={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.formattedAddress || selectedOrder.pickupAddress?.street || '') : (selectedOrder.restaurantLocation?.formattedAddress || '')}
-                        restaurantLat={selectedOrder.orderType !== 'ride' ? selectedOrder.restaurantLocation?.lat : undefined}
-                        restaurantLng={selectedOrder.orderType !== 'ride' ? selectedOrder.restaurantLocation?.lng : undefined}
-                        customerName={selectedOrder.customerName || selectedOrder.user?.name || selectedOrder.userId?.name || 'Customer'}
-                        customerAddress={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.formattedAddress || selectedOrder.address?.street || '') : (selectedOrder.customerLocation?.formattedAddress || selectedOrder.address?.street || '')}
-                        customerLat={selectedOrder.orderType !== 'ride' ? selectedOrder.customerLocation?.lat : undefined}
-                        customerLng={selectedOrder.orderType !== 'ride' ? selectedOrder.customerLocation?.lng : undefined}
-                        deliveryMethod={selectedOrder.orderType === 'ride' ? 'Ride' : 'Standard'}
-                        orderId={selectedOrder._id}
-                        isRide={selectedOrder.orderType === 'ride'}
-                        ridePickupLat={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.lat ?? selectedOrder.customerLocation?.lat) : undefined}
-                        ridePickupLng={selectedOrder.orderType === 'ride' ? (selectedOrder.pickupLocation?.lng ?? selectedOrder.customerLocation?.lng) : undefined}
-                        rideDropLat={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lat ?? selectedOrder.restaurantLocation?.lat) : undefined}
-                        rideDropLng={selectedOrder.orderType === 'ride' ? (selectedOrder.dropLocation?.lng ?? selectedOrder.restaurantLocation?.lng) : undefined}
-                        riderLat={riderLoc?.lat}
-                        riderLng={riderLoc?.lng}
-                        gpsStatus={gpsStatus}
-                        supplierDeliveries={selectedOrder.supplierDeliveries || []}
-                        pickupStops={selectedOrder.pickupStops || []}
-                        routeSequence={selectedOrder.routeSequence || []}
-                      />
-                    )}
+                      {/* Main 2-Column Responsive Layout matching reference design */}
+                      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
 
-                    {/* Unified Pickup Stops Panel — shows ALL sources (suppliers + restaurant) */}
-                    {(() => {
-                      const stopsProgress = getPickupStopsProgress(selectedOrder);
-                      if (!stopsProgress.hasStops) {
-                        // Legacy: fall back to old supplierDeliveries display if no pickupStops
-                        if (!Array.isArray(selectedOrder.supplierDeliveries) || selectedOrder.supplierDeliveries.length === 0) return null;
-                        return (
-                          <div className="bg-base border border-line rounded-2xl p-4 flex flex-col gap-3">
-                            <h5 className="text-xs font-extrabold uppercase tracking-wider text-main flex items-center gap-1.5">
-                              🏪 Store Pickup Stops ({selectedOrder.supplierDeliveries.length})
-                            </h5>
-                            <div className="flex flex-col gap-2">
-                              {selectedOrder.supplierDeliveries.map((sup, sIdx) => (
-                                <div key={sup.supplierId || sIdx} className="bg-surface border border-line rounded-xl p-3 flex flex-col gap-1 shadow-2xs">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <p className="font-bold text-xs text-main">{sup.supplierName || 'Store'}</p>
-                                    {sup.distanceKm != null && <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex-shrink-0">{sup.distanceKm} km</span>}
-                                  </div>
-                                  {Array.isArray(sup.items) && sup.items.length > 0 && (
-                                    <div className="bg-base/70 rounded-lg p-2 flex flex-col gap-1 border border-line/60 text-[11px]">
-                                      {sup.items.map((it, itIdx) => {
-                                        const uPrice = Number(it.price || 0);
-                                        const qty = Number(it.quantity || 1);
-                                        return (
-                                          <div key={itIdx} className="flex justify-between items-center font-medium text-main">
-                                            <span>• {it.itemName || it.name} {it.unit ? `(${it.unit})` : ''}</span>
-                                            <span className="font-bold text-muted">Qty: {qty} × {formatCurrency(uPrice)} = {formatCurrency(uPrice * qty)}</span>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
+                        {/* CENTER / MAIN COLUMN: Header, Map, Summary Bar, Pickup Stops, Live Chat */}
+                        <div className="xl:col-span-8 flex flex-col gap-5">
+
+                          {/* Order Header Card */}
+                          <div className="bg-surface rounded-2xl p-4 sm:p-5 border border-line shadow-2xs flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2.5">
+                                <h4 className="font-display font-black text-base sm:text-lg text-main">
+                                  ORDER <span className="font-mono text-primary">#{currentOrder._id.substr(-8).toUpperCase()}</span>
+                                </h4>
+                                {getOrderTypeBadge()}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted font-medium mt-0.5">
+                                <span>Customer: <strong className="text-main font-bold">{custName}</strong></span>
+                                <span>•</span>
+                                <span className="flex items-center gap-1 font-semibold text-main">
+                                  <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
+                                  Placed: {formatAppDateTime(currentOrder.createdAt)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {/* Status pill */}
+                              {(() => {
+                                const restStops = Array.isArray(currentOrder.pickupStops) ? currentOrder.pickupStops.filter(s => s.sourceType === 'restaurant') : [];
+                                if (isCancelled) {
+                                  return <span className="text-[11px] font-black px-2.5 py-1 rounded-xl bg-red-100 text-red-700 border border-red-200">Cancelled / Rejected</span>;
+                                }
+                                if (isDelivered) {
+                                  return <span className="text-[11px] font-black px-2.5 py-1 rounded-xl bg-green-100 text-green-700 border border-green-200">Delivered</span>;
+                                }
+                                if (['Out_for_Delivery', 'Out for Delivery'].includes(currentOrder.status)) {
+                                  return <span className="text-[11px] font-black px-2.5 py-1 rounded-xl bg-purple-100 text-purple-700 border border-purple-200 animate-pulse">Out for Delivery</span>;
+                                }
+                                if (currentOrder.orderType === 'food' && restStops.length > 0) {
+                                  if (restStops.every(s => s.status === 'Ready' || s.status === 'Collected')) {
+                                    return <span className="text-[11px] font-black px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-700 border border-emerald-200">🟢 Ready for Pickup</span>;
+                                  }
+                                  if (restStops.some(s => s.status === 'Preparing')) {
+                                    return <span className="text-[11px] font-black px-2.5 py-1 rounded-xl bg-amber-100 text-amber-800 border border-amber-200">🟠 Preparing</span>;
+                                  }
+                                }
+                                return <span className={`text-[11px] font-black px-2.5 py-1 rounded-xl ${getStatusBadge(currentOrder.status)}`}>{currentOrder.status}</span>;
+                              })()}
+
+                              <button
+                                onClick={() => setSelectedDetailsOrder(currentOrder)}
+                                className="p-2 sm:px-3 sm:py-1.5 rounded-xl border border-line hover:border-primary text-muted hover:text-primary transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer bg-base shadow-2xs"
+                                title="View Details Modal"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">View Details</span>
+                              </button>
                             </div>
                           </div>
-                        );
-                      }
 
-                      const { total, collected, allCollected } = stopsProgress;
-                      const isDelivering = ['Out_for_Delivery', 'Out for Delivery', 'Rider_At_Customer', 'Delivered', 'Completed'].includes(selectedOrder.status);
+                          {/* Live Interactive Map */}
+                          {!isDelivered && (
+                            <div className="rounded-3xl overflow-hidden border border-line shadow-2xs relative">
+                              <InteractiveMap
+                                status={currentOrder.status}
+                                restaurantName={currentOrder.orderType === 'ride' ? 'Pickup Point' : (selectedOrderRestaurantName || 'Restaurant')}
+                                restaurantAddress={currentOrder.orderType === 'ride' ? (currentOrder.pickupLocation?.formattedAddress || currentOrder.pickupAddress?.street || '') : (selectedOrderRestaurantAddress || '')}
+                                restaurantLat={currentOrder.orderType !== 'ride' ? currentOrder.restaurantLocation?.lat : undefined}
+                                restaurantLng={currentOrder.orderType !== 'ride' ? currentOrder.restaurantLocation?.lng : undefined}
+                                customerName={custName}
+                                customerAddress={currentOrder.orderType === 'ride' ? (currentOrder.dropLocation?.formattedAddress || currentOrder.address?.street || '') : (currentOrder.customerLocation?.formattedAddress || currentOrder.address?.street || '')}
+                                customerLat={currentOrder.orderType !== 'ride' ? currentOrder.customerLocation?.lat : undefined}
+                                customerLng={currentOrder.orderType !== 'ride' ? currentOrder.customerLocation?.lng : undefined}
+                                deliveryMethod={currentOrder.orderType === 'ride' ? 'Ride' : 'Standard'}
+                                orderId={currentOrder._id}
+                                isRide={currentOrder.orderType === 'ride'}
+                                ridePickupLat={currentOrder.orderType === 'ride' ? (currentOrder.pickupLocation?.lat ?? currentOrder.customerLocation?.lat) : undefined}
+                                ridePickupLng={currentOrder.orderType === 'ride' ? (currentOrder.pickupLocation?.lng ?? currentOrder.customerLocation?.lng) : undefined}
+                                rideDropLat={currentOrder.orderType === 'ride' ? (currentOrder.dropLocation?.lat ?? currentOrder.restaurantLocation?.lat) : undefined}
+                                rideDropLng={currentOrder.orderType === 'ride' ? (currentOrder.dropLocation?.lng ?? currentOrder.restaurantLocation?.lng) : undefined}
+                                riderLat={riderLoc?.lat}
+                                riderLng={riderLoc?.lng}
+                                gpsStatus={gpsStatus}
+                                supplierDeliveries={currentOrder.supplierDeliveries || []}
+                                pickupStops={(currentOrder.pickupStops || []).filter(s => s.status !== 'Rejected' && s.status !== 'Cancelled')}
+                                routeSequence={currentOrder.routeSequence || []}
+                                onRouteInfo={setRouteInfo}
+                              />
+                            </div>
+                          )}
 
-                      return (
-                        <div className="bg-base border border-line rounded-2xl p-4 flex flex-col gap-3">
-                          <div className="flex items-center justify-between">
-                            <h5 className="text-xs font-extrabold uppercase tracking-wider text-main flex items-center gap-1.5">
-                              📦 Pickup Stops
-                            </h5>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${allCollected || isDelivering ? 'bg-green-100 text-green-700' : 'bg-violet-100 text-primary'}`}>
-                              {isDelivering ? 'All Collected' : `${collected}/${total} Collected`}
-                            </span>
+                          {/* Map Summary Bar (Distance, Total Stops, Estimated Time) */}
+                          <div className="grid grid-cols-3 gap-3 bg-surface border border-line rounded-2xl p-3 sm:p-4 text-center shadow-2xs">
+                            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-violet-50/50">
+                              <span className="text-[10px] uppercase font-extrabold text-muted flex items-center gap-1">
+                                <Navigation className="w-3 h-3 text-primary" /> Total Distance
+                              </span>
+                              <span className="text-xs sm:text-sm font-black text-main mt-0.5">
+                                {routeInfo?.totalDistanceKm ? formatDistance(routeInfo.totalDistanceKm) : (currentOrder.distance ? formatDistance(currentOrder.distance) : 'Live Route')}
+                              </span>
+                            </div>
+                            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-violet-50/50">
+                              <span className="text-[10px] uppercase font-extrabold text-muted flex items-center gap-1">
+                                <MapPin className="w-3 h-3 text-primary" /> Total Stops
+                              </span>
+                              <span className="text-xs sm:text-sm font-black text-main mt-0.5">
+                                {currentOrder.pickupStops?.length ? `${currentOrder.pickupStops.length} Pickup ${currentOrder.pickupStops.length === 1 ? 'Stop' : 'Stops'}` : '1 Pickup Stop'}
+                              </span>
+                            </div>
+                            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-violet-50/50">
+                              <span className="text-[10px] uppercase font-extrabold text-muted flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-primary" /> Est. Time
+                              </span>
+                              <span className="text-xs sm:text-sm font-black text-main mt-0.5">
+                                {routeInfo?.totalDurationMinutes ? `~${Math.round(routeInfo.totalDurationMinutes)} mins` : (currentOrder.estimatedDeliveryTime ? `${currentOrder.estimatedDeliveryTime} mins` : (currentOrder.estimatedTime ? `${currentOrder.estimatedTime} mins` : 'Live Routing'))}
+                              </span>
+                            </div>
                           </div>
 
-                          {/* Progress bar */}
-                          <div className="w-full bg-line rounded-full h-1.5">
-                            <div
-                              className="bg-primary rounded-full h-1.5 transition-all duration-500"
-                              style={{ width: `${total > 0 ? (collected / total) * 100 : 0}%` }}
-                            />
-                          </div>
+                          {/* Detailed Pickup Stops Section */}
+                          {currentOrder.orderType !== 'ride' && (
+                            <div className="bg-surface border border-line rounded-3xl p-4 sm:p-5 flex flex-col gap-4 shadow-2xs">
+                              <div className="flex items-center justify-between border-b border-line pb-3">
+                                <div className="flex items-center gap-2">
+                                  <h5 className="text-xs sm:text-sm font-black uppercase tracking-wider text-main flex items-center gap-1.5">
+                                    <Package className="w-4 h-4 text-primary" /> Pickup Stops ({currentOrder.pickupStops?.length || 0})
+                                  </h5>
+                                </div>
+                                <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${allActiveCollected || isDelivering ? 'bg-green-100 text-green-700' : 'bg-violet-100 text-primary'}`}>
+                                  {isDelivering ? 'All Collected' : `${collectedStops.length}/${activeStops.length} Collected`}
+                                </span>
+                              </div>
 
-                          {/* Each stop */}
-                          <div className="flex flex-col gap-2.5">
-                            {selectedOrder.pickupStops.map((stop, sIdx) => {
-                              const stopId = String(stop._id || stop.stopId || sIdx);
-                              const isSupplier = stop.sourceType === 'supplier';
-                              const isCollected = stop.status === 'Collected';
-                              const isArrived = stop.status === 'Rider_Arrived';
-                              const isStopRejected = stop.status === 'Rejected' || stop.status === 'Cancelled';
-                              const isRestaurantNotReady = stop.sourceType === 'restaurant' && ['Pending', 'Preparing'].includes(stop.status);
-                              const isRestaurantReady = stop.sourceType === 'restaurant' && stop.status === 'Ready';
-                              const isUpdatingStop = Boolean(updatingId && (updatingId === (selectedOrder._id + '_stop_' + stopId) || updatingId.includes('_stop_' + stopId)));
+                              {/* Progress bar */}
+                              {activeStops.length > 0 && (
+                                <div className="w-full bg-base rounded-full h-2 border border-line overflow-hidden">
+                                  <div
+                                    className="bg-primary rounded-full h-full transition-all duration-500"
+                                    style={{ width: `${(collectedStops.length / activeStops.length) * 100}%` }}
+                                  />
+                                </div>
+                              )}
 
-                              return (
-                                <div
-                                  key={stopId}
-                                  className={`border rounded-xl p-3 flex flex-col gap-2 shadow-2xs transition-all ${
-                                    isStopRejected ? 'bg-red-50/60 border-red-200 opacity-75' :
-                                    isCollected ? 'bg-green-50 border-green-150' :
-                                    isSupplier ? 'bg-surface border-line' :
-                                    'bg-orange-50/50 border-orange-100'
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="flex items-center gap-2">
-                                      <span className={`w-5 h-5 rounded-full font-extrabold text-[10px] flex items-center justify-center flex-shrink-0 ${
-                                        isStopRejected ? 'bg-red-500 text-white' :
-                                        isCollected ? 'bg-green-600 text-white' :
-                                        isSupplier ? 'bg-violet-600 text-white' :
-                                        'bg-orange-500 text-white'
-                                      }`}>
-                                        {isStopRejected ? '✕' : isCollected ? '✓' : sIdx + 1}
-                                      </span>
-                                      <div>
-                                        <h6 className="font-bold text-xs text-main flex items-center gap-1">
-                                          {isSupplier ? '🏪' : '🍴'} {stop.sourceName || 'Pickup Stop'}
-                                        </h6>
-                                        {stop.address && <p className="text-[10px] text-muted line-clamp-1">{stop.address}</p>}
-                                      </div>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                                      {stop.distanceKm != null && stop.distanceKm > 0 && (
-                                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{formatDistance(stop.distanceKm)}</span>
-                                      )}
-                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded capitalize ${
-                                        isStopRejected ? 'bg-red-100 text-red-700' :
-                                        isCollected ? 'bg-green-100 text-green-700' :
-                                        isArrived ? 'bg-violet-100 text-violet-700' :
-                                        (!isRestaurantNotReady) ? 'bg-emerald-100 text-emerald-700' :
-                                        'bg-yellow-100 text-yellow-700'
-                                      }`}>
-                                        {isStopRejected ? 'Cancelled' :
-                                         isCollected ? 'Collected' :
-                                         isArrived ? 'Rider Arrived' :
-                                         isRestaurantNotReady ? 'Preparing' :
-                                         'Ready for Pickup'}
-                                      </span>
-                                    </div>
-                                  </div>
+                              {/* List of stops */}
+                              <div className="flex flex-col gap-3.5">
+                                {(() => {
+                                  const fulfillmentSources = getOrderFulfillmentSources(currentOrder);
+                                  if (!fulfillmentSources || fulfillmentSources.length === 0) {
+                                    return <p className="text-xs text-muted text-center py-4">No pickup stops found for this order.</p>;
+                                  }
 
-                                  {/* Items with customer unit prices and line totals */}
-                                  {Array.isArray(stop.items) && stop.items.length > 0 && (
-                                    <div className="bg-base/70 rounded-lg p-2.5 flex flex-col gap-1 border border-line/60">
-                                      <span className="text-[9px] uppercase font-extrabold text-muted">Items to Collect:</span>
-                                      {stop.items.map((it, itIdx) => {
-                                        const uPrice = Number(it.price || it.customerUnitPrice || 0);
-                                        const qty = Number(it.quantity || 1);
-                                        const lTotal = uPrice * qty;
-                                        return (
-                                          <div key={itIdx} className="flex justify-between items-center text-[11px] font-medium text-main">
-                                            <span className={isStopRejected ? 'line-through text-red-500' : ''}>
-                                              • {it.itemName || it.name} {it.unit ? `(${it.unit})` : ''}
+                                  return fulfillmentSources.map((stop, sIdx) => {
+                                    const stopId = String(stop.stopId || stop.id || sIdx);
+                                    const isNoSup = Boolean(stop.isNoSupplier);
+                                    const isSupplier = stop.sourceType === 'supplier';
+                                    const isRest = stop.sourceType === 'restaurant';
+                                    const isCollected = stop.status === 'Collected';
+                                    const isArrived = stop.status === 'Rider_Arrived';
+                                    const isStopRejected = stop.status === 'Rejected' || stop.status === 'Cancelled';
+                                    const isRestaurantNotReady = isRest && ['Pending', 'Preparing'].includes(stop.status);
+                                    const isRestaurantReady = isRest && stop.status === 'Ready';
+                                    const isUpdatingStop = Boolean(updatingId && (updatingId === (currentOrder._id + '_stop_' + stopId) || updatingId.includes('_stop_' + stopId)));
+                                    const stopItems = stop.items || [];
+                                    const stopSubtotal = stop.subtotal;
+
+                                    if (isNoSup) {
+                                      return (
+                                        <div
+                                          key={stop.id || sIdx}
+                                          className="border border-line rounded-2xl p-4 flex flex-col gap-3 shadow-2xs bg-surface"
+                                        >
+                                          {/* Category Header */}
+                                          <div className="flex items-start justify-between gap-2">
+                                            <div className="flex items-start gap-2.5">
+                                              <span className="w-6 h-6 rounded-full font-black text-sm flex items-center justify-center shrink-0 mt-0.5 bg-primary/10 text-primary">
+                                                {stop.icon || '📦'}
+                                              </span>
+                                              <div>
+                                                <div className="flex items-center gap-2">
+                                                  <h6 className="font-bold text-xs sm:text-sm text-main">
+                                                    {stop.sourceName}
+                                                  </h6>
+                                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider bg-primary/10 text-primary">
+                                                    {stop.badge || 'Category'}
+                                                  </span>
+                                                </div>
+                                                <p className="text-[11px] text-muted mt-0.5 font-medium">
+                                                  Items to collect with customer delivery
+                                                </p>
+                                              </div>
+                                            </div>
+                                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full capitalize bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                              READY TO COLLECT
                                             </span>
-                                            <div className="flex items-center gap-2 text-right">
-                                              <span className="text-[10px] text-muted font-bold">Qty: {qty} × {formatCurrency(uPrice)} =</span>
-                                              <span className="font-bold text-main">{formatCurrency(lTotal)}</span>
+                                          </div>
+
+                                          {/* Items to collect card */}
+                                          <div className="bg-surface/90 rounded-xl p-3 border border-line flex flex-col gap-2">
+                                            <div className="flex justify-between items-center text-[10px] font-extrabold uppercase tracking-wider text-muted border-b border-line/60 pb-1.5">
+                                              <span>Items to Collect ({stopItems.length})</span>
+                                              <span className="text-[9px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-bold">
+                                                {stop.badge || 'Category'}
+                                              </span>
+                                            </div>
+
+                                            {stopItems.length > 0 ? (
+                                              <div className="overflow-x-auto">
+                                                <table className="w-full text-left text-xs border-collapse">
+                                                  <thead>
+                                                    <tr className="border-b border-line/60 text-[10px] uppercase font-extrabold text-muted tracking-wider">
+                                                      <th className="py-1 px-1.5">Item Name</th>
+                                                      <th className="py-1 px-1 text-center">Qty</th>
+                                                      <th className="py-1 px-1 text-right">Unit Price</th>
+                                                      <th className="py-1 px-1.5 text-right">Total</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody className="divide-y divide-line/40">
+                                                    {stopItems.map((it, itIdx) => (
+                                                      <tr
+                                                        key={itIdx}
+                                                        className={`hover:bg-base/30 transition-colors ${
+                                                          it.isCancelled ? 'opacity-60 bg-red-50/20' : ''
+                                                        }`}
+                                                      >
+                                                        <td className="py-1.5 px-1.5 font-bold text-main">
+                                                          <div className="flex items-center gap-1.5 min-w-0">
+                                                            {it.isVeg !== undefined && (
+                                                              <span className={`w-3 h-3 rounded-xs border flex items-center justify-center shrink-0 ${
+                                                                it.isVeg ? 'border-green-600' : 'border-red-600'
+                                                              }`}>
+                                                                <span className={`w-1 h-1 rounded-full ${it.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
+                                                              </span>
+                                                            )}
+                                                            <span className={`truncate ${it.isCancelled ? 'line-through text-red-500' : ''}`}>
+                                                              {it.name}
+                                                            </span>
+                                                            {it.unit ? (
+                                                              <span className="text-[9px] font-extrabold text-primary bg-primary/10 px-1.5 py-0.2 rounded border border-primary/20 shrink-0">
+                                                                {it.unit}
+                                                              </span>
+                                                            ) : null}
+                                                            {it.isCancelled && (
+                                                              <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.2 bg-red-100 text-red-700 rounded border border-red-200 shrink-0">
+                                                                Cancelled
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                        </td>
+                                                        <td className={`py-1.5 px-1 text-center font-semibold ${it.isCancelled ? 'line-through text-red-500' : 'text-muted'}`}>
+                                                          {it.quantity}
+                                                        </td>
+                                                        <td className={`py-1.5 px-1 text-right font-medium text-muted ${it.isCancelled ? 'line-through text-red-500' : ''}`}>
+                                                          {formatCurrency(it.price)}
+                                                        </td>
+                                                        <td className={`py-1.5 px-1.5 text-right font-black ${it.isCancelled ? 'line-through text-red-500' : 'text-main'}`}>
+                                                          {formatCurrency(it.lineTotal ?? (it.price * it.quantity))}
+                                                        </td>
+                                                      </tr>
+                                                    ))}
+                                                  </tbody>
+                                                </table>
+                                              </div>
+                                            ) : (
+                                              <p className="text-xs text-muted italic py-1">Items details pending.</p>
+                                            )}
+
+                                            {/* Stop subtotal */}
+                                            <div className="flex justify-between items-center text-xs font-bold text-muted border-t border-line/60 pt-2 mt-0.5">
+                                              <span className="text-main">Source Subtotal:</span>
+                                              <span className="font-black text-primary text-sm">
+                                                {formatCurrency(stopSubtotal)}
+                                              </span>
                                             </div>
                                           </div>
-                                        );
-                                      })}
-                                      <div className="flex justify-between items-center text-[10px] font-bold text-muted border-t border-line/60 pt-1.5 mt-0.5">
-                                        <span>Source Subtotal:</span>
-                                        <span className="font-extrabold text-main">
-                                          {formatCurrency(stop.items.reduce((sum, it) => sum + (Number(it.price || it.customerUnitPrice || 0) * Number(it.quantity || 1)), 0))}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  )}
+                                        </div>
+                                      );
+                                    }
 
-                                  {/* Phone & Call Button */}
-                                  {stop.sourcePhone && !isStopRejected && (
-                                    <div className="flex items-center justify-between bg-violet-50/70 border border-violet-150 rounded-xl px-3 py-2 mt-0.5">
-                                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-violet-900">
-                                        <Phone className="w-3.5 h-3.5 text-violet-600 shrink-0" />
-                                        <span>{stop.sourcePhone}</span>
-                                      </div>
-                                      <a
-                                        href={`tel:${stop.sourcePhone}`}
-                                        className="text-[10px] font-black text-white bg-primary hover:bg-primary-hover px-3 py-1.5 rounded-lg shadow-2xs transition-colors flex items-center gap-1"
+                                    return (
+                                      <div
+                                        key={stopId}
+                                        className={`border rounded-2xl p-4 flex flex-col gap-3 shadow-2xs transition-all ${
+                                          isStopRejected ? 'bg-red-50/50 border-red-200 opacity-80' :
+                                          isCollected ? 'bg-emerald-50/40 border-emerald-200' :
+                                          isSupplier ? 'bg-violet-50/20 border-violet-150' :
+                                          'bg-amber-50/20 border-amber-150'
+                                        }`}
                                       >
-                                        <Phone className="w-3 h-3" />
-                                        <span>Call {isSupplier ? 'Store' : 'Restaurant'}</span>
-                                      </a>
-                                    </div>
-                                  )}
+                                        {/* Stop header: number, icon, source name, status pill, distance */}
+                                        <div className="flex items-start justify-between gap-2">
+                                          <div className="flex items-start gap-2.5">
+                                            <span className={`w-6 h-6 rounded-full font-black text-[11px] flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                              isStopRejected ? 'bg-red-500 text-white' :
+                                              isCollected ? 'bg-green-600 text-white' :
+                                              isSupplier ? 'bg-violet-600 text-white' :
+                                              'bg-orange-500 text-white'
+                                            }`}>
+                                              {isStopRejected ? '✕' : isCollected ? '✓' : sIdx + 1}
+                                            </span>
+                                            <div>
+                                              <div className="flex items-center gap-2">
+                                                <h6 className="font-bold text-xs sm:text-sm text-main">
+                                                  {stop.sourceName || (isSupplier ? 'Store / Supplier' : 'Restaurant')}
+                                                </h6>
+                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                                  isSupplier ? 'bg-violet-100 text-violet-800' : 'bg-orange-100 text-orange-800'
+                                                }`}>
+                                                  {isSupplier ? 'Store / Supplier' : 'Restaurant'}
+                                                </span>
+                                              </div>
+                                              {stop.address && (
+                                                <p className="text-[11px] text-muted mt-0.5 flex items-start gap-1">
+                                                  <MapPin className="w-3 h-3 text-muted shrink-0 mt-0.5" />
+                                                  <span>{stop.address}</span>
+                                                </p>
+                                              )}
+                                            </div>
+                                          </div>
 
-                                  {/* Per-stop milestone buttons */}
-                                  {!isCollected && !isDelivering && (
-                                    <div className="flex gap-1.5 mt-1">
-                                      {/* Stop was Rejected / Cancelled */}
-                                      {isStopRejected && (
-                                        <span className="flex-1 bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1">
-                                          <XCircle className="w-3.5 h-3.5" /> Stop Cancelled / Rejected (Skip)
-                                        </span>
-                                      )}
+                                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                            {stop.distanceKm != null && stop.distanceKm > 0 && (
+                                              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
+                                                {formatDistance(stop.distanceKm)}
+                                              </span>
+                                            )}
+                                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full capitalize ${
+                                              isStopRejected ? 'bg-red-100 text-red-700 border border-red-200' :
+                                              isCollected ? 'bg-green-100 text-green-700 border border-green-200' :
+                                              isArrived ? 'bg-violet-100 text-violet-700 border border-violet-200' :
+                                              (!isRestaurantNotReady) ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                                              'bg-amber-100 text-amber-800 border border-amber-200'
+                                            }`}>
+                                              {isStopRejected ? 'REJECTED' :
+                                               isCollected ? 'COLLECTED' :
+                                               isArrived ? 'RIDER ARRIVED' :
+                                               isRestaurantNotReady ? 'PREPARING' :
+                                               'READY FOR PICKUP'}
+                                            </span>
+                                          </div>
+                                        </div>
 
-                                      {/* Restaurant food not ready yet */}
-                                      {!isStopRejected && isRestaurantNotReady && (
-                                        <span className="flex-1 bg-yellow-50 border border-yellow-200 text-yellow-700 text-[10px] font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1">
-                                          <Clock className="w-3.5 h-3.5" /> Waiting for Restaurant
-                                        </span>
-                                      )}
+                                        {/* Items to collect card */}
+                                        <div className="bg-surface/90 rounded-xl p-3 border border-line flex flex-col gap-2">
+                                          <div className="flex justify-between items-center text-[10px] font-extrabold uppercase tracking-wider text-muted border-b border-line/60 pb-1.5">
+                                            <span>Items to Collect ({stopItems.length})</span>
+                                            {isSupplier && <span className="text-[9px] text-violet-700 bg-violet-50 px-1.5 py-0.2 rounded font-bold">Store Items</span>}
+                                          </div>
 
-                                      {/* Stop is Ready for Pickup — show Reached Store / Reached Restaurant */}
-                                      {!isStopRejected && !isArrived && (isRestaurantReady || isSupplier) && (
-                                        <button
-                                          onClick={() => handleUpdateStopStatus(selectedOrder._id, stopId, 'Rider_Arrived')}
-                                          disabled={isUpdatingStop}
-                                          className={`flex-1 ${isSupplier ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-orange-500 hover:bg-orange-600'} text-white text-[10px] font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-50`}
-                                        >
-                                          <MapPin className="w-3.5 h-3.5" />
-                                          {isUpdatingStop ? 'Updating...' : (isSupplier ? 'Reached Store' : 'Reached Restaurant')}
-                                        </button>
-                                      )}
+                                          {stopItems.length > 0 ? (
+                                            <div className="overflow-x-auto">
+                                              <table className="w-full text-left text-xs border-collapse">
+                                                <thead>
+                                                  <tr className="border-b border-line/60 text-[10px] uppercase font-extrabold text-muted tracking-wider">
+                                                    <th className="py-1 px-1.5">Item Name</th>
+                                                    <th className="py-1 px-1 text-center">Qty</th>
+                                                    <th className="py-1 px-1 text-right">Unit Price</th>
+                                                    <th className="py-1 px-1.5 text-right">Total</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-line/40">
+                                                  {stopItems.map((it, itIdx) => (
+                                                    <tr
+                                                      key={itIdx}
+                                                      className={`hover:bg-base/30 transition-colors ${
+                                                        it.isCancelled || isStopRejected ? 'opacity-60 bg-red-50/20' : ''
+                                                      }`}
+                                                    >
+                                                      <td className="py-1.5 px-1.5 font-bold text-main">
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                          {it.isVeg !== undefined && (
+                                                            <span className={`w-3 h-3 rounded-xs border flex items-center justify-center shrink-0 ${
+                                                              it.isVeg ? 'border-green-600' : 'border-red-600'
+                                                              }`}>
+                                                              <span className={`w-1 h-1 rounded-full ${it.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
+                                                            </span>
+                                                          )}
+                                                          <span className={`truncate ${it.isCancelled || isStopRejected ? 'line-through text-red-500' : ''}`}>
+                                                            {it.name}
+                                                          </span>
+                                                          {it.unit ? (
+                                                            <span className="text-[9px] font-extrabold text-primary bg-primary/10 px-1.5 py-0.2 rounded border border-primary/20 shrink-0">
+                                                              {it.unit}
+                                                            </span>
+                                                          ) : null}
+                                                          {it.isCancelled && (
+                                                            <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.2 bg-red-100 text-red-700 rounded border border-red-200 shrink-0">
+                                                              Cancelled
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      </td>
+                                                      <td className={`py-1.5 px-1 text-center font-semibold ${it.isCancelled || isStopRejected ? 'line-through text-red-500' : 'text-muted'}`}>
+                                                        {it.quantity}
+                                                      </td>
+                                                      <td className={`py-1.5 px-1 text-right font-medium text-muted ${it.isCancelled || isStopRejected ? 'line-through text-red-500' : ''}`}>
+                                                        {formatCurrency(it.price)}
+                                                      </td>
+                                                      <td className={`py-1.5 px-1.5 text-right font-black ${it.isCancelled || isStopRejected ? 'line-through text-red-500' : 'text-main'}`}>
+                                                        {formatCurrency(it.lineTotal ?? (it.price * it.quantity))}
+                                                      </td>
+                                                    </tr>
+                                                  ))}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          ) : (
+                                            <p className="text-xs text-muted italic py-1">Items details pending.</p>
+                                          )}
 
-                                      {/* Rider has reached the stop — show Collect Items / Collect Food */}
-                                      {!isStopRejected && isArrived && (
-                                        <button
-                                          onClick={() => handleUpdateStopStatus(selectedOrder._id, stopId, 'Collected')}
-                                          disabled={isUpdatingStop}
-                                          className="flex-1 bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
-                                        >
-                                          <CheckCircle className="w-3.5 h-3.5" />
-                                          {isUpdatingStop ? 'Collecting...' : (isSupplier ? 'Collect Items' : 'Collect Food')}
-                                        </button>
-                                      )}
-                                    </div>
-                                  )}
+                                          {/* Stop subtotal */}
+                                          <div className="flex justify-between items-center text-xs font-bold text-muted border-t border-line/60 pt-2 mt-0.5">
+                                            <span className="text-main">Source Subtotal:</span>
+                                            <span className="font-black text-primary text-sm">
+                                              {formatCurrency(stopSubtotal)}
+                                            </span>
+                                          </div>
+                                        </div>
 
-                                  {isCollected && (
-                                    <div className="flex items-center gap-1 text-[10px] text-green-700 font-bold">
-                                      <CheckCircle className="w-3.5 h-3.5" /> Collected ✓
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
+                                        {/* Contact & Call Button */}
+                                        {stop.sourcePhone && !isStopRejected && (
+                                          <div className="flex items-center justify-between bg-violet-50/70 border border-violet-150 rounded-xl px-3 py-2">
+                                            <div className="flex items-center gap-1.5 text-xs font-bold text-violet-900">
+                                              <Phone className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                                              <span>{stop.sourcePhone}</span>
+                                            </div>
+                                            <a
+                                              href={`tel:${stop.sourcePhone}`}
+                                              className="text-[10px] font-black text-white bg-primary hover:bg-primary-hover px-3 py-1.5 rounded-lg shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                                            >
+                                              <Phone className="w-3 h-3" />
+                                              <span>Call {isSupplier ? 'Store' : 'Restaurant'}</span>
+                                            </a>
+                                          </div>
+                                        )}
 
-                          {/* Out_for_Delivery guard warning */}
-                          {!allCollected && !isDelivering && (
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[10px] font-bold text-amber-800 flex items-start gap-2">
-                              <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-500 mt-0.5" />
-                              <span>
-                                {collected} of {total} stops collected. Collect all items before starting delivery.
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
+                                        {/* Stop Milestone Actions */}
+                                        {!isCollected && !isDelivering && (
+                                          <div className="flex gap-2 mt-0.5">
+                                            {isStopRejected ? (
+                                              <span className="flex-1 bg-red-50 border border-red-200 text-red-700 text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5">
+                                                <XCircle className="w-4 h-4" /> Stop Cancelled / Rejected (Skip)
+                                              </span>
+                                            ) : isRestaurantNotReady ? (
+                                              <span className="flex-1 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5">
+                                                <Clock className="w-4 h-4 text-amber-600" /> Waiting for Restaurant Preparation
+                                              </span>
+                                            ) : !isArrived && (isRestaurantReady || isSupplier) ? (
+                                              <button
+                                                onClick={() => handleUpdateStopStatus(currentOrder._id, stopId, 'Rider_Arrived')}
+                                                disabled={isUpdatingStop}
+                                                className={`flex-1 ${isSupplier ? 'bg-violet-600 hover:bg-violet-700' : 'bg-orange-500 hover:bg-orange-600'} text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs`}
+                                              >
+                                                <MapPin className="w-4 h-4" />
+                                                <span>{isUpdatingStop ? 'Updating...' : (isSupplier ? 'Reached Store' : 'Reached Restaurant')}</span>
+                                              </button>
+                                            ) : isArrived ? (
+                                              <button
+                                                onClick={() => handleUpdateStopStatus(currentOrder._id, stopId, 'Collected')}
+                                                disabled={isUpdatingStop}
+                                                className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
+                                              >
+                                                <CheckCircle className="w-4 h-4" />
+                                                <span>{isUpdatingStop ? 'Collecting...' : (isSupplier ? 'Collect Items' : 'Collect Food')}</span>
+                                              </button>
+                                            ) : null}
+                                          </div>
+                                        )}
 
-                    {/* Rider Financial Overview: Customer Collection vs Rider Earnings */}
-                    {selectedOrder.orderType !== 'ride' ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
-                        {/* Customer Payment to Collect */}
-                        <div className="bg-surface border border-line rounded-2xl p-3.5 flex flex-col gap-2 shadow-2xs">
-                          <div className="flex justify-between items-center border-b border-line pb-1.5">
-                            <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Customer Payment</span>
-                            <span className="text-[9px] font-bold text-muted bg-base px-1.5 py-0.5 rounded border border-line uppercase">
-                              {selectedOrder.paymentDetails?.method || (selectedOrder.paymentMethod === 'COD' || !selectedOrder.paymentMethod ? 'Cash on Delivery' : selectedOrder.paymentMethod)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-muted font-medium">Items Subtotal</span>
-                            <span className="font-bold text-main">{formatCurrency(getOrderFinancialBreakdown(selectedOrder).customer.itemsSubtotal)}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-muted font-medium">Delivery Fee</span>
-                            <span className="font-bold text-main">{formatCurrency(getOrderFinancialBreakdown(selectedOrder).customer.totalCustomerDeliveryFee)}</span>
-                          </div>
-                          {getOrderFinancialBreakdown(selectedOrder).customer.platformFee > 0 && (
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-muted font-medium">Platform Fee</span>
-                              <span className="font-bold text-main">{formatCurrency(getOrderFinancialBreakdown(selectedOrder).customer.platformFee)}</span>
-                            </div>
-                          )}
-                          <div className="border-t border-line pt-1.5 flex justify-between items-center text-xs font-black">
-                            <span className="text-main">Amount to Collect (COD)</span>
-                            <span className="text-primary text-sm font-black">{formatCurrency(selectedOrder.total)}</span>
-                          </div>
-                        </div>
-
-                        {/* Rider Delivery Earnings */}
-                        <div className="bg-surface border border-line rounded-2xl p-3.5 flex flex-col gap-2 shadow-2xs">
-                          <div className="flex justify-between items-center border-b border-line pb-1.5">
-                            <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Rider Earnings</span>
-                            <span className="text-[9px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase">
-                              Wallet Credit
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-muted font-medium">Base Delivery Earning</span>
-                            <span className="font-bold text-main">{formatCurrency(getOrderFinancialBreakdown(selectedOrder).rider.basePayout)}</span>
-                          </div>
-                          {getOrderFinancialBreakdown(selectedOrder).rider.additionalStopPayout > 0 && (
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-muted font-medium">Additional Stops Bonus</span>
-                              <span className="font-bold text-main">{formatCurrency(getOrderFinancialBreakdown(selectedOrder).rider.additionalStopPayout)}</span>
-                            </div>
-                          )}
-                          {selectedOrder.riderReview?.tipAmount > 0 && (
-                            <div className="flex justify-between items-center text-xs text-green-600 font-bold">
-                              <span>Customer Tip</span>
-                              <span>+{formatCurrency(selectedOrder.riderReview.tipAmount)}</span>
-                            </div>
-                          )}
-                          <div className="border-t border-line pt-1.5 flex justify-between items-center text-xs font-black">
-                            <span className="text-main">Total Rider Earning</span>
-                            <span className="text-green-600 text-sm font-black">
-                              {formatCurrency((Number(getOrderFinancialBreakdown(selectedOrder).rider.totalRiderPayout) || 0) + (Number(selectedOrder.riderReview?.tipAmount) || 0))}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
-                        {/* Customer Ride Fare */}
-                        <div className="bg-surface border border-yellow-200/80 rounded-2xl p-3.5 flex flex-col gap-2 shadow-2xs">
-                          <div className="flex justify-between items-center border-b border-line pb-1.5">
-                            <span className="text-[9px] uppercase font-extrabold tracking-wider text-yellow-700">Ride Fare (Customer)</span>
-                            <span className="text-[9px] font-bold text-yellow-800 bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200 uppercase">
-                              {selectedOrder.paymentDetails?.method || (selectedOrder.paymentMethod === 'COD' || !selectedOrder.paymentMethod ? 'Cash on Drop' : selectedOrder.paymentMethod)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-muted font-medium">Estimated Distance</span>
-                            <span className="font-bold text-main">{formatDistance(selectedOrder.distance)}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-muted font-medium">Total Ride Fare</span>
-                            <span className="font-bold text-main">{formatCurrency(selectedOrder.total ?? selectedOrder.fare)}</span>
-                          </div>
-                          <div className="border-t border-line pt-1.5 flex justify-between items-center text-xs font-black">
-                            <span className="text-main">Amount to Collect (Cash)</span>
-                            <span className="text-yellow-700 text-sm font-black">{formatCurrency(selectedOrder.total ?? selectedOrder.fare)}</span>
-                          </div>
-                        </div>
-
-                        {/* Rider Captain Earnings */}
-                        <div className="bg-surface border border-line rounded-2xl p-3.5 flex flex-col gap-2 shadow-2xs">
-                          <div className="flex justify-between items-center border-b border-line pb-1.5">
-                            <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Captain Earning</span>
-                            <span className="text-[9px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase">
-                              Wallet Credit
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-muted font-medium">Ride Payout</span>
-                            <span className="font-bold text-main">
-                              {formatCurrency(selectedOrder.pricingSnapshot?.rider?.totalRiderPayout ?? selectedOrder.riderPayout ?? selectedOrder.riderEarning ?? selectedOrder.total ?? selectedOrder.fare)}
-                            </span>
-                          </div>
-                          {selectedOrder.riderReview?.tipAmount > 0 && (
-                            <div className="flex justify-between items-center text-xs text-green-600 font-bold">
-                              <span>Customer Tip</span>
-                              <span>+{formatCurrency(selectedOrder.riderReview.tipAmount)}</span>
-                            </div>
-                          )}
-                          <div className="border-t border-line pt-1.5 flex justify-between items-center text-xs font-black">
-                            <span className="text-main">Total Captain Earning</span>
-                            <span className="text-green-600 text-sm font-black">
-                              {formatCurrency((Number(selectedOrder.pricingSnapshot?.rider?.totalRiderPayout ?? selectedOrder.riderPayout ?? selectedOrder.riderEarning ?? selectedOrder.total ?? selectedOrder.fare ?? 0)) + (Number(selectedOrder.riderReview?.tipAmount) || 0))}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Driver Instructions */}
-                    {selectedOrder.instruction && (
-                      <div className="bg-violet-50/50 border border-violet-100 text-violet-900 rounded-2xl p-4 flex gap-2.5 text-xs leading-relaxed font-medium">
-                        <FileText className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                        <div>
-                          <h5 className="font-bold text-main">Driver Instructions</h5>
-                          <p className="mt-0.5 text-gray-655 font-semibold">{selectedOrder.instruction}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Action buttons */}
-                    {(selectedOrder.status === 'Rider_Assigned' || (selectedOrder.orderType === 'food' && selectedOrder.riderStatus === 'Pending' && (selectedOrder.deliveryAgent?.id === user?._id || selectedOrder.deliveryAgent?.phone === user?.phone))) ? (
-                      <div className="bg-base border border-gray-150 p-4 rounded-2xl flex flex-col gap-2">
-                        <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Milestone Control</span>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleUpdateStatus(selectedOrder._id, 'Rider_Accepted')}
-                            disabled={updatingId === selectedOrder._id}
-                            className="flex-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                          >
-                            <CheckCircle className="w-4.5 h-4.5" />
-                            <span>{selectedOrder.orderType === 'ride' ? 'ACCEPT RIDE' : 'ACCEPT ORDER'}</span>
-                          </button>
-                          <button
-                            onClick={() => { setRejectingOrderId(selectedOrder._id); setRejectionReason(''); setCustomRejectionReason(''); }}
-                            disabled={updatingId === selectedOrder._id}
-                            className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                          >
-                            <span>{selectedOrder.orderType === 'ride' ? 'REJECT RIDE' : 'REJECT'}</span>
-                          </button>
-                        </div>
-                      </div>
-                    ) : getNextRiderAction(selectedOrder.status, selectedOrder.orderType, selectedOrder) ? (
-                      <div className="bg-base border border-gray-150 p-4 rounded-2xl flex flex-col gap-2">
-                        <span className="text-[9px] uppercase font-extrabold tracking-wider text-muted">Milestone Control</span>
-                        <button
-                          onClick={() => handleUpdateStatus(selectedOrder._id, getNextRiderAction(selectedOrder.status, selectedOrder.orderType, selectedOrder).next)}
-                          disabled={updatingId === selectedOrder._id}
-                          className="bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          <CheckCircle className="w-4.5 h-4.5" />
-                          <span>{updatingId === selectedOrder._id ? 'Updating...' : getNextRiderAction(selectedOrder.status, selectedOrder.orderType, selectedOrder).label}</span>
-                        </button>
-                      </div>
-                    ) : ['Delivered', 'Completed'].includes(selectedOrder.status) ? (
-                      <div className="bg-green-50 border border-green-200 text-green-700 text-xs font-bold p-3.5 rounded-xl flex items-center justify-center gap-2">
-                        <CheckCircle className="w-5 h-5" />
-                        <span>{selectedOrder.orderType === 'ride' ? '✅ Ride successfully completed!' : '✅ Delivery successfully completed!'}</span>
-                      </div>
-                    ) : (
-                      <div className="bg-violet-50 border border-violet-100 text-violet-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2 animate-pulse">
-                        <Clock className="w-5 h-5 text-primary" />
-                        <span>
-                          {selectedOrder.orderType === 'ride'
-                            ? 'Waiting for pickup...'
-                            : Array.isArray(selectedOrder.pickupStops) && selectedOrder.pickupStops.length > 0
-                              ? 'Collecting items from pickup stops...'
-                              : 'Awaiting preparation...'}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Live Chat Panel */}
-                    {selectedOrder.status !== 'Delivered' && (
-                    <div className="rounded-2xl p-4 border border-gray-150 flex flex-col gap-3 bg-surface mt-1">
-                      <h4 className="font-display font-extrabold text-xs text-gray-805 uppercase tracking-wider pb-1 border-b border-line flex items-center justify-between">
-                        <span>{selectedOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'Live Chat with Restaurant' : 'Live Chat with Customer'}</span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                      </h4>
-
-                      {/* Scrollable messages container */}
-                      <div ref={chatContainerRef} className="h-48 overflow-y-auto flex flex-col gap-3 pr-1.5 scrollbar-thin">
-                        {selectedOrder.messages && selectedOrder.messages.length > 0 ? (
-                          selectedOrder.messages
-                            .filter(msg => {
-                              const isBeforePickup = selectedOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
-                              if (isBeforePickup) {
-                                // Before pickup: Only show restaurant messages or rider messages targeted at restaurant
-                                return msg.sender === 'restaurant' || msg.sender === 'system' || (msg.sender === 'rider' && msg.target !== 'customer');
-                              } else {
-                                // After pickup: Only show customer messages or rider messages targeted at customer
-                                return msg.sender === 'customer' || msg.sender === 'system' || (msg.sender === 'rider' && msg.target !== 'restaurant');
-                              }
-                            })
-                            .map((msg, idx) => {
-                            if (msg.sender === 'system') {
-                              return (
-                                <div key={idx} className="text-[9px] text-muted font-bold text-center bg-base/70 py-1 px-2.5 rounded-lg w-max mx-auto max-w-[85%] border border-line">
-                                  {msg.text}
-                                </div>
-                              );
-                            }
-
-                            const isMe = msg.sender === 'rider';
-                            return (
-                              <div 
-                                key={idx} 
-                                className={`flex flex-col gap-0.5 max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
-                              >
-                                <div className={`px-3 py-1.5 rounded-2xl text-xs font-semibold leading-normal ${
-                                  isMe 
-                                    ? 'bg-primary text-white rounded-tr-none shadow-3xs' 
-                                    : 'bg-gray-100 text-main rounded-tl-none border border-gray-150'
-                                }`}>
-                                  {msg.text}
-                                </div>
-                                <span className="text-[7px] text-muted font-medium">
-                                  {formatAppTimeOnly(msg.createdAt)}
-                                </span>
+                                        {isCollected && (
+                                          <div className="flex items-center gap-1.5 text-xs text-green-700 font-bold bg-green-50 p-2 rounded-xl border border-green-100">
+                                            <CheckCircle className="w-4 h-4 text-green-600" />
+                                            <span>Items Collected ✓</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  });
+                                })()}
                               </div>
-                            );
-                          })
-                        ) : (
-                          <div className="flex-grow flex flex-col items-center justify-center text-center text-muted gap-1.5 py-6">
-                            <span className="text-lg">💬</span>
-                            <p className="text-[10px] font-bold text-muted">No messages yet</p>
-                            <p className="text-[9px] max-w-[160px] leading-tight">Send a message to coordinate direction details with the {selectedOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'restaurant' : 'customer'}.</p>
-                          </div>
-                        )}
-                      </div>
 
-                      {/* Message Input Box */}
-                      <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-line pt-2 mt-0.5">
-                        <input
-                          type="text"
-                          placeholder={`Type a message to ${selectedOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status) ? 'restaurant' : 'customer'}...`}
-                          value={messageText}
-                          onChange={(e) => setMessageText(e.target.value)}
-                          className="bg-base border border-line-strong focus:border-primary focus:bg-surface rounded-xl px-3 py-2 text-xs text-main outline-none flex-grow"
-                        />
-                        <button
-                          type="submit"
-                          disabled={!messageText.trim() || isSending}
-                          className="bg-primary hover:bg-primary-hover text-white p-2 rounded-xl shadow-xs transition-colors flex items-center justify-center cursor-pointer disabled:opacity-40"
-                        >
-                          <Send className="w-4 h-4" />
-                        </button>
-                      </form>
-                    </div>
-                    )}
-
-                    {/* Address details */}
-                    {(() => {
-                      if (selectedOrder.status === 'Delivered') {
-                        return (
-                          <div className="flex flex-col gap-3">
-                            <div className="bg-green-50 border border-green-100 text-green-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2">
-                              <CheckCircle className="w-5 h-5 text-green-600" />
-                              <span>{selectedOrder.orderType === 'ride' ? 'Ride successfully completed! Earnings credited to wallet.' : 'Order successfully delivered! Earnings credited to wallet.'}</span>
-                            </div>
-                            {Number(selectedOrder.riderReview?.rating) > 0 ? (
-                              <div className="bg-violet-50/50 border border-violet-100 rounded-2xl p-4 flex flex-col gap-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[9px] font-extrabold text-muted uppercase tracking-wider flex items-center gap-1">
-                                    <MessageSquare className="w-3.5 h-3.5" /> Customer Feedback
+                              {/* Collection alert warning */}
+                              {!allActiveCollected && !isDelivering && activeStops.length > 0 && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs font-bold text-amber-800 flex items-start gap-2">
+                                  <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-500 mt-0.5" />
+                                  <span>
+                                    {collectedStops.length} of {activeStops.length} active stops collected. Please collect all items before starting delivery.
                                   </span>
-                                  <div className="flex items-center gap-0.5">
-                                    {[1, 2, 3, 4, 5].map((s) => (
-                                      <Star key={s} className={`w-3.5 h-3.5 ${s <= selectedOrder.riderReview.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-200'}`} />
-                                    ))}
-                                  </div>
                                 </div>
-                                {selectedOrder.riderReview?.tipAmount > 0 && (
-                                  <div className="flex items-center justify-between bg-green-50 border border-green-100 rounded-xl px-3 py-2">
-                                    <span className="text-[10px] font-bold text-green-700 flex items-center gap-1">
-                                      <Heart className="w-3 h-3 text-green-600 fill-green-100" /> Tip Received
-                                    </span>
-                                    <span className="text-sm font-black text-green-700">₹{selectedOrder.riderReview.tipAmount}</span>
-                                  </div>
-                                )}
-                                {selectedOrder.riderReview?.comment && (
-                                  <div className="bg-surface/60 rounded-xl px-3 py-2.5 border border-violet-100/50">
-                                    <p className="text-[10px] text-muted font-semibold italic">"{selectedOrder.riderReview.comment}"</p>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="bg-base border border-line rounded-2xl p-3 text-center">
-                                <p className="text-[10px] text-muted font-semibold">Awaiting customer feedback...</p>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      }
+                              )}
+                            </div>
+                          )}
 
-                      const isBeforePickup = selectedOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(selectedOrder.status);
-                      
-                      if (selectedOrder.orderType === 'ride') {
-                        return (
-                          <div className="border border-line p-4 rounded-2xl flex items-center justify-between shadow-xs">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[10px] text-muted font-extrabold uppercase tracking-wider">Customer</span>
-                              <h5 className="font-bold text-main text-sm">
-                                {selectedOrder.customerName || selectedOrder.user?.name || selectedOrder.userId?.name || 'Customer'}
+                          {/* Live Chat Panel */}
+                          {!isDelivered && (
+                            <div className="rounded-3xl p-4 sm:p-5 border border-line flex flex-col gap-3 bg-surface shadow-2xs">
+                              <h4 className="font-display font-extrabold text-xs text-main uppercase tracking-wider pb-2 border-b border-line flex items-center justify-between">
+                                <span>{currentOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(currentOrder.status) ? 'Live Chat with Restaurant' : 'Live Chat with Customer'}</span>
+                                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                              </h4>
+
+                              {/* Scrollable messages container */}
+                              <div ref={chatContainerRef} className="h-44 overflow-y-auto flex flex-col gap-2.5 pr-1.5 scrollbar-thin">
+                                {currentOrder.messages && currentOrder.messages.length > 0 ? (
+                                  currentOrder.messages
+                                    .filter(msg => {
+                                      const isBeforePickup = currentOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(currentOrder.status);
+                                      if (isBeforePickup) {
+                                        return msg.sender === 'restaurant' || msg.sender === 'system' || (msg.sender === 'rider' && msg.target !== 'customer');
+                                      } else {
+                                        return msg.sender === 'customer' || msg.sender === 'system' || (msg.sender === 'rider' && msg.target !== 'restaurant');
+                                      }
+                                    })
+                                    .map((msg, idx) => {
+                                      if (msg.sender === 'system') {
+                                        return (
+                                          <div key={idx} className="text-[9px] text-muted font-bold text-center bg-base/70 py-1 px-2.5 rounded-lg w-max mx-auto max-w-[85%] border border-line">
+                                            {msg.text}
+                                          </div>
+                                        );
+                                      }
+
+                                      const isMe = msg.sender === 'rider';
+                                      return (
+                                        <div
+                                          key={idx}
+                                          className={`flex flex-col gap-0.5 max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
+                                        >
+                                          <div className={`px-3 py-1.5 rounded-2xl text-xs font-semibold leading-normal ${
+                                            isMe
+                                              ? 'bg-primary text-white rounded-tr-none shadow-3xs'
+                                              : 'bg-gray-100 text-main rounded-tl-none border border-gray-150'
+                                          }`}>
+                                            {msg.text}
+                                          </div>
+                                          <span className="text-[7px] text-muted font-medium">
+                                            {formatAppTimeOnly(msg.createdAt)}
+                                          </span>
+                                        </div>
+                                      );
+                                    })
+                                ) : (
+                                  <div className="flex-grow flex flex-col items-center justify-center text-center text-muted gap-1.5 py-6">
+                                    <span className="text-lg">💬</span>
+                                    <p className="text-[11px] font-bold text-muted">No messages yet</p>
+                                    <p className="text-[10px] max-w-[180px] leading-tight">Send a message to coordinate details with the {currentOrder.orderType === 'food' && ['Placed', 'Accepted', 'Confirmed', 'Preparing', 'Ready_for_Pickup', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant'].includes(currentOrder.status) ? 'restaurant' : 'customer'}.</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Message Input Box */}
+                              <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-line pt-2 mt-0.5">
+                                <input
+                                  type="text"
+                                  placeholder="Type a message..."
+                                  value={messageText}
+                                  onChange={(e) => setMessageText(e.target.value)}
+                                  className="bg-base border border-line focus:border-primary focus:bg-surface rounded-xl px-3 py-2 text-xs text-main outline-none flex-grow"
+                                />
+                                <button
+                                  type="submit"
+                                  disabled={!messageText.trim() || isSending}
+                                  className="bg-primary hover:bg-primary-hover text-white p-2 rounded-xl shadow-xs transition-colors flex items-center justify-center cursor-pointer disabled:opacity-40"
+                                >
+                                  <Send className="w-4 h-4" />
+                                </button>
+                              </form>
+                            </div>
+                          )}
+
+                        </div>
+
+                        {/* RIGHT / SIDEBAR COLUMN: Customer & Payment, Rider Earnings, Milestone Controls, Instructions */}
+                        <div className="xl:col-span-4 flex flex-col gap-5">
+
+                          {/* Customer & Delivery Card */}
+                          <div className="bg-surface border border-line rounded-3xl p-4 sm:p-5 flex flex-col gap-3 shadow-2xs">
+                            <div className="flex items-center justify-between border-b border-line pb-2.5">
+                              <h5 className="font-extrabold text-xs uppercase tracking-wider text-muted flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5 text-primary" /> Customer & Delivery
                               </h5>
-                              <p className="text-[10px] text-gray-500 font-semibold max-w-[200px] truncate">
-                                {selectedOrder.pickupLocation?.formattedAddress || selectedOrder.pickupAddress?.street || 'Pickup'} 
-                                {' → '} 
-                                {selectedOrder.dropLocation?.formattedAddress || selectedOrder.address?.street || 'Drop'}
+                            </div>
+
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] uppercase font-extrabold text-muted">Recipient</span>
+                              <h5 className="font-bold text-main text-sm sm:text-base">{custName}</h5>
+                            </div>
+
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] uppercase font-extrabold text-muted">Delivery Address</span>
+                              <p className="text-xs text-main font-medium leading-relaxed bg-base p-2.5 rounded-xl border border-line">
+                                {dropAddress}
                               </p>
                             </div>
-                            <a 
-                              href={`tel:${selectedOrder.customerPhone || selectedOrder.user?.phone || selectedOrder.userId?.phone}`}
-                              className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
-                            >
-                              <Phone className="w-4 h-4" />
-                              <span>Call Customer</span>
-                            </a>
-                          </div>
-                        );
-                      }
 
-                      return (
-                        <div className="border border-primary p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
-                          {isBeforePickup ? (
-                            <>
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[10px] text-primary font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-                                  <MapPin className="w-3 h-3" /> Pickup Kitchen
-                                </span>
-                                <h5 className="font-bold text-main text-sm">
-                                  {selectedOrderRestaurantName || 'Restaurant'}
-                                </h5>
-                                <p className="text-[10px] text-gray-500 font-semibold mt-0.5 max-w-[250px] leading-relaxed">
-                                  {selectedOrderRestaurantAddress || 'Restaurant Address'}
-                                </p>
-                              </div>
-                              {selectedOrderRestaurantPhone && (
-                                <a 
-                                  href={`tel:${selectedOrderRestaurantPhone}`}
-                                  className="bg-violet-100 hover:bg-violet-200 text-violet-700 text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm shrink-0"
-                                >
-                                  <Phone className="w-4 h-4" />
-                                  <span>Call Restaurant</span>
-                                </a>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[10px] text-primary font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-                                  <MapPin className="w-3 h-3" /> Drop Customer
-                                </span>
-                                <h5 className="font-bold text-main text-sm">
-                                  {selectedOrder.customerName || selectedOrder.user?.name || selectedOrder.userId?.name || 'Customer'}
-                                </h5>
-                                <p className="text-[10px] text-gray-500 font-semibold mt-0.5 max-w-[250px] leading-relaxed">
-                                  {selectedOrder.customerLocation?.formattedAddress || `${selectedOrder.address?.street || 'Customer Location'}, ${selectedOrder.address?.city || ''}, ${selectedOrder.address?.state || ''} - ${selectedOrder.address?.zip || ''}`}
-                                </p>
-                              </div>
-                              <a 
-                                href={`tel:${selectedOrder.userId?.phone || selectedOrder.customerPhone || selectedOrder.user?.phone}`}
-                                className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm shrink-0"
+                            {custPhone && (
+                              <a
+                                href={`tel:${custPhone}`}
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-2xs cursor-pointer mt-1"
                               >
                                 <Phone className="w-4 h-4" />
                                 <span>Call Customer</span>
                               </a>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <div className="bg-surface rounded-3xl border border-line p-16 text-center flex flex-col items-center justify-center gap-3">
-                    <Bike className="w-10 h-10 text-gray-300" />
-                    <h4 className="font-display font-extrabold text-sm text-main">No dispatch selected</h4>
-                    <p className="text-xs text-muted max-w-xs leading-relaxed">Select a claimed run from the left panel to load the routing map and milestones.</p>
-                  </div>
-                )}
-              </div>
+                            )}
+                          </div>
 
+                          {/* Milestone Action Card */}
+                          <div className="bg-surface border border-line rounded-3xl p-4 sm:p-5 flex flex-col gap-3 shadow-2xs">
+                            <div className="flex items-center justify-between border-b border-line pb-2">
+                              <h5 className="font-extrabold text-xs uppercase tracking-wider text-muted flex items-center gap-1.5">
+                                <ShieldCheck className="w-3.5 h-3.5 text-primary" /> Milestone Action
+                              </h5>
+                            </div>
+
+                            {/* Action buttons */}
+                            {(currentOrder.status === 'Rider_Assigned' || (currentOrder.orderType === 'food' && currentOrder.riderStatus === 'Pending' && (currentOrder.deliveryAgent?.id === user?._id || currentOrder.deliveryAgent?.phone === user?.phone))) ? (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleUpdateStatus(currentOrder._id, 'Rider_Accepted')}
+                                  disabled={updatingId === currentOrder._id}
+                                  className="flex-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                  <span>{currentOrder.orderType === 'ride' ? 'ACCEPT RIDE' : 'ACCEPT ORDER'}</span>
+                                </button>
+                                <button
+                                  onClick={() => { setRejectingOrderId(currentOrder._id); setRejectionReason(''); setCustomRejectionReason(''); }}
+                                  disabled={updatingId === currentOrder._id}
+                                  className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 text-xs font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                                >
+                                  <span>{currentOrder.orderType === 'ride' ? 'REJECT RIDE' : 'REJECT'}</span>
+                                </button>
+                              </div>
+                            ) : nextRiderAction ? (
+                              <div className="flex flex-col gap-2">
+                                <button
+                                  onClick={() => handleUpdateStatus(currentOrder._id, nextRiderAction.next)}
+                                  disabled={updatingId === currentOrder._id || (!allActiveCollected && nextRiderAction.next === 'Out_for_Delivery')}
+                                  className="w-full bg-primary hover:bg-primary-hover text-white text-xs font-extrabold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs uppercase tracking-wider"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                  <span>{updatingId === currentOrder._id ? 'Updating...' : nextRiderAction.label}</span>
+                                </button>
+                                {!allActiveCollected && nextRiderAction.next === 'Out_for_Delivery' && (
+                                  <p className="text-[10px] text-amber-700 font-bold text-center">
+                                    ⚠️ Collect all items from pickup stops to begin delivery.
+                                  </p>
+                                )}
+                              </div>
+                            ) : isDelivered ? (
+                              <div className="flex flex-col gap-3">
+                                <div className="bg-green-50 border border-green-200 text-green-700 text-xs font-bold p-3.5 rounded-xl flex items-center justify-center gap-2">
+                                  <CheckCircle className="w-5 h-5 text-green-600" />
+                                  <span>{currentOrder.orderType === 'ride' ? '✅ Ride completed!' : '✅ Delivery successfully completed!'}</span>
+                                </div>
+                                {Number(currentOrder.riderReview?.rating) > 0 && (
+                                  <div className="bg-violet-50/50 border border-violet-100 rounded-xl p-3 flex flex-col gap-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[10px] font-bold text-muted flex items-center gap-1">
+                                        <MessageSquare className="w-3 h-3" /> Customer Rating
+                                      </span>
+                                      <div className="flex items-center gap-0.5">
+                                        {[1, 2, 3, 4, 5].map((s) => (
+                                          <Star key={s} className={`w-3.5 h-3.5 ${s <= currentOrder.riderReview.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-200'}`} />
+                                        ))}
+                                      </div>
+                                    </div>
+                                    {currentOrder.riderReview?.tipAmount > 0 && (
+                                      <div className="flex items-center justify-between bg-green-50 px-2.5 py-1.5 rounded-lg border border-green-100">
+                                        <span className="text-[10px] font-bold text-green-700 flex items-center gap-1">
+                                          <Heart className="w-3 h-3 text-green-600 fill-green-100" /> Tip
+                                        </span>
+                                        <span className="text-xs font-black text-green-700">₹{currentOrder.riderReview.tipAmount}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="bg-violet-50 border border-violet-100 text-violet-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2 animate-pulse">
+                                <Clock className="w-4 h-4 text-primary shrink-0" />
+                                <span>
+                                  {currentOrder.orderType === 'ride'
+                                    ? 'Waiting for pickup...'
+                                    : Array.isArray(currentOrder.pickupStops) && currentOrder.pickupStops.length > 0
+                                      ? 'Collecting items from pickup stops...'
+                                      : 'Awaiting preparation...'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Customer Payment Breakdown Card */}
+                          <div className="bg-surface border border-line rounded-3xl p-4 sm:p-5 flex flex-col gap-3 shadow-2xs">
+                            <div className="flex justify-between items-center border-b border-line pb-2.5">
+                              <h5 className="font-extrabold text-xs uppercase tracking-wider text-muted flex items-center gap-1.5">
+                                <DollarSign className="w-3.5 h-3.5 text-primary" /> Customer Payment / Order Bill
+                              </h5>
+                              <span className="text-[9px] font-extrabold text-muted bg-base px-2 py-0.5 rounded border border-line uppercase">
+                                {billing.isCOD ? 'Cash on Delivery' : (currentOrder.paymentDetails?.method || 'Paid Online')}
+                              </span>
+                            </div>
+
+                            {/* 1. Restaurant & Store Charges */}
+                            <div className="flex flex-col gap-2">
+                              <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">
+                                {currentOrder.orderType === 'ride' ? 'RIDE PICKUP & BASE CHARGES' : 'RESTAURANT & STORE CHARGES'}
+                              </span>
+
+                              <div className="flex flex-col gap-1.5 pl-1">
+                                {billing.sources.map((src, sIdx) => (
+                                  <div key={src.id || sIdx} className="flex justify-between items-center text-xs">
+                                    <span className={`font-semibold flex items-center gap-1.5 ${src.isRejected ? 'line-through text-red-500' : 'text-main'}`}>
+                                      <span>{src.name}</span>
+                                      {src.isRejected && <span className="text-[9px] text-red-600 font-bold">(Rejected)</span>}
+                                    </span>
+                                    <span className={`font-bold ${src.isRejected ? 'line-through text-red-500' : 'text-main'}`}>
+                                      {formatCurrency(src.subtotal)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {currentOrder.orderType !== 'ride' && (
+                                <div className="border-t border-line/60 pt-1.5 flex justify-between items-center text-xs font-bold text-muted">
+                                  <span>Subtotal (Items Total)</span>
+                                  <span className="font-extrabold text-main">{formatCurrency(billing.itemsSubtotal)}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* 2. Delivery & Other Charges */}
+                            {currentOrder.orderType !== 'ride' && (
+                              <div className="border-t border-line pt-2.5 flex flex-col gap-2">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">
+                                  DELIVERY & OTHER CHARGES
+                                </span>
+
+                                <div className="flex flex-col gap-1.5 pl-1">
+                                  {billing.deliveryFeeLines.map((line, lIdx) => (
+                                    <div key={lIdx} className="flex justify-between items-center text-xs">
+                                      <span className="text-muted font-medium truncate pr-2">{line.label}</span>
+                                      <span className="font-bold text-main shrink-0">+{formatCurrency(line.amount)}</span>
+                                    </div>
+                                  ))}
+
+                                  <div className="flex justify-between items-center text-xs font-bold text-muted pt-0.5">
+                                    <span>Total Delivery Fees</span>
+                                    <span className="font-bold text-main">{formatCurrency(billing.totalDeliveryFees)}</span>
+                                  </div>
+
+                                  {billing.platformFee > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-muted font-medium">Platform Fee</span>
+                                      <span className="font-bold text-main">+{formatCurrency(billing.platformFee)}</span>
+                                    </div>
+                                  )}
+
+                                  {billing.surgeFee > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-muted font-medium">Surge Surcharge</span>
+                                      <span className="font-bold text-main">+{formatCurrency(billing.surgeFee)}</span>
+                                    </div>
+                                  )}
+
+                                  {billing.rainFee > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-muted font-medium">Rain Surcharge</span>
+                                      <span className="font-bold text-main">+{formatCurrency(billing.rainFee)}</span>
+                                    </div>
+                                  )}
+
+                                  {billing.extraItemFee > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-muted font-medium">Extra Items Fee</span>
+                                      <span className="font-bold text-main">+{formatCurrency(billing.extraItemFee)}</span>
+                                    </div>
+                                  )}
+
+                                  {billing.discount > 0 && (
+                                    <div className="flex justify-between items-center text-xs text-green-600 font-medium">
+                                      <span>Promo / Discount</span>
+                                      <span className="font-bold">-{formatCurrency(billing.discount)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 3. Total Payable / Amount to Collect */}
+                            <div className="border-t border-line pt-2.5 flex justify-between items-center">
+                              <span className="text-xs font-black text-main uppercase">
+                                {billing.isCOD ? 'Amount to Collect (COD)' : 'Total Payable'}
+                              </span>
+                              <span className="text-primary text-base font-black">
+                                {formatCurrency(billing.totalPayable)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Rider Delivery Earnings Card */}
+                          <div className="bg-surface border border-line rounded-3xl p-4 sm:p-5 flex flex-col gap-3 shadow-2xs">
+                            <div className="flex justify-between items-center border-b border-line pb-2.5">
+                              <h5 className="font-extrabold text-xs uppercase tracking-wider text-muted flex items-center gap-1.5">
+                                <DollarSign className="w-3.5 h-3.5 text-green-600" /> Rider Earnings
+                              </h5>
+                              <span className="text-[9px] font-extrabold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200 uppercase">
+                                Wallet Credit
+                              </span>
+                            </div>
+
+                            <div className="flex flex-col gap-2">
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-muted font-medium">
+                                  {currentOrder.orderType === 'ride' ? 'Ride Base & Distance Payout' : 'Base Delivery Earning'}
+                                </span>
+                                <span className="font-bold text-main">
+                                  {formatCurrency(billing.rider.basePayout)}
+                                </span>
+                              </div>
+
+                              {currentOrder.orderType !== 'ride' && billing.rider.additionalStopPayout > 0 && (
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="text-muted font-medium">Additional Stops Bonus</span>
+                                  <span className="font-bold text-main">{formatCurrency(billing.rider.additionalStopPayout)}</span>
+                                </div>
+                              )}
+
+                              {billing.rider.tipAmount > 0 && (
+                                <div className="flex justify-between items-center text-xs text-green-600 font-bold">
+                                  <span>Customer Tip</span>
+                                  <span>+{formatCurrency(billing.rider.tipAmount)}</span>
+                                </div>
+                              )}
+
+                              <div className="border-t border-line pt-2.5 flex justify-between items-center">
+                                <span className="text-xs font-bold text-main">
+                                  TOTAL {currentOrder.orderType === 'ride' ? 'CAPTAIN' : 'RIDER'} EARNING
+                                </span>
+                                <span className="text-green-600 text-base font-black">
+                                  {formatCurrency(billing.rider.totalRiderPayout)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Driver Instructions */}
+                          {currentOrder.instruction && (
+                            <div className="bg-violet-50/50 border border-violet-150 text-violet-900 rounded-3xl p-4 flex gap-2.5 text-xs leading-relaxed font-medium shadow-2xs">
+                              <FileText className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                              <div>
+                                <h5 className="font-bold text-main">Driver Instructions</h5>
+                                <p className="mt-1 text-gray-700 font-semibold">{currentOrder.instruction}</p>
+                              </div>
+                            </div>
+                          )}
+
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
             </div>
           )}
+
 
           {/* AVAILABLE ORDERS POOL TAB */}
           {activeSubTab === 'pool' && (
@@ -2139,21 +2283,19 @@ export default function DeliveryDashboard() {
                             </>
                           ) : (() => {
                             // Determine order type for display
-                            const hasSuppliers = Array.isArray(order.pickupStops) && order.pickupStops.some(s => s.sourceType === 'supplier');
-                            const hasRestaurant = Array.isArray(order.pickupStops) && order.pickupStops.some(s => s.sourceType === 'restaurant');
-                            const isMixed = hasSuppliers && hasRestaurant;
-                            const isCatalogOnly = hasSuppliers && !hasRestaurant;
-                            const isFoodOnly = !hasSuppliers && hasRestaurant;
+                            const fulfillmentSources = getOrderFulfillmentSources(order);
+                            const hasSuppliers = fulfillmentSources.some(s => s.sourceType === 'supplier');
+                            const hasRestaurant = fulfillmentSources.some(s => s.sourceType === 'restaurant');
+                            const hasNoSupplierItems = fulfillmentSources.some(s => s.isNoSupplier);
+                            const isMixed = (hasRestaurant ? 1 : 0) + (hasSuppliers ? 1 : 0) + (hasNoSupplierItems ? 1 : 0) > 1;
+                            const isCatalogOnly = !hasRestaurant && (hasSuppliers || hasNoSupplierItems);
+                            const isFoodOnly = hasRestaurant && !hasSuppliers && !hasNoSupplierItems;
 
                             const typeLabel = isMixed ? '🔀 MIXED ORDER' : isCatalogOnly ? '🏪 STORE DELIVERY' : '🍽 FOOD ORDER';
                             const typeColor = isMixed ? 'text-violet-600' : isCatalogOnly ? 'text-emerald-600' : 'text-orange-500';
 
                             // Collect all pickup sources for display
-                            const pickupSources = Array.isArray(order.pickupStops) && order.pickupStops.length > 0
-                              ? order.pickupStops
-                              : hasRestaurant
-                                ? [{ sourceType: 'restaurant', sourceName: order.restaurant?.name || 'Restaurant', items: [] }]
-                                : (order.supplierDeliveries || []).map(sd => ({ sourceType: 'supplier', sourceName: sd.supplierName || 'Store', items: sd.items || [] }));
+                            const pickupSources = fulfillmentSources;
 
                             return (
                               <>
@@ -2163,45 +2305,66 @@ export default function DeliveryDashboard() {
                                   <span className="truncate">{order.customerName || order.user?.name || order.userId?.name || 'Customer'}</span>
                                 </div>
                                 {/* Pickup sources */}
-                                <div className="mt-2 flex flex-col gap-1.5">
-                                  {pickupSources.slice(0, 3).map((src, si) => {
+                                <div className="mt-2 flex flex-col gap-2">
+                                  {pickupSources.map((src, si) => {
+                                    const isNoSup = Boolean(src.isNoSupplier);
                                     const isRest = src.sourceType === 'restaurant';
                                     const stopStatus = src.status || (isRest ? 'Pending' : 'Ready');
+                                    const isStopRejected = stopStatus === 'Rejected' || stopStatus === 'Cancelled';
                                     const isReady = !isRest || stopStatus === 'Ready';
-                                    const statusLabel = isReady
-                                      ? '🟢 Ready for Pickup'
-                                      : stopStatus === 'Preparing'
-                                        ? '🟠 Preparing'
-                                        : '🔴 Awaiting Restaurant';
-                                    const statusClass = isReady
-                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                      : stopStatus === 'Preparing'
-                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                        : 'bg-red-100 text-red-700 border border-red-200 font-bold';
+                                    const statusLabel = isStopRejected
+                                      ? '❌ Rejected'
+                                      : isReady
+                                        ? '🟢 Ready for Pickup'
+                                        : stopStatus === 'Preparing'
+                                          ? '🟠 Preparing'
+                                          : '🔴 Awaiting Restaurant';
+                                    const statusClass = isStopRejected
+                                      ? 'bg-red-100 text-red-700 border border-red-200'
+                                      : isReady
+                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                        : stopStatus === 'Preparing'
+                                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                          : 'bg-red-100 text-red-700 border border-red-200 font-bold';
+
+                                    const stopItems = src.items || [];
+                                    const stopSubtotal = src.subtotal;
 
                                     return (
-                                      <div key={si} className={`flex items-start justify-between gap-1.5 ${isRest ? 'bg-orange-50/80 border-orange-100' : 'bg-emerald-50/80 border-emerald-100'} border rounded-lg p-1.5`}>
-                                        <div className="flex items-start gap-1.5 min-w-0">
-                                          <span className="text-[11px] flex-shrink-0 mt-0.5">{isRest ? '🍴' : '🏪'}</span>
-                                          <div className="min-w-0">
-                                            <p className="text-[10px] font-bold text-main truncate">{src.sourceName}</p>
-                                            {Array.isArray(src.items) && src.items.length > 0 && (
-                                              <p className="text-[9px] text-muted truncate">
-                                                {src.items.slice(0, 2).map(it => `${it.itemName || it.name || ''}${it.unit ? ` (${it.unit})` : ''} ×${it.quantity || 1}`).join(', ')}
-                                                {src.items.length > 2 ? ` +${src.items.length - 2} more` : ''}
-                                              </p>
+                                      <div
+                                        key={si}
+                                        className={`flex flex-col gap-1.5 ${
+                                          isNoSup ? 'bg-surface border-line' :
+                                          isRest ? 'bg-orange-50/70 border-orange-150' :
+                                          'bg-emerald-50/70 border-emerald-150'
+                                        } border rounded-xl p-2.5 shadow-3xs`}
+                                      >
+                                        <div className="flex items-start justify-between gap-1.5">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className="text-xs shrink-0">{isNoSup ? (src.icon || '📦') : isRest ? '🍴' : '🏪'}</span>
+                                            <p className="text-xs font-bold text-main truncate">{src.sourceName}</p>
+                                            <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-surface border border-line text-muted shrink-0">
+                                              {isNoSup ? (src.badge || 'Item') : isRest ? 'Food' : (src.category || 'Store')}
+                                            </span>
+                                          </div>
+                                          <span className={`text-[8px] font-black px-1.5 py-0.5 rounded shrink-0 ${statusClass}`}>
+                                            {statusLabel}
+                                          </span>
+                                        </div>
+                                        {stopItems.length > 0 && (
+                                          <div className="flex items-center justify-between text-[10px] text-muted font-medium bg-surface/90 rounded-lg px-2 py-1 border border-line/60">
+                                            <span className="truncate pr-2 text-main">
+                                              {stopItems.slice(0, 3).map(it => `${it.name}${it.unit ? ` (${it.unit})` : ''} ×${it.quantity}`).join(', ')}
+                                              {stopItems.length > 3 ? ` +${stopItems.length - 3} more` : ''}
+                                            </span>
+                                            {stopSubtotal > 0 && (
+                                              <span className="font-extrabold text-main shrink-0 ml-auto">{formatCurrency(stopSubtotal)}</span>
                                             )}
                                           </div>
-                                        </div>
-                                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded flex-shrink-0 self-start ${statusClass}`}>
-                                          {statusLabel}
-                                        </span>
+                                        )}
                                       </div>
                                     );
                                   })}
-                                  {pickupSources.length > 3 && (
-                                    <p className="text-[9px] text-muted font-semibold pl-1">+{pickupSources.length - 3} more stops</p>
-                                  )}
                                 </div>
                                 <div className="flex items-center gap-1.5 text-muted text-[10px] font-semibold mt-2">
                                   <span className="font-extrabold text-[10px] text-gray-400 w-24">DELIVER TO:</span>
@@ -2217,6 +2380,34 @@ export default function DeliveryDashboard() {
                         </div>
                       </div>
                       <div className="flex flex-col gap-2 mt-3 pt-2 border-t border-line/60">
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            id={`btn-view-details-${order._id}`}
+                            onClick={() => setSelectedDetailsOrder(order)}
+                            className="w-full bg-base hover:bg-surface border border-line-strong hover:border-primary text-main text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-3xs active:scale-[0.99]"
+                          >
+                            <Eye className="w-4 h-4 text-primary" />
+                            <span>VIEW DETAILS</span>
+                          </button>
+                          <button
+                            type="button"
+                            id={`btn-reject-order-${order._id}`}
+                            onClick={() => {
+                              setRejectingOrder(order);
+                              setRejectModalStep('confirm');
+                              setRejectReasonCode('');
+                              setRejectReasonText('');
+                              setRejectNote('');
+                              setRejectErrorMsg('');
+                            }}
+                            disabled={updatingId === order._id}
+                            className="w-full bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-600 border border-red-200 hover:border-red-300 text-xs font-black py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all shadow-2xs active:scale-[0.99]"
+                          >
+                            <XCircle className="w-4 h-4 text-red-500" />
+                            <span>REJECT ORDER</span>
+                          </button>
+                        </div>
                         <button
                           id={`btn-accept-order-${order._id}`}
                           onClick={() => handleAcceptOrder(order._id)}
@@ -2225,22 +2416,6 @@ export default function DeliveryDashboard() {
                         >
                           <CheckCircle className="w-4 h-4" />
                           <span>{updatingId === order._id ? 'Claiming...' : (order.orderType === 'ride' ? 'ACCEPT & CLAIM RIDE' : 'ACCEPT & CLAIM DELIVERY')}</span>
-                        </button>
-                        <button
-                          id={`btn-reject-order-${order._id}`}
-                          onClick={() => {
-                            setRejectingOrder(order);
-                            setRejectModalStep('confirm');
-                            setRejectReasonCode('');
-                            setRejectReasonText('');
-                            setRejectNote('');
-                            setRejectErrorMsg('');
-                          }}
-                          disabled={updatingId === order._id}
-                          className="w-full bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-600 border border-red-200 hover:border-red-300 text-xs font-black py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all shadow-2xs active:scale-[0.99]"
-                        >
-                          <XCircle className="w-4 h-4 text-red-500" />
-                          <span>REJECT ORDER</span>
                         </button>
                       </div>
                     </div>
@@ -2259,11 +2434,11 @@ export default function DeliveryDashboard() {
           {/* WALLET & WITHDRAWALS TAB */}
           {activeSubTab === 'wallet' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              
+
               {/* Request form */}
               <div className="flex flex-col gap-4">
                 <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Earnings Cashout</h3>
-                
+
                 <form onSubmit={handleWithdrawalRequest} className="bg-surface border border-line p-5 rounded-3xl shadow-2xs flex flex-col gap-4">
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] uppercase font-extrabold tracking-wider text-muted px-1">Withdrawal Amount (₹)</label>
@@ -2434,7 +2609,7 @@ export default function DeliveryDashboard() {
           {activeSubTab === 'kyc' && (
             <div className="flex flex-col gap-4">
               <h3 className="font-display font-extrabold text-base text-main border-b border-line pb-2">Delivery Partner KYC Authentication</h3>
-              
+
               {user?.kycStatus === 'Approved' ? (
                 <div className="bg-green-50 border border-green-100 rounded-3xl p-6 text-green-800 flex flex-col gap-3">
                   <div className="flex items-center gap-2">
@@ -2613,7 +2788,7 @@ export default function DeliveryDashboard() {
                     Service-Wise Ratings
                   </h4>
                   <p className="text-[11px] text-muted -mt-1">Your rating performance across individual services</p>
-                  
+
                   <div className="flex flex-col gap-2 pt-1">
                     {[
                       { id: 'food', label: 'Food Delivery' },
@@ -2870,18 +3045,18 @@ export default function DeliveryDashboard() {
               </div>
             )}
             <button
-              onClick={() => { 
-                setEditName(user?.name || ''); 
-                setEditPhone(user?.phone || ''); 
+              onClick={() => {
+                setEditName(user?.name || '');
+                setEditPhone(user?.phone || '');
                 setEditEmail(user?.email || '');
                 setIsEmailOtpSent(false);
                 setEmailOtp('');
                 setEmailUpdateError('');
                 setEmailUpdateSuccess('');
-                setEditProfileImage(null); 
-                setProfileError(''); 
-                setProfileSuccess(''); 
-                setShowEditProfile(true); 
+                setEditProfileImage(null);
+                setProfileError('');
+                setProfileSuccess('');
+                setShowEditProfile(true);
               }}
               className="flex items-center gap-2 w-full justify-center py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl cursor-pointer mt-2"
             >
@@ -2909,8 +3084,8 @@ export default function DeliveryDashboard() {
             </div>
             <div className="flex flex-col gap-3">
               <p className="text-[11px] font-semibold text-gray-500 mb-2">Please tell us why you are unable to complete this request.</p>
-              <select 
-                value={rejectionReason} 
+              <select
+                value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
                 className="w-full bg-surface border border-line p-3.5 rounded-xl text-sm font-bold text-main focus:outline-none focus:border-primary transition-colors appearance-none"
               >
@@ -2922,7 +3097,7 @@ export default function DeliveryDashboard() {
                 <option value="Wrong assignment">Wrong assignment</option>
                 <option value="Other">Other</option>
               </select>
-              
+
               {rejectionReason === 'Other' && (
                 <textarea
                   placeholder="Please specify (optional)"
@@ -2931,12 +3106,12 @@ export default function DeliveryDashboard() {
                   className="w-full bg-surface border border-line p-3.5 rounded-xl text-sm font-semibold text-main focus:outline-none focus:border-primary transition-colors mt-2 resize-none min-h-[80px]"
                 />
               )}
-              
+
               <div className="flex gap-3 mt-4">
                 <button type="button" onClick={() => setRejectingOrderId(null)} className="flex-1 py-3 border border-line-strong text-xs font-bold text-main rounded-xl hover:bg-base cursor-pointer">Cancel</button>
-                <button 
-                  type="button" 
-                  disabled={!rejectionReason} 
+                <button
+                  type="button"
+                  disabled={!rejectionReason}
                   onClick={handleRejectOrder}
                   className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50 transition-colors"
                 >
@@ -2959,7 +3134,7 @@ export default function DeliveryDashboard() {
             {profileError && <p className="text-[11px] font-bold text-red-500 bg-red-50 px-3 py-2 rounded-xl border border-red-100">{profileError}</p>}
             {profileSuccess && <p className="text-[11px] font-bold text-green-700 bg-green-50 px-3 py-2 rounded-xl border border-green-100">{profileSuccess}</p>}
             <form onSubmit={handleSaveProfile} className="flex flex-col gap-4">
-              
+
               {/* Profile Image Uploader */}
               <div className="flex flex-col items-center justify-center mb-2">
                 <div className="relative w-24 h-24 rounded-full border-2 border-line-strong overflow-hidden bg-base flex items-center justify-center">

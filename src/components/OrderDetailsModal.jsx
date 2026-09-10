@@ -1,19 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  X, 
-  ShoppingBag, 
-  MapPin, 
-  Calendar, 
-  Clock, 
-  CreditCard, 
-  ShieldCheck, 
-  RotateCcw, 
-  Star, 
-  Phone, 
-  Store, 
-  User, 
-  CheckCircle2, 
-  XCircle, 
+import {
+  X,
+  ShoppingBag,
+  MapPin,
+  Calendar,
+  Clock,
+  CreditCard,
+  ShieldCheck,
+  RotateCcw,
+  Star,
+  Phone,
+  Store,
+  User,
+  CheckCircle2,
+  XCircle,
   HelpCircle,
   Car,
   Package,
@@ -22,26 +22,35 @@ import {
   ShieldAlert,
   ChevronDown,
   AlertCircle,
-  UserCheck
+  UserCheck,
+  DollarSign
 } from 'lucide-react';
 import { API_BASE } from '../config/api';
 import { Link } from 'react-router-dom';
 import { formatAppDate, formatAppDateTime } from '../utils/dateUtils';
 import { getImageUrl, handleImageError } from '../utils/uploadUtil';
-import { 
-  getContributingFoodRestaurants, 
-  getContributingStoreSources, 
-  getCustomerCancellationEligibility, 
-  getOrderFinancialBreakdown, 
-  getDeliveryFeeBreakdown, 
-  getOrderPlacedAt, 
-  getOrderDeliveredAt, 
-  getOrderCancelledAt, 
-  getOrderSourceDisplayNames, 
-  buildSourceObjMap, 
-  formatCurrency, 
-  formatDistance, 
-  formatRating 
+import {
+  getContributingFoodRestaurants,
+  getContributingStoreSources,
+  getCustomerCancellationEligibility,
+  getOrderFinancialBreakdown,
+  getDeliveryFeeBreakdown,
+  getOrderPlacedAt,
+  getOrderDeliveredAt,
+  getOrderCancelledAt,
+  getOrderSourceDisplayNames,
+  buildSourceObjMap,
+  formatCurrency,
+  formatDistance,
+  formatRating,
+  getStopItems,
+  getStopSubtotal,
+  getOrderBillingBreakdown,
+  getOrderFulfillmentSources,
+  isRestaurantItem,
+  isSupplierItem,
+  getNoSupplierCategory,
+  getCategoryDisplayMeta
 } from '../utils/orderUtils';
 import CancelOrderModal from './CancelOrderModal';
 
@@ -168,17 +177,20 @@ export default function OrderDetailsModal({
 
   // Rider snapshot safety
   const hasRider = Boolean(
-    order.deliveryAgent && 
-    order.deliveryAgent.name && 
+    order.deliveryAgent &&
+    order.deliveryAgent.name &&
     !isCancelled
   );
 
+  // Single authoritative billing breakdown for rider views
+  const billing = getOrderBillingBreakdown(order);
+
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 animate-fade-in overflow-y-auto"
       onClick={onClose}
     >
-      <div 
+      <div
         className="bg-surface rounded-3xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl animate-scale-up relative border border-line overflow-hidden my-auto"
         onClick={(e) => e.stopPropagation()}
       >
@@ -198,19 +210,19 @@ export default function OrderDetailsModal({
                 </span>
               </div>
               <p className="text-[11px] text-muted font-medium mt-0.5">
-                {role === 'restaurant' 
-                  ? 'Restaurant Order Summary' 
-                  : role === 'rider' 
-                  ? 'Rider Run Information' 
-                  : role === 'admin' 
-                  ? 'Master System Record' 
+                {role === 'restaurant'
+                  ? 'Restaurant Order Summary'
+                  : role === 'rider'
+                  ? 'Rider Run Information'
+                  : role === 'admin'
+                  ? 'Master System Record'
                   : 'Complete Purchase Receipt'}
               </p>
             </div>
           </div>
 
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className="text-muted hover:text-main p-2 hover:bg-base rounded-full transition-colors cursor-pointer"
             aria-label="Close modal"
           >
@@ -275,7 +287,7 @@ export default function OrderDetailsModal({
                 {role === 'rider' ? 'Rider Earning' : role === 'restaurant' ? 'Total Payable to Restaurant' : 'Total Paid'}
               </span>
               <span className="font-display font-black text-lg sm:text-xl text-primary">
-                {role === 'rider' 
+                {role === 'rider'
                   ? formatCurrency(isRide ? (order.total ?? order.fare) : (order.pricingSnapshot?.rider?.totalRiderPayout ?? order.riderPayout ?? ((order.deliveryFee || 40) + 20)))
                   : role === 'restaurant'
                   ? (() => {
@@ -396,7 +408,7 @@ export default function OrderDetailsModal({
                 {distinctSources.map((source, sIdx) => {
                   const isSupplier = Boolean(sourceObjMap[source]?.isSupplier);
                   return (
-                    <span 
+                    <span
                       key={sIdx}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-base border border-line text-main"
                     >
@@ -733,8 +745,192 @@ export default function OrderDetailsModal({
             </div>
           )}
 
-          {/* 5. FOOD / STORE / COMBINED ITEMS LIST GROUPED BY SOURCE */}
-          {!isRide && (
+          {/* 5A. RIDER PICKUP STOPS & ITEMS BREAKDOWN */}
+          {role === 'rider' && !isRide && (() => {
+            const fulfillmentSources = getOrderFulfillmentSources(order);
+            const totalSourcesCount = fulfillmentSources.length;
+
+            return (
+              <div className="flex flex-col gap-3">
+                <div className="flex justify-between items-center px-1">
+                  <h4 className="font-display font-extrabold text-xs uppercase tracking-wider text-muted flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-primary" />
+                    <span>Pickup Stops & Items ({totalSourcesCount})</span>
+                  </h4>
+                </div>
+
+                {fulfillmentSources.length > 0 ? (
+                  <div className="flex flex-col gap-3">
+                    {fulfillmentSources.map((source, sIdx) => {
+                      const isNoSupplier = Boolean(source.isNoSupplier);
+                      const isSupplier = source.sourceType === 'supplier';
+                      const isRest = source.sourceType === 'restaurant';
+                      const isCollected = source.status === 'Collected';
+                      const isStopRejected = source.status === 'Rejected' || source.status === 'Cancelled';
+                      const isRestaurantNotReady = isRest && ['Pending', 'Preparing'].includes(source.status);
+                      const stopItems = source.items || [];
+                      const subtotal = source.subtotal;
+
+                      return (
+                        <div
+                          key={source.id || sIdx}
+                          className={`bg-surface border rounded-2xl overflow-hidden shadow-2xs flex flex-col ${
+                            isStopRejected ? 'border-red-200 bg-red-50/30 opacity-85' :
+                            isCollected ? 'border-green-200 bg-green-50/20' :
+                            isNoSupplier ? 'border-line bg-surface' :
+                            'border-line'
+                          }`}
+                        >
+                          {/* Stop Card Header */}
+                          <div className="px-4 py-3 bg-base/60 border-b border-line flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className={`w-6 h-6 rounded-full font-black text-xs flex items-center justify-center shrink-0 ${
+                                isStopRejected ? 'bg-red-500 text-white' :
+                                isCollected ? 'bg-green-600 text-white' :
+                                isNoSupplier ? 'bg-primary/20 text-primary' :
+                                isSupplier ? 'bg-violet-600 text-white' :
+                                'bg-orange-500 text-white'
+                              }`}>
+                                {isStopRejected ? '✕' : isCollected ? '✓' : isNoSupplier ? (source.icon || '📦') : sIdx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <h4 className="font-bold text-xs sm:text-sm text-main truncate flex items-center gap-1.5">
+                                  <span>{isNoSupplier ? (source.icon || '📦') : isSupplier ? '🏪' : '🍴'}</span>
+                                  <span>{source.sourceName}</span>
+                                </h4>
+                                <span className="text-[9px] font-bold text-muted uppercase">
+                                  {isNoSupplier ? `${source.badge || 'Category'}` : isSupplier ? 'Store / Supplier Stop' : 'Restaurant Stop'}
+                                </span>
+                              </div>
+                            </div>
+                            <span className={`text-[9px] font-black px-2.5 py-0.8 rounded-full border shrink-0 ${
+                              isStopRejected ? 'bg-red-100 text-red-700 border-red-200' :
+                              isCollected ? 'bg-green-100 text-green-700 border-green-200' :
+                              isRestaurantNotReady ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                              'bg-emerald-100 text-emerald-800 border-emerald-200'
+                            }`}>
+                              {isStopRejected ? '❌ Rejected / Cancelled' :
+                               isCollected ? '✓ Collected' :
+                               isRestaurantNotReady ? '🟠 Preparing' :
+                               '🟢 Ready for Pickup'}
+                            </span>
+                          </div>
+
+                          {/* Stop Details (Address, Phone, Distance/ETA) — ONLY for physical stops with real details */}
+                          {!isNoSupplier && (source.address || source.sourcePhone || source.distanceKm != null) && (
+                            <div className="px-4 py-3 border-b border-line flex flex-col gap-2 bg-surface">
+                              {source.address && (
+                                <div className="flex items-start gap-1.5 text-xs text-muted">
+                                  <MapPin className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                                  <span className="leading-snug text-main font-medium">{source.address}</span>
+                                </div>
+                              )}
+
+                              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                {(source.distanceKm != null || source.durationMinutes != null) && (
+                                  <div className="flex items-center gap-2 text-[10px] font-bold text-muted">
+                                    {source.distanceKm != null && (
+                                      <span className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md">
+                                        📍 {formatDistance(source.distanceKm)}
+                                      </span>
+                                    )}
+                                    {source.durationMinutes != null && (
+                                      <span className="bg-base text-muted border border-line px-2 py-0.5 rounded-md">
+                                        ⏱️ ~{source.durationMinutes} mins
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {source.sourcePhone && !isStopRejected && (
+                                  <div className="flex items-center gap-2 ml-auto">
+                                    <span className="text-[11px] font-bold text-muted">{source.sourcePhone}</span>
+                                    <a
+                                      href={`tel:${source.sourcePhone}`}
+                                      className="inline-flex items-center gap-1 text-[10px] font-black text-white bg-primary hover:bg-primary-hover px-2.5 py-1 rounded-lg shadow-2xs transition-colors"
+                                    >
+                                      <Phone className="w-3 h-3" />
+                                      <span>Call {isSupplier ? 'Store' : 'Restaurant'}</span>
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Items to Collect */}
+                          <div className="p-3 sm:p-4 flex flex-col gap-2">
+                            <span className="text-[9px] uppercase font-extrabold text-muted tracking-wider">
+                              Items to Collect ({stopItems.length}):
+                            </span>
+                            {stopItems.length > 0 ? (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs border-collapse">
+                                  <thead>
+                                    <tr className="border-b border-line text-[10px] uppercase font-extrabold text-muted tracking-wider">
+                                      <th className="py-1.5 px-2">Item Name</th>
+                                      <th className="py-1.5 px-1 sm:px-2 text-center">Qty</th>
+                                      <th className="py-1.5 px-1 sm:px-2 text-right">Unit Price</th>
+                                      <th className="py-1.5 px-2 text-right">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-line/60">
+                                    {stopItems.map((it, itIdx) => (
+                                      <tr
+                                        key={itIdx}
+                                        className={`hover:bg-base/40 transition-colors ${it.isCancelled ? 'opacity-60 line-through bg-red-50/20' : ''}`}
+                                      >
+                                        <td className="py-2 px-2">
+                                          <div className="flex items-center gap-1.5">
+                                            {it.isVeg !== undefined && (
+                                              <span className={`w-3 h-3 rounded-xs border flex items-center justify-center shrink-0 ${it.isVeg ? 'border-green-600' : 'border-red-600'}`}>
+                                                <span className={`w-1.2 h-1.2 rounded-full ${it.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
+                                              </span>
+                                            )}
+                                            <span className="font-bold text-main">{it.name}</span>
+                                            {it.unit ? (
+                                              <span className="text-[10px] font-semibold text-muted bg-base px-1.5 py-0.2 rounded border border-line">
+                                                {it.unit}
+                                              </span>
+                                            ) : null}
+                                            {it.isCancelled && (
+                                              <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-red-100 text-red-700 rounded border border-red-200 ml-1">
+                                                Cancelled
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="py-2 px-1 sm:px-2 text-center font-bold text-main">×{it.quantity}</td>
+                                        <td className="py-2 px-1 sm:px-2 text-right font-medium text-muted">{formatCurrency(it.price)}</td>
+                                        <td className="py-2 px-2 text-right font-extrabold text-main">{formatCurrency(it.total || it.lineTotal)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted italic">No items listed for this stop.</p>
+                            )}
+
+                            {/* Source Subtotal */}
+                            <div className="flex justify-between items-center border-t border-line/80 pt-2.5 mt-1">
+                              <span className="text-xs font-extrabold text-muted uppercase tracking-wider">Source Subtotal:</span>
+                              <span className="font-black text-main text-sm">{formatCurrency(subtotal)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted italic px-1">No pickup stops available.</p>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* 5B. OTHER ROLES ITEMS LIST GROUPED BY SOURCE */}
+          {role !== 'rider' && !isRide && (
             <div className="flex flex-col gap-3">
               <div className="flex justify-between items-center px-1">
                 <h4 className="font-display font-extrabold text-xs uppercase tracking-wider text-muted flex items-center gap-1.5">
@@ -776,15 +972,22 @@ export default function OrderDetailsModal({
 
                   relevantItems.forEach((item) => {
                     let sourceName = item.sourceName || item.supplierName || item.restaurantName;
+                    let service = item.service || (item.itemModel === 'CatalogItem' ? 'store' : 'food');
                     if (!sourceName) {
-                      if (item.service === 'food' || (!item.service && !item.supplierId)) {
+                      if (isRestaurantItem(item, order)) {
                         sourceName = order.restaurant?.name || 'Restaurant Partner';
+                        service = 'food';
+                      } else if (isSupplierItem(item, order)) {
+                        sourceName = item.storeName || item.supplierName || 'Store Partner';
+                        service = item.service || 'store';
                       } else {
-                        sourceName = 'Store Partner';
+                        const cat = getNoSupplierCategory(item);
+                        const meta = getCategoryDisplayMeta(cat);
+                        sourceName = meta.label;
+                        service = cat.toLowerCase();
                       }
                     }
 
-                    const service = item.service || (item.itemModel === 'CatalogItem' ? 'store' : 'food');
                     const groupKey = `${sourceName}___${service}`;
 
                     if (!groupsMap.has(groupKey)) {
@@ -1048,61 +1251,154 @@ export default function OrderDetailsModal({
               )}
             </div>
           ) : (
-            /* Rider Panel Section: Operational Payment Collection vs Delivery Earnings */
+            /* Rider Panel Section: Structured Source & Delivery Charges Breakdown */
             <div className="flex flex-col gap-4">
-              {/* A. CUSTOMER PAYMENT COLLECTION */}
-              <div className="bg-surface border border-line rounded-2xl p-4 flex flex-col gap-2.5 shadow-2xs">
-                <h4 className="font-display font-extrabold text-xs uppercase tracking-wider text-muted border-b border-line pb-1.5 flex justify-between items-center">
-                  <span>CUSTOMER PAYMENT</span>
-                  <span className="text-[9px] font-bold text-muted bg-base px-2 py-0.5 rounded border border-line uppercase">
-                    {order.paymentDetails?.method || (order.paymentMethod === 'COD' || !order.paymentMethod ? 'Cash on Delivery' : order.paymentMethod)}
+              {/* A. CUSTOMER PAYMENT COLLECTION / BILLING BREAKDOWN */}
+              <div className="bg-surface border border-line rounded-2xl p-4 sm:p-5 flex flex-col gap-3 shadow-2xs">
+                <div className="flex justify-between items-center border-b border-line pb-2">
+                  <h4 className="font-display font-extrabold text-xs uppercase tracking-wider text-muted flex items-center gap-1.5">
+                    <DollarSign className="w-3.5 h-3.5 text-primary" />
+                    <span>CUSTOMER PAYMENT / ORDER BILL</span>
+                  </h4>
+                  <span className="text-[9px] font-extrabold text-muted bg-base px-2 py-0.5 rounded border border-line uppercase">
+                    {billing.isCOD ? 'Cash on Delivery' : (order.paymentDetails?.method || 'Paid Online')}
                   </span>
-                </h4>
+                </div>
 
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-muted font-medium">Amount to Collect</span>
-                  <span className="font-black text-main text-base">{formatCurrency(order.total ?? order.fare)}</span>
+                {/* 1. Restaurant & Store Charges */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">
+                    {isRide ? 'RIDE PICKUP & BASE CHARGES' : 'RESTAURANT & STORE CHARGES'}
+                  </span>
+
+                  <div className="flex flex-col gap-1.5 pl-1">
+                    {billing.sources.map((src, sIdx) => (
+                      <div key={src.id || sIdx} className="flex justify-between items-center text-xs">
+                        <span className={`font-semibold flex items-center gap-1.5 ${src.isRejected ? 'line-through text-red-500' : 'text-main'}`}>
+                          <span>{src.name}</span>
+                          {src.isRejected && <span className="text-[9px] text-red-600 font-bold">(Rejected)</span>}
+                        </span>
+                        <span className={`font-bold ${src.isRejected ? 'line-through text-red-500' : 'text-main'}`}>
+                          {formatCurrency(src.subtotal)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {!isRide && (
+                    <div className="border-t border-line/60 pt-1.5 flex justify-between items-center text-xs font-bold text-muted">
+                      <span>Subtotal (Items Total)</span>
+                      <span className="font-extrabold text-main">{formatCurrency(billing.itemsSubtotal)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Delivery & Other Charges */}
+                {!isRide && (
+                  <div className="border-t border-line pt-2.5 flex flex-col gap-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">
+                      DELIVERY & OTHER CHARGES
+                    </span>
+
+                    <div className="flex flex-col gap-1.5 pl-1">
+                      {billing.deliveryFeeLines.map((line, lIdx) => (
+                        <div key={lIdx} className="flex justify-between items-center text-xs">
+                          <span className="text-muted font-medium truncate pr-2">{line.label}</span>
+                          <span className="font-bold text-main shrink-0">+{formatCurrency(line.amount)}</span>
+                        </div>
+                      ))}
+
+                      <div className="flex justify-between items-center text-xs font-bold text-muted pt-0.5">
+                        <span>Total Delivery Fees</span>
+                        <span className="font-bold text-main">{formatCurrency(billing.totalDeliveryFees)}</span>
+                      </div>
+
+                      {billing.platformFee > 0 && (
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-muted font-medium">Platform Fee</span>
+                          <span className="font-bold text-main">+{formatCurrency(billing.platformFee)}</span>
+                        </div>
+                      )}
+
+                      {billing.surgeFee > 0 && (
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-muted font-medium">Surge Surcharge</span>
+                          <span className="font-bold text-main">+{formatCurrency(billing.surgeFee)}</span>
+                        </div>
+                      )}
+
+                      {billing.rainFee > 0 && (
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-muted font-medium">Rain Surcharge</span>
+                          <span className="font-bold text-main">+{formatCurrency(billing.rainFee)}</span>
+                        </div>
+                      )}
+
+                      {billing.extraItemFee > 0 && (
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-muted font-medium">Extra Items Fee</span>
+                          <span className="font-bold text-main">+{formatCurrency(billing.extraItemFee)}</span>
+                        </div>
+                      )}
+
+                      {billing.discount > 0 && (
+                        <div className="flex justify-between items-center text-xs text-green-600 font-medium">
+                          <span>Promo / Discount</span>
+                          <span className="font-bold">-{formatCurrency(billing.discount)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Total Payable / Amount to Collect */}
+                <div className="border-t border-line pt-2.5 flex justify-between items-center">
+                  <span className="text-xs font-black text-main uppercase">
+                    {billing.isCOD ? 'Amount to Collect (COD)' : 'Total Payable'}
+                  </span>
+                  <span className="text-primary text-base font-black">
+                    {formatCurrency(billing.totalPayable)}
+                  </span>
                 </div>
               </div>
 
               {/* B. RIDER DELIVERY EARNINGS SUMMARY */}
-              <div className="bg-base/70 border border-line rounded-2xl p-4 flex flex-col gap-2.5">
-                <h4 className="font-display font-extrabold text-xs uppercase tracking-wider text-muted border-b border-line pb-1.5 flex justify-between items-center">
-                  <span>{isRide ? 'RIDER CAPTAIN EARNINGS' : 'RIDER DELIVERY EARNINGS'}</span>
+              <div className="bg-surface border border-line rounded-2xl p-4 sm:p-5 flex flex-col gap-2.5 shadow-2xs">
+                <div className="flex justify-between items-center border-b border-line pb-2">
+                  <h4 className="font-display font-extrabold text-xs uppercase tracking-wider text-muted flex items-center gap-1.5">
+                    <DollarSign className="w-3.5 h-3.5 text-green-600" />
+                    <span>{isRide ? 'RIDER CAPTAIN EARNINGS' : 'RIDER EARNINGS'}</span>
+                  </h4>
                   <span className="text-[9px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase">
                     Wallet Payout
                   </span>
-                </h4>
+                </div>
 
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-muted font-medium">{isRide ? 'Ride Payout' : 'Base Delivery Earning'}</span>
+                  <span className="text-muted font-medium">{isRide ? 'Ride Base & Distance Payout' : 'Base Delivery Earning'}</span>
                   <span className="font-bold text-main">
-                    {formatCurrency(isRide ? (order.pricingSnapshot?.rider?.totalRiderPayout ?? order.riderPayout ?? order.riderEarning ?? order.total ?? order.fare) : financials.rider.basePayout)}
+                    {formatCurrency(billing.rider.basePayout)}
                   </span>
                 </div>
 
-                {!isRide && financials.rider.additionalStopPayout > 0 && (
+                {!isRide && billing.rider.additionalStopPayout > 0 && (
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-muted font-medium">Additional Pickup Stops</span>
-                    <span className="font-bold text-main">{formatCurrency(financials.rider.additionalStopPayout)}</span>
+                    <span className="text-muted font-medium">Additional Stops Bonus</span>
+                    <span className="font-bold text-main">{formatCurrency(billing.rider.additionalStopPayout)}</span>
                   </div>
                 )}
 
-                {order.riderReview?.tipAmount > 0 && (
+                {billing.rider.tipAmount > 0 && (
                   <div className="flex justify-between items-center text-xs text-green-600 dark:text-green-400 font-bold">
                     <span>Customer Tip</span>
-                    <span>+{formatCurrency(order.riderReview.tipAmount)}</span>
+                    <span>+{formatCurrency(billing.rider.tipAmount)}</span>
                   </div>
                 )}
 
                 <div className="border-t border-line pt-2 flex justify-between items-center text-sm font-extrabold">
-                  <span className="text-main">Total {isRide ? 'Captain' : 'Delivery'} Earning</span>
+                  <span className="text-main">TOTAL RIDER EARNING</span>
                   <span className="text-green-600 dark:text-green-400 font-black text-base">
-                    {formatCurrency(
-                      isRide 
-                        ? ((Number(order.pricingSnapshot?.rider?.totalRiderPayout ?? order.riderPayout ?? order.riderEarning ?? order.total ?? order.fare) || 0) + (Number(order.riderReview?.tipAmount) || 0))
-                        : ((Number(financials.rider.totalRiderPayout) || 0) + (Number(order.riderReview?.tipAmount) || 0))
-                    )}
+                    {formatCurrency(billing.rider.totalRiderPayout)}
                   </span>
                 </div>
               </div>
@@ -1145,28 +1441,39 @@ export default function OrderDetailsModal({
                 Delivery Address
               </span>
               <div className="flex flex-col gap-1 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-main">
-                    {order.customerName || order.user?.name || 'Customer'}
-                  </span>
-                  {order.address?.label && (
-                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-primary/10 text-primary">
-                      {order.address.label}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-main">
+                      {order.customerName || order.user?.name || 'Customer'}
                     </span>
-                  )}
-                  {/* Phone for authorized roles */}
-                  {(role === 'admin' || role === 'rider') && order.customerPhone && (
-                    <span className="text-[10px] text-muted font-medium ml-1">
-                      ({order.customerPhone})
-                    </span>
+                    {order.address?.label && (
+                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-primary/10 text-primary">
+                        {order.address.label}
+                      </span>
+                    )}
+                  </div>
+                  {/* Phone & Call Customer for authorized roles */}
+                  {(role === 'admin' || role === 'rider') && (order.customerPhone || order.user?.phone || order.userId?.phone) && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-muted">
+                        {order.customerPhone || order.user?.phone || order.userId?.phone}
+                      </span>
+                      <a
+                        href={`tel:${order.customerPhone || order.user?.phone || order.userId?.phone}`}
+                        className="inline-flex items-center gap-1 text-[10px] font-black text-white bg-green-600 hover:bg-green-700 px-2.5 py-1 rounded-lg shadow-2xs transition-colors"
+                      >
+                        <Phone className="w-3 h-3" />
+                        <span>Call Customer</span>
+                      </a>
+                    </div>
                   )}
                 </div>
 
-                <p className="text-muted leading-relaxed font-medium">
-                  {order.customerLocation?.formattedAddress || 
+                <p className="text-muted leading-relaxed font-medium mt-1">
+                  {order.customerLocation?.formattedAddress ||
                     [order.address?.street, order.address?.city, order.address?.state, order.address?.zip]
                       .filter(Boolean)
-                      .join(', ') || 
+                      .join(', ') ||
                     'Customer Address'}
                 </p>
               </div>
@@ -1254,7 +1561,7 @@ export default function OrderDetailsModal({
 
             {/* Customer Rate Store Button (if delivered and unrated store sources exist) */}
             {role === 'customer' && isDelivered && onRateStore && !isRide && getContributingStoreSources(order).some(src => {
-              const isRated = Array.isArray(order.storeReviews) && order.storeReviews.some(r => 
+              const isRated = Array.isArray(order.storeReviews) && order.storeReviews.some(r =>
                 String(r.sourceId) === String(src.sourceId) && r.serviceType === src.serviceType
               );
               return !isRated;
@@ -1262,7 +1569,7 @@ export default function OrderDetailsModal({
               <button
                 onClick={() => {
                   const unrated = getContributingStoreSources(order).find(src => {
-                    const isRated = Array.isArray(order.storeReviews) && order.storeReviews.some(r => 
+                    const isRated = Array.isArray(order.storeReviews) && order.storeReviews.some(r =>
                       String(r.sourceId) === String(src.sourceId) && r.serviceType === src.serviceType
                     );
                     return !isRated;

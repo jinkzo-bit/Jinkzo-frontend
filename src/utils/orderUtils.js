@@ -168,12 +168,12 @@ export const getContributingStoreSources = (order) => {
 export const isOrderRiderClaimed = (order) => {
   if (!order) return false;
   const hasAgent = Boolean(
-    order.deliveryAgent && 
+    order.deliveryAgent &&
     (order.deliveryAgent.id || order.deliveryAgent._id || order.deliveryAgent.phone)
   );
   const hasClaimedRiderStatus = ['Accepted', 'Arrived_At_Restaurant', 'Picked_Up', 'Arrived_At_Customer', 'Delivered'].includes(order.riderStatus);
   const hasClaimedOrderStatus = ['Rider_Assigned', 'Rider_Accepted', 'Rider_At_Restaurant', 'Rider_At_Pickup', 'Picked_Up', 'Out_for_Delivery', 'Rider_At_Customer'].includes(order.status);
-  
+
   return (hasAgent && hasClaimedRiderStatus) || hasClaimedOrderStatus;
 };
 
@@ -314,14 +314,14 @@ export const getCustomerCancellationEligibility = (order) => {
 /**
 export const getEffectiveRestaurantCommissionRate = (settings) => {
   if (!settings) return 15;
-  const enabled = settings.restaurantCommissionEnabled !== undefined 
-    ? Boolean(settings.restaurantCommissionEnabled) 
+  const enabled = settings.restaurantCommissionEnabled !== undefined
+    ? Boolean(settings.restaurantCommissionEnabled)
     : true;
-    
+
   if (!enabled) return 0;
 
-  const pct = settings.restaurantCommissionPercentage !== undefined 
-    ? Number(settings.restaurantCommissionPercentage) 
+  const pct = settings.restaurantCommissionPercentage !== undefined
+    ? Number(settings.restaurantCommissionPercentage)
     : (settings.commissionPercent !== undefined ? Number(settings.commissionPercent) : 15);
 
   if (!Number.isFinite(pct) || pct < 0) return 0;
@@ -802,38 +802,17 @@ export const getOrderSourceDisplayNames = (order) => {
     return { sources: [pickup], primarySource: pickup, summary: pickup, count: 1 };
   }
 
-  const set = new Set();
-  if (Array.isArray(order.pickupStops) && order.pickupStops.length > 0) {
-    order.pickupStops.forEach(s => {
-      if (s.sourceName && s.status !== 'Cancelled' && s.status !== 'Rejected') {
-        set.add(s.sourceName.trim());
-      }
-    });
-  }
-  if (set.size === 0 && Array.isArray(order.supplierDeliveries) && order.supplierDeliveries.length > 0) {
-    order.supplierDeliveries.forEach(sd => {
-      if (sd.supplierName) set.add(sd.supplierName.trim());
-    });
-  }
-  if (set.size === 0 && Array.isArray(order.items) && order.items.length > 0) {
-    order.items.forEach(i => {
-      const name = i.sourceName || i.supplierName || i.restaurantName;
-      if (name) set.add(name.trim());
-    });
-  }
-  if (set.size === 0 && order.restaurant?.name) {
-    set.add(order.restaurant.name.trim());
-  }
+  const fulfillmentSources = getOrderFulfillmentSources(order);
+  const sources = fulfillmentSources.map(s => s.sourceName).filter(Boolean);
 
-  const sources = Array.from(set);
   if (sources.length === 0) {
     const fallback = order.restaurant?.name || 'Jinkzo Partner';
     return { sources: [fallback], primarySource: fallback, summary: fallback, count: 1 };
   }
 
   const primarySource = sources[0];
-  const summary = sources.length === 1 
-    ? primarySource 
+  const summary = sources.length === 1
+    ? primarySource
     : `${primarySource} + ${sources.length - 1} more`;
 
   return {
@@ -1001,5 +980,544 @@ export const normalizeRiderRun = (order) => {
     pickupStops: Array.isArray(order.pickupStops) ? order.pickupStops : [],
     sourcesInfo,
     financials
+  };
+};
+
+/**
+ * Safely extract string ID from an object or value.
+ */
+export const getSafeId = (val) => {
+  if (!val) return '';
+  if (typeof val === 'object') return String(val._id || val.id || '');
+  return String(val);
+};
+
+/**
+ * Checks whether an item is explicitly linked to a restaurant.
+ */
+export const isRestaurantItem = (item, order) => {
+  if (!item || typeof item !== 'object') return false;
+
+  // If item is explicitly tied to a supplier, it cannot be a restaurant item
+  const supId = getSafeId(item.supplierId || item.storeId);
+  if (supId && supId !== 'null' && supId !== 'undefined' && supId !== 'store_jinkzo' && supId !== 'jinkzo_store') return false;
+  if (item.itemModel === 'CatalogItem') return false;
+
+  // Explicit restaurant indicators on the item
+  const itemRestId = getSafeId(item.restaurantId);
+  if (itemRestId && itemRestId !== 'null' && itemRestId !== 'undefined' && itemRestId !== 'store_jinkzo') return true;
+  if (item.sourceType === 'restaurant' && getSafeId(item.sourceId) && getSafeId(item.sourceId) !== 'store_jinkzo') return true;
+  if (item.itemModel === 'MenuItem') return true;
+
+  const itemRestName = (item.restaurantName || '').trim().toLowerCase();
+  if (itemRestName && !itemRestName.includes('store') && !itemRestName.includes('jinkzo')) return true;
+
+  // Contextual check: if the order has an actual restaurant and the item does not belong to store categories
+  const orderRestId = getSafeId(order?.restaurantId || (order?.restaurant?._id !== 'store_jinkzo' ? order?.restaurant?._id : ''));
+  const hasRestStop = Array.isArray(order?.pickupStops) && order.pickupStops.some(s => s.sourceType === 'restaurant' && getSafeId(s.sourceId) !== 'store_jinkzo');
+
+  if ((orderRestId || hasRestStop) && !item.supplierId && !item.storeId) {
+    const srv = String(item.service || '').trim().toLowerCase();
+    const cat = String(item.category || item.categoryName || '').trim().toLowerCase();
+    const isStoreService = srv.includes('grocery') || srv.includes('meat') || srv.includes('chicken') || srv.includes('fish') || srv.includes('veg') || srv.includes('fruit') || srv.includes('bakery') || srv.includes('beverage') || srv.includes('catalog') || srv.includes('store');
+    const isStoreCat = cat.includes('grocery') || cat.includes('meat') || cat.includes('chicken') || cat.includes('fish') || cat.includes('veg') || cat.includes('fruit') || cat.includes('bakery') || cat.includes('beverage');
+    if (!isStoreService && !isStoreCat) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Checks whether an item is explicitly linked to a supplier/store.
+ */
+export const isSupplierItem = (item, order) => {
+  if (!item || typeof item !== 'object') return false;
+  if (isRestaurantItem(item, order)) return false;
+
+  const supId = getSafeId(item.supplierId || item.storeId);
+  if (supId && supId !== 'null' && supId !== 'undefined' && supId !== 'store_jinkzo' && supId !== 'jinkzo_store') return true;
+
+  const supName = (item.supplierName || item.storeName || '').trim().toLowerCase();
+  const isGenericStoreName = !supName || supName === 'jinkzo store' || supName === 'partner store' || supName === 'store partner' || supName === 'store' || supName === 'jinkzo';
+  if (!isGenericStoreName) return true;
+
+  if (item.sourceType === 'supplier' && getSafeId(item.sourceId) && getSafeId(item.sourceId) !== 'store_jinkzo') return true;
+
+  // Check explicit assignment in order.supplierDeliveries
+  if (Array.isArray(order?.supplierDeliveries)) {
+    const itemId = getSafeId(item._id || item.itemId || item.menuItemId || item.productId);
+    const itemName = (item.name || item.itemName || '').trim().toLowerCase();
+    const foundInSup = order.supplierDeliveries.some(sd => {
+      const sdId = getSafeId(sd.supplierId);
+      const sdName = (sd.supplierName || sd.name || '').trim().toLowerCase();
+      const isRealSup = Boolean((sdId && sdId !== 'store_jinkzo') || (sdName && sdName !== 'jinkzo store' && sdName !== 'store'));
+      if (!isRealSup) return false;
+      return Array.isArray(sd.items) && sd.items.some(sdi => {
+        const sdiId = getSafeId(sdi._id || sdi.itemId || sdi.menuItemId || sdi.productId);
+        if (itemId && sdiId && itemId === sdiId) return true;
+        const sdiName = (sdi.itemName || sdi.name || '').trim().toLowerCase();
+        if (itemName && sdiName && itemName === sdiName) return true;
+        return false;
+      });
+    });
+    if (foundInSup) return true;
+  }
+
+  // Check explicit assignment in order.pickupStops
+  if (Array.isArray(order?.pickupStops)) {
+    const itemId = getSafeId(item._id || item.itemId || item.menuItemId || item.productId);
+    const itemName = (item.name || item.itemName || '').trim().toLowerCase();
+    const foundInStop = order.pickupStops.some(stop => {
+      if (stop.sourceType !== 'supplier') return false;
+      const stopId = getSafeId(stop.sourceId);
+      const stopName = (stop.sourceName || '').trim().toLowerCase();
+      const isRealSup = Boolean((stopId && stopId !== 'store_jinkzo') || (stopName && stopName !== 'jinkzo store' && stopName !== 'store'));
+      if (!isRealSup) return false;
+      return Array.isArray(stop.items) && stop.items.some(si => {
+        const siId = getSafeId(si._id || si.itemId || si.menuItemId || si.productId);
+        if (itemId && siId && itemId === siId) return true;
+        const siName = (si.itemName || si.name || '').trim().toLowerCase();
+        if (itemName && siName && itemName === siName) return true;
+        return false;
+      });
+    });
+    if (foundInStop) return true;
+  }
+
+  return false;
+};
+
+/**
+ * Returns normalized category name for a no-supplier item.
+ */
+export const getNoSupplierCategory = (item) => {
+  if (!item) return 'UNASSIGNED ITEM';
+  const raw = String(item.category || item.categoryName || item.service || '').trim();
+  const lower = raw.toLowerCase();
+
+  if (lower.includes('meat') || lower.includes('chicken') || lower.includes('mutton') || lower.includes('fish')) return 'MEAT';
+  if (lower.includes('grocery') || lower.includes('groceries')) return 'GROCERY';
+  if (lower.includes('veg') || lower.includes('fruit')) return 'VEG & FRUITS';
+  if (lower.includes('bakery') || lower.includes('beverage') || lower.includes('cake')) return 'BAKERY';
+
+  if (raw) {
+    return raw.toUpperCase().replace(/[\-_]+/g, ' ').trim();
+  }
+  return 'UNASSIGNED ITEM';
+};
+
+/**
+ * Human-friendly category display label and icon.
+ */
+export const getCategoryDisplayMeta = (categoryKey) => {
+  const cat = String(categoryKey || '').toUpperCase();
+  if (cat.includes('MEAT')) return { label: 'MEAT', badge: 'MEAT', icon: '🥩' };
+  if (cat.includes('GROCERY')) return { label: 'GROCERY', badge: 'GROCERY', icon: '🛒' };
+  if (cat.includes('VEG') || cat.includes('FRUIT')) return { label: 'VEG & FRUITS', badge: 'VEG & FRUITS', icon: '🥦' };
+  if (cat.includes('BAKERY')) return { label: 'BAKERY', badge: 'BAKERY', icon: '🍞' };
+  return { label: cat, badge: cat, icon: '📦' };
+};
+
+/**
+ * Extract normalized items list for any pickup stop (restaurant, supplier, or category stop).
+ * Strictly requires explicit supplier matching and never absorbs unrelated items.
+ */
+export const getStopItems = (stop, order) => {
+  if (!stop) return [];
+
+  const stopId = getSafeId(stop.sourceId);
+  const stopName = (stop.sourceName || stop.name || '').trim().toLowerCase();
+  const isSupplier = stop.sourceType === 'supplier' || stop.sourceType === 'store' || (stop.category && stop.category !== 'food');
+
+  const mapItem = (it) => {
+    const unitPrice = Number(it.price ?? it.customerUnitPrice ?? it.partnerSettlementPrice ?? 0);
+    const qty = Number(it.quantity ?? 1);
+    return {
+      id: getSafeId(it._id || it.itemId || it.menuItemId || it.productId),
+      name: it.itemName || it.name || 'Item',
+      quantity: qty,
+      unit: it.unit || '',
+      price: unitPrice,
+      lineTotal: unitPrice * qty,
+      total: unitPrice * qty,
+      isCancelled: Boolean(it.isCancelled),
+      isVeg: it.isVeg,
+      category: it.category
+    };
+  };
+
+  // 1. Direct items on pickup stop (if explicitly provided)
+  if (Array.isArray(stop.items) && stop.items.length > 0) {
+    return stop.items.map(mapItem);
+  }
+
+  // 2. If supplier, check order.supplierDeliveries for that EXACT supplier
+  if (isSupplier && Array.isArray(order?.supplierDeliveries) && order.supplierDeliveries.length > 0) {
+    const matchingSup = order.supplierDeliveries.find(sd => {
+      const sdId = getSafeId(sd.supplierId);
+      if (stopId && sdId && stopId === sdId) return true;
+      const sdName = (sd.supplierName || sd.name || '').trim().toLowerCase();
+      if (stopName && sdName && stopName === sdName) return true;
+      return false;
+    });
+
+    if (matchingSup && Array.isArray(matchingSup.items) && matchingSup.items.length > 0) {
+      return matchingSup.items.map(mapItem);
+    }
+  }
+
+  // 3. Match from order.items with strict item-to-supplier/restaurant relationship
+  if (Array.isArray(order?.items) && order.items.length > 0) {
+    const matched = order.items.filter(it => {
+      if (isSupplier) {
+        if (!isSupplierItem(it, order)) return false;
+        const itemSupId = getSafeId(it.supplierId || it.storeId);
+        const itemSupName = (it.supplierName || it.storeName || '').trim().toLowerCase();
+
+        if (stopId && itemSupId && stopId === itemSupId) return true;
+        if (stopName && itemSupName && stopName === itemSupName) return true;
+        return false;
+      } else {
+        if (!isRestaurantItem(it, order)) return false;
+        const itemRestId = getSafeId(it.restaurantId);
+        const itemRestName = (it.restaurantName || '').trim().toLowerCase();
+
+        if (stopId && itemRestId && stopId === itemRestId) return true;
+        if (stopName && itemRestName && stopName === itemRestName) return true;
+
+        const restStopsCount = (order.pickupStops || []).filter(s => s.sourceType === 'restaurant').length;
+        if (restStopsCount <= 1) return true;
+        return false;
+      }
+    });
+
+    if (matched.length > 0) {
+      return matched.map(mapItem);
+    }
+  }
+
+  return [];
+};
+
+/**
+ * Calculate the total subtotal of non-cancelled items for a pickup stop.
+ */
+export const getStopSubtotal = (stop, order) => {
+  const items = getStopItems(stop, order);
+  return items.reduce((sum, it) => it.isCancelled ? sum : sum + it.lineTotal, 0);
+};
+
+/**
+ * Canonical helper to retrieve all distinct fulfillment sources (Restaurant, Supplier, or Category-based No-Supplier).
+ * Guarantees that items without an assigned supplier are NEVER grouped under an arbitrary or single supplier.
+ * Guarantees that every item belongs to EXACTLY ONE source group.
+ */
+export const getOrderFulfillmentSources = (order) => {
+  if (!order || typeof order !== 'object') return [];
+
+  const restSources = new Map();
+  const supplierSources = new Map();
+  const categorySources = new Map();
+
+  const normalizeItem = (it, fallbackCat) => {
+    const unitPrice = Number(it.price ?? it.customerUnitPrice ?? it.partnerSettlementPrice ?? 0);
+    const qty = Number(it.quantity ?? 1);
+    return {
+      id: getSafeId(it._id || it.itemId || it.menuItemId || it.productId),
+      name: it.itemName || it.name || 'Item',
+      quantity: qty,
+      unit: it.unit || '',
+      price: unitPrice,
+      lineTotal: unitPrice * qty,
+      total: unitPrice * qty,
+      isCancelled: Boolean(it.isCancelled),
+      isVeg: it.isVeg,
+      category: it.category || fallbackCat || ''
+    };
+  };
+
+  const isSameItem = (a, b) => {
+    if (!a || !b) return false;
+    const aId = getSafeId(a._id || a.itemId || a.menuItemId || a.productId);
+    const bId = getSafeId(b._id || b.itemId || b.menuItemId || b.productId);
+    if (aId && bId && aId === bId) return true;
+    const aName = (a.itemName || a.name || '').trim().toLowerCase();
+    const bName = (b.itemName || b.name || '').trim().toLowerCase();
+    if (aName && bName && aName === bName) return true;
+    return false;
+  };
+
+  // 1. Gather all items to partition
+  let itemsToPartition = Array.isArray(order.items) && order.items.length > 0 ? order.items : [];
+
+  // Fallback if order.items is missing: gather items from pickupStops or supplierDeliveries
+  if (itemsToPartition.length === 0) {
+    if (Array.isArray(order.pickupStops) && order.pickupStops.length > 0) {
+      order.pickupStops.forEach(stop => {
+        if (Array.isArray(stop.items)) {
+          stop.items.forEach(si => {
+            itemsToPartition.push({
+              ...si,
+              restaurantId: stop.sourceType === 'restaurant' ? stop.sourceId : null,
+              restaurantName: stop.sourceType === 'restaurant' ? stop.sourceName : '',
+              supplierId: stop.sourceType === 'supplier' ? stop.sourceId : null,
+              supplierName: stop.sourceType === 'supplier' ? stop.sourceName : '',
+              category: stop.category || si.category || ''
+            });
+          });
+        }
+      });
+    }
+  }
+
+  // 2. Partition every item into EXACTLY ONE source group
+  itemsToPartition.forEach(item => {
+    // ----------------------------------------------------
+    // SITUATION 1: RESTAURANT FOOD ITEM
+    // ----------------------------------------------------
+    if (isRestaurantItem(item, order)) {
+      const restId = getSafeId(item.restaurantId) || getSafeId(order.restaurantId) || (order.restaurant?._id !== 'store_jinkzo' ? getSafeId(order.restaurant?._id) : '') || 'restaurant_main';
+      const restName = (item.restaurantName || (order.restaurant?.name !== 'Jinkzo Store' ? order.restaurant?.name : '') || 'Restaurant').trim();
+      const key = `restaurant_${restId || restName.toLowerCase()}`;
+
+      if (!restSources.has(key)) {
+        const matchingStop = Array.isArray(order.pickupStops)
+          ? order.pickupStops.find(s => s.sourceType === 'restaurant' && (
+              (restId && getSafeId(s.sourceId) === restId) ||
+              (restName && s.sourceName?.trim().toLowerCase() === restName.toLowerCase())
+            )) || order.pickupStops.find(s => s.sourceType === 'restaurant')
+          : null;
+
+        restSources.set(key, {
+          id: key,
+          stopId: String(matchingStop?._id || matchingStop?.stopId || restId),
+          sourceType: 'restaurant',
+          sourceId: restId,
+          sourceName: matchingStop?.sourceName || restName,
+          category: 'food',
+          sourcePhone: matchingStop?.sourcePhone || order.restaurantPhone || order.restaurant?.phone || '',
+          address: matchingStop?.address || order.restaurantAddress || order.restaurant?.address || '',
+          latitude: matchingStop?.latitude ?? order.restaurantLocation?.lat ?? order.restaurant?.lat ?? order.restaurant?.latitude,
+          longitude: matchingStop?.longitude ?? order.restaurantLocation?.lng ?? order.restaurant?.lng ?? order.restaurant?.longitude,
+          distanceKm: matchingStop?.distanceKm ?? null,
+          durationMinutes: matchingStop?.durationMinutes ?? null,
+          status: matchingStop?.status || (['Placed', 'Accepted', 'Confirmed', 'Preparing'].includes(order.status) ? 'Preparing' : 'Ready'),
+          isRejected: matchingStop ? (matchingStop.status === 'Rejected' || matchingStop.status === 'Cancelled') : false,
+          isNoSupplier: false,
+          items: []
+        });
+      }
+      restSources.get(key).items.push(normalizeItem(item, 'food'));
+      return;
+    }
+
+    // ----------------------------------------------------
+    // SITUATION 2: SUPPLIER-LINKED ITEM
+    // ----------------------------------------------------
+    if (isSupplierItem(item, order)) {
+      const supId = getSafeId(item.supplierId || item.storeId);
+      let supName = (item.supplierName || item.storeName || '').trim();
+
+      const matchingStop = Array.isArray(order.pickupStops)
+        ? order.pickupStops.find(s => s.sourceType === 'supplier' && (
+            (supId && getSafeId(s.sourceId) === supId) ||
+            (supName && s.sourceName?.trim().toLowerCase() === supName.toLowerCase()) ||
+            (Array.isArray(s.items) && s.items.some(si => isSameItem(si, item)))
+          ))
+        : null;
+
+      const matchingSd = Array.isArray(order.supplierDeliveries)
+        ? order.supplierDeliveries.find(sd => (
+            (supId && getSafeId(sd.supplierId) === supId) ||
+            (supName && sd.supplierName?.trim().toLowerCase() === supName.toLowerCase()) ||
+            (Array.isArray(sd.items) && sd.items.some(sdi => isSameItem(sdi, item)))
+          ))
+        : null;
+
+      const finalSupId = supId || getSafeId(matchingStop?.sourceId) || getSafeId(matchingSd?.supplierId) || '';
+      if (!supName || supName.toLowerCase() === 'partner store' || supName.toLowerCase() === 'store partner') {
+        supName = matchingStop?.sourceName || matchingSd?.supplierName || supName || 'Store';
+      }
+
+      const key = `supplier_${finalSupId || supName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
+
+      if (!supplierSources.has(key)) {
+        supplierSources.set(key, {
+          id: key,
+          stopId: String(matchingStop?._id || matchingStop?.stopId || matchingSd?._id || finalSupId || key),
+          sourceType: 'supplier',
+          sourceId: finalSupId,
+          sourceName: supName,
+          category: matchingStop?.category || matchingSd?.category || item.category || 'store',
+          sourcePhone: matchingStop?.sourcePhone || matchingSd?.supplierPhone || '',
+          address: matchingStop?.address || matchingSd?.address || '',
+          latitude: matchingStop?.latitude ?? matchingSd?.latitude ?? null,
+          longitude: matchingStop?.longitude ?? matchingSd?.longitude ?? null,
+          distanceKm: matchingStop?.distanceKm ?? matchingSd?.distanceKm ?? null,
+          durationMinutes: matchingStop?.durationMinutes ?? matchingSd?.durationMinutes ?? null,
+          status: matchingStop?.status || 'Ready',
+          isRejected: matchingStop ? (matchingStop.status === 'Rejected' || matchingStop.status === 'Cancelled') : false,
+          isNoSupplier: false,
+          items: []
+        });
+      }
+      supplierSources.get(key).items.push(normalizeItem(item, 'store'));
+      return;
+    }
+
+    // ----------------------------------------------------
+    // SITUATION 3: NO SUPPLIER / STORE (INFORMATIONAL CATEGORY ONLY)
+    // ----------------------------------------------------
+    const catKey = getNoSupplierCategory(item);
+    const meta = getCategoryDisplayMeta(catKey);
+    const key = `category_${catKey.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
+
+    if (!categorySources.has(key)) {
+      categorySources.set(key, {
+        id: key,
+        stopId: key,
+        sourceType: 'category',
+        category: catKey,
+        sourceName: meta.label,
+        badge: meta.badge,
+        icon: meta.icon,
+        isNoSupplier: true,
+        status: 'Ready',
+        address: '',
+        sourcePhone: '',
+        latitude: null,
+        longitude: null,
+        distanceKm: null,
+        durationMinutes: null,
+        isRejected: false,
+        items: []
+      });
+    }
+    categorySources.get(key).items.push(normalizeItem(item, catKey));
+  });
+
+  // Calculate subtotals
+  const allSources = [
+    ...Array.from(restSources.values()),
+    ...Array.from(supplierSources.values()),
+    ...Array.from(categorySources.values())
+  ];
+
+  allSources.forEach(src => {
+    src.subtotal = src.items.reduce((sum, it) => it.isCancelled ? sum : sum + (Number(it.lineTotal) || 0), 0);
+  });
+
+  return allSources;
+};
+
+/**
+ * Authoritative Order Billing Breakdown Helper.
+ * Single source of truth for Rider View Details Modal and Claimed Runs View.
+ */
+export const getOrderBillingBreakdown = (order) => {
+  if (!order || typeof order !== 'object') {
+    return {
+      sources: [],
+      itemsSubtotal: 0,
+      deliveryFeeLines: [],
+      totalDeliveryFees: 0,
+      platformFee: 0,
+      surgeFee: 0,
+      rainFee: 0,
+      extraItemFee: 0,
+      discount: 0,
+      totalPayable: 0,
+      isCOD: true,
+      paymentMethod: 'Cash on Delivery',
+      rider: {
+        basePayout: 0,
+        additionalStopPayout: 0,
+        tipAmount: 0,
+        totalRiderPayout: 0
+      }
+    };
+  }
+
+  const isRide = order.orderType === 'ride';
+  const fin = getOrderFinancialBreakdown(order);
+  const deliv = getDeliveryFeeBreakdown(order);
+
+  // Authoritative Customer Totals
+  const itemsSubtotal = Number(fin.customer.itemsSubtotal || 0);
+  const totalDeliveryFees = Number(deliv.totalDeliveryFees || fin.customer.totalCustomerDeliveryFee || 0);
+  const platformFee = Number(deliv.platformFee || fin.customer.platformFee || 0);
+  const surgeFee = Number(deliv.surgeFee || fin.customer.surgeFee || 0);
+  const rainFee = Number(deliv.rainFee || fin.customer.rainFee || 0);
+  const extraItemFee = Number(deliv.extraItemFee || fin.customer.extraItemFee || 0);
+  const discount = Number(deliv.discount || fin.customer.discount || 0);
+  const totalPayable = Number(order.total ?? deliv.totalPayable ?? fin.customer.totalPayable ?? 0);
+
+  // Collect All Contributing Sources
+  const sources = [];
+
+  if (isRide) {
+    const pickupName = order.pickupLocation?.formattedAddress || order.pickupAddress?.street || 'Ride Pickup';
+    sources.push({
+      id: 'ride_pickup',
+      name: pickupName,
+      type: 'ride',
+      subtotal: totalPayable,
+      status: order.status,
+      isRejected: false,
+      isNoSupplier: false,
+      itemsCount: 0
+    });
+  } else {
+    const fulfillmentSources = getOrderFulfillmentSources(order);
+    fulfillmentSources.forEach(fSrc => {
+      sources.push({
+        id: fSrc.id,
+        name: fSrc.sourceName,
+        sourceName: fSrc.sourceName,
+        type: fSrc.sourceType,
+        sourceType: fSrc.sourceType,
+        category: fSrc.category,
+        subtotal: fSrc.subtotal,
+        status: fSrc.status,
+        isRejected: Boolean(fSrc.isRejected),
+        isNoSupplier: Boolean(fSrc.isNoSupplier),
+        itemsCount: (fSrc.items || []).filter(i => !i.isCancelled).length
+      });
+    });
+  }
+
+  // Payment method
+  const paymentMethod = order.paymentDetails?.method || (order.paymentMethod === 'COD' || !order.paymentMethod ? 'COD' : order.paymentMethod);
+  const isCOD = paymentMethod === 'COD';
+
+  // Rider Earnings
+  const tipAmount = Number(order.riderReview?.tipAmount ?? order.tipAmount ?? 0);
+  const basePayout = isRide
+    ? Number(order.pricingSnapshot?.rider?.totalRiderPayout ?? order.riderPayout ?? order.riderEarning ?? order.total ?? order.fare ?? 0)
+    : Number(fin.rider.basePayout || 0);
+  const additionalStopPayout = isRide ? 0 : Number(fin.rider.additionalStopPayout || 0);
+  const totalRiderPayout = (isRide ? basePayout : Number(fin.rider.totalRiderPayout || 0)) + tipAmount;
+
+  return {
+    sources,
+    itemsSubtotal,
+    deliveryFeeLines: deliv.lines || [],
+    totalDeliveryFees,
+    platformFee,
+    surgeFee,
+    rainFee,
+    extraItemFee,
+    discount,
+    totalPayable,
+    isCOD,
+    paymentMethod,
+    rider: {
+      basePayout,
+      additionalStopPayout,
+      tipAmount,
+      totalRiderPayout
+    }
   };
 };
