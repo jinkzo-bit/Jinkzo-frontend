@@ -200,6 +200,10 @@ export default function AdminDashboard() {
   const [analyticsCustomEndDate, setAnalyticsCustomEndDate] = useState('');
   const [analyticsShowDatePicker, setAnalyticsShowDatePicker] = useState(false);
   const [analyticsAppliedDateFilter, setAnalyticsAppliedDateFilter] = useState({ type: 'all', start: '', end: '' });
+  const [calendarViewDate, setCalendarViewDate] = useState(() => {
+    const n = new Date();
+    return { year: n.getFullYear(), month: n.getMonth() };
+  });
 
   // KYC Center
   const [pendingKyc, setPendingKyc] = useState([]);
@@ -1257,6 +1261,84 @@ export default function AdminDashboard() {
     }
   };
 
+  // Admin Restaurant Opening Hours
+  const handleOpenRestaurantHoursModal = (u) => {
+    setSelectedRestaurantForHours(u);
+    setAdminOpeningHours(
+      normalizeOpeningHours(
+        u.restaurant?.openingHours || DEFAULT_OPENING_HOURS
+      )
+    );
+    setAdminHoursSuccess('');
+    setAdminHoursError('');
+    setShowRestaurantHoursModal(true);
+  };
+
+  const handleAdminApplyAllDays = () => {
+    const updated = {};
+
+    DAYS_OF_WEEK.forEach(day => {
+      updated[day] = {
+        enabled: true,
+        open: adminBulkOpenTime || '09:00',
+        close: adminBulkCloseTime || '23:00'
+      };
+    });
+
+    setAdminOpeningHours(updated);
+  };
+
+  const handleSaveAdminRestaurantHours = async () => {
+    if (!selectedRestaurantForHours) return;
+    const restId = selectedRestaurantForHours.restaurant?._id || selectedRestaurantForHours.restaurantId;
+    if (!restId) {
+      setAdminHoursError('Restaurant ID not found for this account.');
+      return;
+    }
+    setIsAdminHoursSaving(true);
+    setAdminHoursError('');
+    setAdminHoursSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/admin/restaurants/${restId}/opening-hours`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          openingHours: adminOpeningHours
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAdminHoursError(data.message || 'Failed to update opening hours.');
+        return;
+      }
+      setAdminHoursSuccess('Opening hours updated successfully!');
+      setAllUsers(prev => prev.map(u => {
+        if (u._id === selectedRestaurantForHours._id) {
+          return {
+            ...u,
+            restaurant: {
+              ...(u.restaurant || {}),
+              openingHours: data.openingHours || adminOpeningHours
+            }
+          };
+        }
+        return u;
+      }));
+      setTimeout(() => {
+        setShowRestaurantHoursModal(false);
+        setAdminHoursSuccess('');
+      }, 1200);
+    } catch (err) {
+      console.error('Error saving restaurant opening hours:', err);
+      setAdminHoursError('Server error updating opening hours.');
+    } finally {
+      setIsAdminHoursSaving(false);
+    }
+  };
+
   // Approve withdrawal request
   const handleApproveWithdrawal = async (requestId) => {
     setApprovingWithdrawalId(requestId);
@@ -1534,31 +1616,6 @@ export default function AdminDashboard() {
   const adminRiders = allUsers.filter(u => u.role === 'delivery');
   const adminFoodAvailable = adminRiders.some(r => r.deliveryDetails?.isAvailable === true && r.deliveryDetails?.activeFoodDelivery !== false);
   const adminRideAvailable = adminRiders.some(r => r.deliveryDetails?.isAvailable === true && r.deliveryDetails?.activeRide !== false);
-
-  const getDateLabel = () => {
-    const now = new Date();
-    const todayStr = formatAppDateOnly(now);
-    if (appliedDateFilter.type === 'all') return 'All Time';
-    if (appliedDateFilter.type === 'today') return `${todayStr} / Today`;
-    if (appliedDateFilter.type === 'yesterday') {
-      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      return `${formatAppDateOnly(yesterday)} / Yesterday`;
-    }
-    if (appliedDateFilter.type === '7days') {
-      const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      return `${formatAppDateOnly(start)} - ${todayStr} / Last 7 Days`;
-    }
-    if (appliedDateFilter.type === '30days') {
-      const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      return `${formatAppDateOnly(start)} - ${todayStr} / Last 30 Days`;
-    }
-    if (appliedDateFilter.type === 'custom') {
-      const startLabel = appliedDateFilter.start ? formatAppDateOnly(appliedDateFilter.start) : 'Start';
-      const endLabel = appliedDateFilter.end ? formatAppDateOnly(appliedDateFilter.end) : 'End';
-      return `${startLabel} - ${endLabel} / Custom Date Range`;
-    }
-    return 'Select Date Range';
-  };
 
   const renderCalendar = (onDateSelect) => {
     const { year, month } = calendarViewDate;
