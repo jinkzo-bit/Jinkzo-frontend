@@ -1,7 +1,7 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Search, SlidersHorizontal, AlertTriangle, Heart, ShoppingBag, Store, Sparkles, X, MapPin } from 'lucide-react';
+import { Search, SlidersHorizontal, AlertTriangle, Heart, Store, X, MapPin } from 'lucide-react';
 import RestaurantCard from '../components/RestaurantCard';
 import FoodDietaryFilter from '../components/FoodDietaryFilter';
 import { useCartStore } from '../store/cartStore';
