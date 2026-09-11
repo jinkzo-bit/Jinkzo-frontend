@@ -18,7 +18,6 @@ import OrderTracking from './pages/OrderTracking';
 import Profile from './pages/Profile';
 import LoginSignup from './pages/LoginSignup';
 import ForgotPassword from './pages/ForgotPassword';
-import DeliveryPortal from './pages/DeliveryPortal';
 import RestaurantDashboard from './pages/RestaurantDashboard';
 import DeliveryDashboard from './pages/DeliveryDashboard';
 import AdminDashboard from './pages/AdminDashboard';
@@ -105,7 +104,7 @@ export default function App() {
               } />
               <Route path="/login" element={<LoginSignup />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/delivery" element={<DeliveryPortal />} />
+              <Route path="/delivery" element={<Navigate to="/delivery-dashboard" replace />} />
               <Route path="/restaurant-dashboard" element={
                 <RoleProtectedRoute allowedRoles={['restaurant']}>
                   <RestaurantDashboard />
