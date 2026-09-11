@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { XCircle, CheckCircle, RefreshCw, UserCheck, AlertCircle, Clock, MapPin, DollarSign, Filter, Eye } from 'lucide-react';
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
+import { API_BASE } from '../../config/api';
 
 export default function RiderRejectionsTab({ token, onViewOrder }) {
   const [rejectionsData, setRejectionsData] = useState({ pendingCount: 0, totalCount: 0, rejections: [], orders: [] });
