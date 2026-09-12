@@ -239,10 +239,11 @@ export default function LoginSignup() {
   const handleSignupOtpVerify = async (e) => {
     e.preventDefault();
     setFormError('');
-    if (signupOtp.length !== 6) return setFormError('Please enter the complete 6-digit OTP.');
+    const trimmedOtp = (signupOtp || '').toString().trim();
+    if (trimmedOtp.length !== 6) return setFormError('Please enter the complete 6-digit OTP.');
     if (!savedRegisterData) return setFormError('Session expired. Please fill the form again.');
     const { name: n, email: em, password: pw, phone: ph, role: r, partnerDetails: pd } = savedRegisterData;
-    const res = await register(n, em, pw, ph, r, { ...pd, emailOtp: signupOtp });
+    const res = await register(n, em, pw, ph, r, pd, trimmedOtp);
     if (!res.success) setFormError(res.message);
   };
 
@@ -354,7 +355,7 @@ export default function LoginSignup() {
               }
             </div>
 
-            <button type="submit" disabled={loading || signupOtp.length !== 6}
+            <button type="submit" disabled={loading || (signupOtp || '').toString().trim().length !== 6}
               className="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold py-3.5 px-4 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
               {loading
                 ? <><svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg> Creating Account...</>

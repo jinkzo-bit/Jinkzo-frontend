@@ -234,13 +234,25 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // ── Register ────────────────────────────────────────────────────────────────
-  register: async (name, email, password, phone, role = 'customer', partnerDetails = {}) => {
+  register: async (name, email, password, phone, role = 'customer', partnerDetails = {}, emailOtp = '') => {
     set({ loading: true, error: null });
     try {
+      const cleanOtp = (emailOtp || partnerDetails?.emailOtp || '').toString().trim();
+      const safePartnerDetails = { ...partnerDetails };
+      delete safePartnerDetails.emailOtp;
+
       const res = await fetch(`${API_BASE}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, phone, role, ...partnerDetails }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          phone,
+          role,
+          emailOtp: cleanOtp,
+          ...safePartnerDetails,
+        }),
       });
 
       const data = await safeJson(res);
