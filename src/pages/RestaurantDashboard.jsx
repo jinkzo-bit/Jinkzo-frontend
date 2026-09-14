@@ -283,13 +283,27 @@ export default function RestaurantDashboard() {
       fetchOrders();
       fetchMetrics();
     });
-    const interval = setInterval(() => {
+    // Fallback polling: 30 seconds (reduces polling bursts by 67% while Socket.IO handles real-time updates)
+    let interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return; // Pause polling when tab is hidden / minimized
+      }
       fetchOrders();
       fetchMetrics();
-    }, 10000);
+    }, 30000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchOrders();
+        fetchMetrics();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       socket.disconnect();
       clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [token, user, navigate]);
 

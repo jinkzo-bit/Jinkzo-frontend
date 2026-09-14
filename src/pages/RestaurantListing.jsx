@@ -1,7 +1,7 @@
 import { API_BASE } from '../config/api';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Search, SlidersHorizontal, AlertTriangle, Heart, Store, X, MapPin } from 'lucide-react';
+import { Search, SlidersHorizontal, AlertTriangle, AlertCircle, RefreshCw, Heart, Store, X, MapPin } from 'lucide-react';
 import RestaurantCard from '../components/RestaurantCard';
 import FoodDietaryFilter from '../components/FoodDietaryFilter';
 import { useCartStore } from '../store/cartStore';
@@ -17,6 +17,10 @@ export default function RestaurantListing() {
   const [restaurants, setRestaurants] = useState([]);
   const [dishes, setDishes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
+
+  const handleRetry = () => setRetryTrigger(prev => prev + 1);
 
   // Category & search params from URL
   const categoryParam = searchParams.get('category') || '';
@@ -28,21 +32,22 @@ export default function RestaurantListing() {
 
   // Identify Active Dashboard for Browsing Mode
   const normCategory = (categoryParam || '').toLowerCase().trim();
-  const isFoodCategory = !normCategory || normCategory === 'food';
 
-  let activeDashboard = 'food';
+  // Non-food service mapping: only these routes switch out of the food dashboard
+  const NON_FOOD_SERVICES = {
+    'beverages': 'cool_hot',
+    'hot_cool': 'cool_hot',
+    'cool_hot': 'cool_hot',
+    'bakery': 'cool_hot',
+    'bakery_beverages': 'cool_hot',
+    'grocery': 'grocery',
+    'meat': 'meat',
+    'fruits-vegetables': 'veg_fruits',
+    'veg_fruits': 'veg_fruits'
+  };
 
-  if (normCategory === 'beverages' || normCategory === 'hot_cool' || normCategory === 'cool_hot') {
-    activeDashboard = 'cool_hot';
-  } else if (normCategory === 'grocery') {
-    activeDashboard = 'grocery';
-  } else if (normCategory === 'meat') {
-    activeDashboard = 'meat';
-  } else if (normCategory === 'fruits-vegetables' || normCategory === 'veg_fruits') {
-    activeDashboard = 'veg_fruits';
-  } else if (normCategory && normCategory !== 'food') {
-    activeDashboard = normCategory;
-  }
+  const activeDashboard = NON_FOOD_SERVICES[normCategory] || 'food';
+  const isFoodCategory = activeDashboard === 'food';
 
   const [dynamicCategories, setDynamicCategories] = useState([]);
   const [isCategoriesLoading, setIsCategoriesLoading] = useState(true);
@@ -77,7 +82,14 @@ export default function RestaurantListing() {
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState(searchParam);
-  const [selectedCuisine, setSelectedCuisine] = useState(searchParams.get('cuisine') || 'All');
+  const [selectedCuisine, setSelectedCuisine] = useState(() => {
+    const cParam = searchParams.get('cuisine');
+    if (cParam) return cParam;
+    if (categoryParam && !NON_FOOD_SERVICES[normCategory] && normCategory !== 'food' && normCategory !== 'all') {
+      return categoryParam;
+    }
+    return 'All';
+  });
 
   // Dietary filter state: 'all' | 'veg' | 'non-veg' (Active ONLY for Food category)
   const [dietFilter, setDietFilter] = useState(() => {
@@ -118,7 +130,15 @@ export default function RestaurantListing() {
   useEffect(() => {
     const paramSearch = searchParams.get('search') || '';
     setSearchQuery(paramSearch);
-    setSelectedCuisine(searchParams.get('cuisine') || 'All');
+
+    const cParam = searchParams.get('cuisine');
+    if (cParam) {
+      setSelectedCuisine(cParam);
+    } else if (categoryParam && !NON_FOOD_SERVICES[normCategory] && normCategory !== 'food' && normCategory !== 'all') {
+      setSelectedCuisine(categoryParam);
+    } else {
+      setSelectedCuisine('All');
+    }
 
     if (isFoodCategory) {
       const d = searchParams.get('diet');
@@ -132,7 +152,7 @@ export default function RestaurantListing() {
     } else {
       setDietFilter('all');
     }
-  }, [searchParams, isFoodCategory]);
+  }, [searchParams, isFoodCategory, categoryParam, normCategory]);
 
   // Fetch category-services availability list
   useEffect(() => {
@@ -336,10 +356,16 @@ export default function RestaurantListing() {
                 if (!isCancelled) {
                   setDishes(list.map(d => ({ ...d, service: 'food', serviceName: 'Food' })));
                   setRestaurants([]);
+                  setApiError(null);
                 }
               } else if (!isCancelled) {
-                setDishes([]);
-                setRestaurants([]);
+                // FAILURE: Preserve existing dishes if any exist, set error state instead of clearing to []
+                setApiError({
+                  status: res.status,
+                  message: res.status === 429
+                    ? t('restaurant.rateLimitMsg', 'Server is receiving too many requests. Please wait a moment.')
+                    : t('restaurant.loadErrorMsg', 'Unable to load dishes right now. Please retry.')
+                });
               }
             } else {
               const url = `${API_BASE}/restaurants?${queryParams.toString()}`;
@@ -355,10 +381,16 @@ export default function RestaurantListing() {
                 if (!isCancelled) {
                   setRestaurants(list);
                   setDishes([]);
+                  setApiError(null);
                 }
               } else if (!isCancelled) {
-                setRestaurants([]);
-                setDishes([]);
+                // FAILURE: Preserve existing restaurants if any exist, set error state instead of clearing to []
+                setApiError({
+                  status: res.status,
+                  message: res.status === 429
+                    ? t('restaurant.rateLimitMsg', 'Server is receiving too many requests. Please wait a moment.')
+                    : t('restaurant.loadErrorMsg', 'Unable to load restaurants right now. Please retry.')
+                });
               }
             }
           } else {
@@ -441,6 +473,12 @@ export default function RestaurantListing() {
         }
       } catch (err) {
         console.error('Fetch filtering data error:', err);
+        if (!isCancelled) {
+          setApiError({
+            status: 0,
+            message: t('restaurant.networkError', 'Network connection issue. Please check your internet and retry.')
+          });
+        }
       } finally {
         if (!isCancelled) {
           setIsLoading(false);
@@ -453,15 +491,23 @@ export default function RestaurantListing() {
     return () => {
       isCancelled = true;
     };
-  }, [activeDashboard, searchQuery, isGlobalSearch, selectedCuisine, dietFilter, allCategoryServices]);
+  }, [activeDashboard, searchQuery, isGlobalSearch, selectedCuisine, dietFilter, allCategoryServices, retryTrigger]);
 
   // URL sync helper
   const updateUrlParam = (key, value) => {
     const newParams = new URLSearchParams(searchParams);
     if (value && value !== 'All' && value !== false) {
       newParams.set(key, value);
+      if (key === 'cuisine' && newParams.has('category')) {
+        const cat = (newParams.get('category') || '').toLowerCase().trim();
+        if (!NON_FOOD_SERVICES[cat]) newParams.delete('category');
+      }
     } else {
       newParams.delete(key);
+      if (key === 'cuisine' && newParams.has('category')) {
+        const cat = (newParams.get('category') || '').toLowerCase().trim();
+        if (!NON_FOOD_SERVICES[cat]) newParams.delete('category');
+      }
     }
     setSearchParams(newParams);
   };
@@ -1198,12 +1244,50 @@ export default function RestaurantListing() {
         ) : activeDashboard === 'food' && selectedCuisine === 'All' ? (
           /* ── FOOD DASHBOARD BROWSING MODE (Default: Show Food Restaurants) ── */
           restaurants.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {restaurants.map((restaurant) => (
-                <RestaurantCard key={restaurant._id} restaurant={restaurant} isLoading={false} />
-              ))}
+            <div className="flex flex-col gap-4">
+              {apiError && (
+                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl flex items-center justify-between gap-3 text-xs text-amber-800 dark:text-amber-300 animate-fade-in shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span className="font-medium">{t('restaurant.showingPrevious', 'Unable to refresh right now. Showing previously loaded restaurants.')}</span>
+                  </div>
+                  <button
+                    onClick={handleRetry}
+                    className="font-bold underline cursor-pointer hover:text-amber-950 dark:hover:text-amber-100 flex-shrink-0 flex items-center gap-1"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    {t('common.retry', 'Retry')}
+                  </button>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {restaurants.map((restaurant) => (
+                  <RestaurantCard key={restaurant._id} restaurant={restaurant} isLoading={false} />
+                ))}
+              </div>
+            </div>
+          ) : apiError ? (
+            /* Error state when no existing restaurants could be loaded */
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-3 bg-surface rounded-3xl border border-line p-8 shadow-2xs">
+              <div className="w-16 h-16 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-2">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <h3 className="font-display font-extrabold text-xl text-main">
+                {t('restaurant.unableToLoad', 'Unable to load restaurants right now')}
+              </h3>
+              <p className="text-sm text-muted max-w-sm">
+                {apiError.message || t('restaurant.tryAgainLater', 'We encountered a connection issue. Please check your network and retry.')}
+              </p>
+              <button
+                onClick={handleRetry}
+                className="bg-primary text-white font-bold text-xs px-5 py-2.5 rounded-xl mt-3 shadow-md cursor-pointer hover:bg-primary-hover flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                {t('restaurant.tryAgain', 'Try Again')}
+              </button>
             </div>
           ) : (
+            /* Genuine filter empty state (Only when API succeeded with 200 OK + []) */
             <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
               <div className="w-16 h-16 rounded-full bg-violet-50 dark:bg-violet-950/40 text-primary flex items-center justify-center mb-2">
                 <SlidersHorizontal className="w-8 h-8" />
