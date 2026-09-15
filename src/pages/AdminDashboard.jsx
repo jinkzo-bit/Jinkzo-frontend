@@ -493,6 +493,8 @@ export default function AdminDashboard() {
       fetchRejectionsCount();
     });
 
+    let orderStatusDebounceTimer = null;
+
     socket.on('orderStatusChanged', (data) => {
       if (data && data.order) {
         setAllOrders(prev => {
@@ -500,15 +502,18 @@ export default function AdminDashboard() {
           if (exists) {
             return prev.map(o => o._id === data.orderId ? { ...o, ...data.order } : o);
           }
-          // If not in our list, it might be a newly created order or we don't have its full payload.
-          // Fetch all to guarantee we have all populated customer/restaurant references.
-          fetchAllOrders();
           return prev;
         });
-      } else {
-        fetchAllOrders();
       }
-      fetchAnalytics();
+
+      // Trailing debounce (~2 seconds) so multiple orderStatusChanged events burst into only ONE refresh
+      if (orderStatusDebounceTimer) {
+        clearTimeout(orderStatusDebounceTimer);
+      }
+      orderStatusDebounceTimer = setTimeout(() => {
+        fetchAllOrders();
+        fetchAnalytics();
+      }, 2000);
     });
 
     socket.on('locationUpdated', ({ orderId, lat, lng }) => {
@@ -518,13 +523,30 @@ export default function AdminDashboard() {
       }));
     });
 
+    // 30-second polling with visibility awareness (pauses when browser tab is hidden)
     const interval = setInterval(() => {
-      fetchAllOrders();
-      fetchAnalytics();
-    }, 10000);
+      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+        fetchAllOrders();
+        fetchAnalytics();
+      }
+    }, 30000);
+
+    // Refresh immediately when returning to visible tab
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchAllOrders();
+        fetchAnalytics();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       socket.disconnect();
       clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (orderStatusDebounceTimer) {
+        clearTimeout(orderStatusDebounceTimer);
+      }
     };
   }, [token, user, navigate]);
 
