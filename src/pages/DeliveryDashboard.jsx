@@ -182,6 +182,9 @@ export default function DeliveryDashboard() {
         setActiveSubTabState('history');
         return;
       }
+      if (historyOrders.length === 0) {
+        fetchHistoryData(true);
+      }
     }
   }, [orderIdFromUrl, availableOrders, activeOrders, historyOrders]);
 
@@ -300,6 +303,17 @@ export default function DeliveryDashboard() {
     }
   };
 
+  // Concurrency, coalescing, and visibility synchronization refs
+  const isFetchingOrdersRef = useRef(false);
+  const pendingRefreshRequestedRef = useRef(false);
+  const fetchOrdersSequenceRef = useRef(0);
+  const lastOrdersFetchTimeRef = useRef(0);
+  const refreshTimerRef = useRef(null);
+  const needsSyncOnVisibleRef = useRef(false);
+
+  const isFetchingHistoryRef = useRef(false);
+  const lastHistoryFetchTimeRef = useRef(0);
+
   useEffect(() => {
     if (!token) {
       navigate('/login');
@@ -313,10 +327,11 @@ export default function DeliveryDashboard() {
       fetchProfile();
       fetchOrdersData();
 
+      // Timer 1: 60-second profile polling only (visibility-aware; does not duplicate live orders)
       const interval = setInterval(() => {
+        if (document.hidden || document.visibilityState === 'hidden') return;
         fetchProfile();
-        fetchOrdersData();
-      }, 60000); // 60 seconds fallback polling to prevent 429 API rate limits
+      }, 60000);
 
       return () => clearInterval(interval);
     }
@@ -340,43 +355,109 @@ export default function DeliveryDashboard() {
     }
   };
 
+  // Live orders fetcher: requests ONLY available and active (history decoupled)
+  // Protected with in-flight coalescing queue and out-of-order response sequencing
   const fetchOrdersData = async () => {
+    // If a fetch is currently running, queue one follow-up refresh so no signals are lost
+    if (isFetchingOrdersRef.current) {
+      pendingRefreshRequestedRef.current = true;
+      return;
+    }
+
+    isFetchingOrdersRef.current = true;
+    pendingRefreshRequestedRef.current = false;
+    const currentSeq = ++fetchOrdersSequenceRef.current;
+
     try {
-      const [availRes, activeRes, historyRes] = await Promise.all([
+      const [availRes, activeRes] = await Promise.all([
         fetch(`${API_BASE}/delivery-partner/orders/available`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`${API_BASE}/delivery-partner/orders/active`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`${API_BASE}/delivery-partner/orders/history`, { headers: { 'Authorization': `Bearer ${token}` } })
+        fetch(`${API_BASE}/delivery-partner/orders/active`, { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
 
-      if (availRes.ok) {
-        const availData = await availRes.json();
-        setAvailableOrders(Array.isArray(availData) ? availData : []);
+      // Out-of-order protection: only apply if this response belongs to the latest request sequence
+      if (currentSeq === fetchOrdersSequenceRef.current) {
+        if (availRes.ok) {
+          const availData = await availRes.json();
+          setAvailableOrders(Array.isArray(availData) ? availData : []);
+        }
+
+        if (activeRes.ok) {
+          const activeData = await activeRes.json();
+          const safeActiveData = Array.isArray(activeData) ? activeData : [];
+          setActiveOrders(safeActiveData);
+
+          if (safeActiveData.length > 0) {
+            setSelectedOrder(prev => {
+              if (!prev) return safeActiveData[0];
+              const match = safeActiveData.find(o => String(o._id) === String(prev._id));
+              return match || safeActiveData[0];
+            });
+          }
+        }
+
+        lastOrdersFetchTimeRef.current = Date.now();
       }
+    } catch (err) {
+      console.error('Error fetching live delivery orders:', err);
+    } finally {
+      isFetchingOrdersRef.current = false;
+      setIsOrdersLoading(false);
 
-      if (activeRes.ok) {
-        const activeData = await activeRes.json();
-        const safeActiveData = Array.isArray(activeData) ? activeData : [];
-        setActiveOrders(safeActiveData);
-
-        if (safeActiveData.length > 0) {
-          setSelectedOrder(prev => {
-            if (!prev) return safeActiveData[0];
-            const match = safeActiveData.find(o => String(o._id) === String(prev._id));
-            return match || safeActiveData[0];
-          });
+      // Coalesced queued refresh: execute queued request if one arrived while fetching
+      if (pendingRefreshRequestedRef.current) {
+        pendingRefreshRequestedRef.current = false;
+        if (!document.hidden && document.visibilityState !== 'hidden') {
+          fetchOrdersData();
+        } else {
+          needsSyncOnVisibleRef.current = true;
         }
       }
+    }
+  };
 
-      if (historyRes.ok) {
-        const historyData = await historyRes.json();
+  // Shared trailing-debounced live orders refresh scheduler (~1000ms debounce)
+  const scheduleLiveOrdersRefresh = (delay = 1000) => {
+    // If hidden, do not start HTTP fetch; mark pending for foreground return
+    if (document.hidden || document.visibilityState === 'hidden') {
+      needsSyncOnVisibleRef.current = true;
+      return;
+    }
+
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      fetchOrdersData();
+    }, delay);
+  };
+
+  // Dedicated on-demand past runs history fetcher (called on History tab or after Delivered)
+  const fetchHistoryData = async (force = false) => {
+    const now = Date.now();
+    // Throttle rapid repeated tab clicks within 4s unless explicitly forced
+    if (!force && now - lastHistoryFetchTimeRef.current < 4000 && historyOrders.length > 0) {
+      return;
+    }
+    if (isFetchingHistoryRef.current) return;
+
+    isFetchingHistoryRef.current = true;
+    try {
+      const res = await fetch(`${API_BASE}/delivery-partner/orders/history`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const historyData = await res.json();
         const safeHistoryData = Array.isArray(historyData) ? historyData : [];
         safeHistoryData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         setHistoryOrders(safeHistoryData);
+        lastHistoryFetchTimeRef.current = Date.now();
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error fetching rider history:', err);
     } finally {
-      setIsOrdersLoading(false);
+      isFetchingHistoryRef.current = false;
     }
   };
 
@@ -460,6 +541,13 @@ export default function DeliveryDashboard() {
   useEffect(() => {
     if (activeSubTab === 'reviews') {
       fetchRatingsData();
+    }
+  }, [activeSubTab]);
+
+  // Fetch history data on-demand whenever switching to history tab
+  useEffect(() => {
+    if (activeSubTab === 'history') {
+      fetchHistoryData();
     }
   }, [activeSubTab]);
 
@@ -713,7 +801,7 @@ export default function DeliveryDashboard() {
         setSelectedOrder(prev => (prev && prev._id === data.orderId ? { ...prev, pickupStops: data.pickupStops, ...(data.status ? { status: data.status } : {}) } : prev));
         setActiveOrders(prev => prev.map(o => (o._id === data.orderId ? { ...o, pickupStops: data.pickupStops, ...(data.status ? { status: data.status } : {}) } : o)));
       }
-      fetchOrdersData();
+      scheduleLiveOrdersRefresh(1000);
     });
 
     // Whole order or status updated
@@ -722,7 +810,7 @@ export default function DeliveryDashboard() {
         setSelectedOrder(prev => (prev && prev._id === data._id ? { ...prev, ...data } : prev));
         setActiveOrders(prev => prev.map(o => (o._id === data._id ? { ...o, ...data } : o)));
       }
-      fetchOrdersData();
+      scheduleLiveOrdersRefresh(1000);
     });
 
     socket.on('statusUpdated', (data) => {
@@ -730,49 +818,54 @@ export default function DeliveryDashboard() {
         setSelectedOrder(prev => (prev && prev._id === data.order._id ? { ...prev, ...data.order } : prev));
         setActiveOrders(prev => prev.map(o => (o._id === data.order._id ? { ...o, ...data.order } : o)));
       }
-      fetchOrdersData();
+      scheduleLiveOrdersRefresh(1000);
     });
 
-    // General order status change
+    // General order status change (platform broadcast)
     socket.on('orderStatusChanged', (data) => {
       if (data && data.order) {
         setSelectedOrder(prev => (prev && prev._id === data.order._id ? { ...prev, ...data.order } : prev));
         setActiveOrders(prev => prev.map(o => (o._id === data.order._id ? { ...o, ...data.order } : o)));
       }
-      fetchOrdersData();
+      scheduleLiveOrdersRefresh(1000);
     });
 
     socket.on('auto_ride_opportunity', () => {
-      fetchOrdersData();
+      scheduleLiveOrdersRefresh(1000);
     });
 
     socket.on('new_order_pool', () => {
-      fetchOrdersData();
+      scheduleLiveOrdersRefresh(1000);
     });
 
-    // Fallback polling interval every 12 seconds for network resilience
+    // Fallback polling interval every 30 seconds for network resilience (visibility-aware)
     const interval = setInterval(() => {
+      if (document.hidden || document.visibilityState === 'hidden') return;
       fetchOrdersData();
-    }, 12000);
+    }, 30000);
 
-    // Refresh immediately when window/tab is focused or visible
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchOrdersData();
+    // Coalesced refresh when window/tab returns to focus or becomes visible
+    const handleVisibilityOrFocus = () => {
+      if (!document.hidden && document.visibilityState !== 'hidden') {
+        if (needsSyncOnVisibleRef.current || (Date.now() - lastOrdersFetchTimeRef.current > 25000)) {
+          needsSyncOnVisibleRef.current = false;
+          scheduleLiveOrdersRefresh(300); // 300ms trailing debounce merges focus + visibilitychange into 1 refresh
+        }
       }
     };
-    const handleFocus = () => {
-      fetchOrdersData();
-    };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
 
     return () => {
       socket.disconnect();
       clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
     };
   }, [token, user?._id, selectedOrder?._id]);
 
@@ -834,6 +927,7 @@ export default function DeliveryDashboard() {
         if (['Delivered', 'Completed'].includes(fresh.status)) {
           setActiveOrders(prev => prev.filter(o => String(o._id) !== String(orderId)));
           setHistoryOrders(prev => [fresh, ...prev.filter(o => String(o._id) !== String(orderId))]);
+          fetchHistoryData(true);
         } else {
           setActiveOrders(prev => prev.map(o => String(o._id) === String(orderId) ? fresh : o));
         }
