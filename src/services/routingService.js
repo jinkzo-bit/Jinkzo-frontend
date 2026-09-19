@@ -7,7 +7,12 @@ export async function getRoute(origin, destination) {
   if (activeController) {
     activeController.abort();
   }
-  activeController = new AbortController();
+  const controller = new AbortController();
+  activeController = controller;
+
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, 9000);
   
   try {
     const res = await fetch(`${API_BASE}/maps/routes`, {
@@ -18,7 +23,7 @@ export async function getRoute(origin, destination) {
         destination,
         travelMode: 'DRIVE',
       }),
-      signal: activeController.signal,
+      signal: controller.signal,
     });
     const data = await res.json();
     
@@ -34,10 +39,15 @@ export async function getRoute(origin, destination) {
     }
   } catch (err) {
     if (err.name === 'AbortError') {
-      console.log('[RoutingService] Request aborted');
+      console.log('[RoutingService] Request aborted or timed out');
     } else {
       console.warn('[RoutingService] Backend proxy failed:', err.message);
     }
     throw err; // DO NOT fallback to 0 distance
+  } finally {
+    clearTimeout(timeoutId);
+    if (activeController === controller) {
+      activeController = null;
+    }
   }
 }

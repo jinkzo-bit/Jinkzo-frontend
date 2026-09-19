@@ -699,16 +699,22 @@ export default function GoogleMapContainer({
 
     // Prevent duplicate concurrent requests
     if (isRouteFetchingRef.current) return;
-    isRouteFetchingRef.current = true;
 
     const currentRequestId = ++routeRequestIdRef.current;
 
     const fetchMultiRoutes = async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 9000);
+
       try {
+        isRouteFetchingRef.current = true;
         const res = await fetch(`${API_BASE}/maps/multi-stop-routes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ waypoints, travelMode: 'DRIVE' })
+          body: JSON.stringify({ waypoints, travelMode: 'DRIVE' }),
+          signal: controller.signal
         });
         const data = await res.json();
 
@@ -736,8 +742,13 @@ export default function GoogleMapContainer({
           }
         }
       } catch (err) {
-        console.error('[GoogleMapContainer] Multi-stop routes fetch failed:', err);
+        if (err.name === 'AbortError') {
+          console.warn('[GoogleMapContainer] Multi-stop routes request timed out after 9000ms');
+        } else {
+          console.error('[GoogleMapContainer] Multi-stop routes fetch failed:', err);
+        }
       } finally {
+        clearTimeout(timeoutId);
         isRouteFetchingRef.current = false;
       }
     };
