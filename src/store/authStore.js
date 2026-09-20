@@ -135,6 +135,12 @@ export const useAuthStore = create((set, get) => ({
           const data = await safeJson(res);
           const currentToken = get().token || sessionToken || 'cookie-auth-active';
           set({ user: data, token: currentToken, isAuthenticated: true, error: null });
+          try {
+            const { useCartStore } = await import('./cartStore');
+            useCartStore.getState().loadUserCart(data._id);
+          } catch (cartErr) {
+            console.error('Failed to load user cart on initialize:', cartErr);
+          }
           console.log('[FCM-DIAGNOSTIC] Stage 1: User session verified via /auth/me:', {
             email: data?.email,
             role: data?.role,
@@ -148,10 +154,22 @@ export const useAuthStore = create((set, get) => ({
           get().logout();
         } else {
           set({ error: 'Session initialization failed', isAuthenticated: false });
+          try {
+            const { useCartStore } = await import('./cartStore');
+            useCartStore.getState().resetCartForLogout();
+          } catch (cartErr) {
+            console.error('Failed to reset cart on session failure:', cartErr);
+          }
         }
       } catch (err) {
         console.error('Session initialization failed:', err);
         set({ error: err.message, isAuthenticated: false });
+        try {
+          const { useCartStore } = await import('./cartStore');
+          useCartStore.getState().resetCartForLogout();
+        } catch (cartErr) {
+          console.error('Failed to reset cart on init error:', cartErr);
+        }
       } finally {
         set({ loading: false });
       }
@@ -187,6 +205,13 @@ export const useAuthStore = create((set, get) => ({
       }
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
+
+      try {
+        const { useCartStore } = await import('./cartStore');
+        useCartStore.getState().loadUserCart(data.user._id);
+      } catch (cartErr) {
+        console.error('Failed to load user cart on login:', cartErr);
+      }
 
       if (activeToken && data.user) {
         console.log('[FCM-DIAGNOSTIC] Stage 1 (authStore.login): Calling registerWebPush before login resolves...');
@@ -266,6 +291,13 @@ export const useAuthStore = create((set, get) => ({
       if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
       set({ user: data.user, token: data.token || 'cookie-auth-active', isAuthenticated: true, error: null });
 
+      try {
+        const { useCartStore } = await import('./cartStore');
+        useCartStore.getState().loadUserCart(data.user._id);
+      } catch (cartErr) {
+        console.error('Failed to load user cart on register:', cartErr);
+      }
+
       if (activeToken && data.user) {
         try {
           await registerWebPush(activeToken, data.user);
@@ -309,9 +341,9 @@ export const useAuthStore = create((set, get) => ({
 
     try {
       const { useCartStore } = await import('./cartStore');
-      useCartStore.getState().clearCart();
+      useCartStore.getState().resetCartForLogout();
     } catch (e) {
-      console.error('Failed to clear cart on logout:', e);
+      console.error('Failed to reset cart on logout:', e);
     }
 
     try {

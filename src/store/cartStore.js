@@ -1,18 +1,72 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { useAuthStore } from './authStore';
 
 import { API_BASE } from '../config/api';
 import { checkRestaurantOpenStatus, checkItemAvailability, normalizeMenuItem } from '../utils/timingUtils';
 
-// NC16 FIX: Wrap store with persist middleware so cart survives page refreshes.
-// Only cart data is persisted — toasts and platformSettings are always re-fetched fresh.
+// P2-04 FIX: Explicit user-partitioned cart persistence (Web)
+// Authenticated carts: 'jinkzo-cart-<userId>'
+// Guest carts:         'jinkzo-cart-guest'
+// Legacy key 'corior-cart' is deprecated and orphaned.
+const CART_STORAGE_PREFIX = 'jinkzo-cart-';
+const GUEST_CART_KEY = 'jinkzo-cart-guest';
+
+const getStorageKey = (userId) => {
+  return userId ? `${CART_STORAGE_PREFIX}${userId}` : GUEST_CART_KEY;
+};
+
+const saveCartToStorage = (userId, state) => {
+  try {
+    const key = getStorageKey(userId);
+    const dataToSave = {
+      items: state.items || [],
+      restaurant: state.restaurant || null,
+      promoCode: state.promoCode || null,
+      promoDiscount: state.promoDiscount || 0,
+      cashbackAmount: state.cashbackAmount || 0,
+      savedAt: Date.now()
+    };
+    localStorage.setItem(key, JSON.stringify(dataToSave));
+  } catch (err) {
+    console.warn('[CartStore] Failed to save cart to localStorage:', err);
+  }
+};
+
+const deleteCartFromStorage = (userId) => {
+  try {
+    const key = getStorageKey(userId);
+    localStorage.removeItem(key);
+  } catch (err) {
+    console.warn('[CartStore] Failed to remove cart from localStorage:', err);
+  }
+};
+
+const readCartFromStorage = (userId) => {
+  try {
+    const key = getStorageKey(userId);
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.items)) {
+      return {
+        items: parsed.items,
+        restaurant: parsed.restaurant || null,
+        promoCode: parsed.promoCode || null,
+        promoDiscount: parsed.promoDiscount || 0,
+        cashbackAmount: parsed.cashbackAmount || 0
+      };
+    }
+  } catch (err) {
+    console.warn('[CartStore] Failed to read/parse cart from localStorage:', err);
+  }
+  return null;
+};
+
 let platformSettingsPromise = null;
 let platformSettingsFetched = false;
 
-export const useCartStore = create(
-  persist(
-    (set, get) => ({
+export const useCartStore = create((set, get) => ({
+  activeUserId: null,
   items: [],
   restaurant: null, // Only one restaurant order at a time
   promoCode: null,
@@ -160,6 +214,7 @@ export const useCartStore = create(
       items: updatedItems, 
       restaurant: restaurant || get().restaurant
     });
+    saveCartToStorage(get().activeUserId, get());
     
     const addedName = item.name || item.itemName || item.productName || item.title || item.foodName || 'Item';
     get().showToast(`Added "${addedName}${itemUnit ? ` (${itemUnit})` : ''}" to cart!`);
@@ -195,6 +250,7 @@ export const useCartStore = create(
       promoDiscount: updatedItems.length === 0 ? 0 : get().promoDiscount,
       cashbackAmount: updatedItems.length === 0 ? 0 : get().cashbackAmount
     });
+    saveCartToStorage(get().activeUserId, get());
   },
 
   updateQuantity: (menuItemId, quantity, unit = null) => {
@@ -233,9 +289,47 @@ export const useCartStore = create(
       promoDiscount: updatedItems.length === 0 ? 0 : get().promoDiscount,
       cashbackAmount: updatedItems.length === 0 ? 0 : get().cashbackAmount
     });
+    saveCartToStorage(get().activeUserId, get());
+  },
+
+  loadUserCart: (userId) => {
+    const targetUserId = userId || null;
+    const saved = readCartFromStorage(targetUserId);
+    if (saved && Array.isArray(saved.items) && saved.items.length > 0) {
+      set({
+        activeUserId: targetUserId,
+        items: saved.items,
+        restaurant: saved.restaurant,
+        promoCode: saved.promoCode,
+        promoDiscount: saved.promoDiscount,
+        cashbackAmount: saved.cashbackAmount
+      });
+    } else {
+      set({
+        activeUserId: targetUserId,
+        items: [],
+        restaurant: null,
+        promoCode: null,
+        promoDiscount: 0,
+        cashbackAmount: 0
+      });
+    }
+  },
+
+  resetCartForLogout: () => {
+    set({
+      activeUserId: null,
+      items: [],
+      restaurant: null,
+      promoCode: null,
+      promoDiscount: 0,
+      cashbackAmount: 0
+    });
   },
 
   clearCart: () => {
+    const { activeUserId } = get();
+    deleteCartFromStorage(activeUserId);
     set({
       items: [],
       restaurant: null,
@@ -266,6 +360,7 @@ export const useCartStore = create(
         return { success: false, message: 'Minimum order amount for WELCOME50 is ₹200' };
       }
       set({ promoCode: 'WELCOME50', promoDiscount: 50 });
+      saveCartToStorage(get().activeUserId, get());
       get().showToast('Flat ₹50 discount applied!', 'success');
       return { success: true };
     } else if (normalizedCode === 'QUICK20') {
@@ -274,6 +369,7 @@ export const useCartStore = create(
       }
       const discount = Math.round(subtotal * 0.20);
       set({ promoCode: 'QUICK20', promoDiscount: discount, cashbackAmount: 0 });
+      saveCartToStorage(get().activeUserId, get());
       get().showToast('20% discount applied!', 'success');
       return { success: true };
     } else if (normalizedCode === 'CASHBACK50') {
@@ -281,6 +377,7 @@ export const useCartStore = create(
         return { success: false, message: 'Minimum order amount for CASHBACK50 is ₹200' };
       }
       set({ promoCode: 'CASHBACK50', promoDiscount: 0, cashbackAmount: 50 });
+      saveCartToStorage(get().activeUserId, get());
       get().showToast('Promo applied! ₹50 Cashback will be added to your wallet upon successful checkout.', 'success');
       return { success: true };
     }
@@ -320,11 +417,13 @@ export const useCartStore = create(
         const discountAmount = Math.min(matchedOffer.discount, itemSubtotal);
 
         set({ promoCode: matchedOffer.code, promoDiscount: discountAmount, cashbackAmount: 0 });
+        saveCartToStorage(get().activeUserId, get());
         get().showToast(`Applied ${matchedOffer.code}! Saved ₹${discountAmount}`, 'success');
         return { success: true };
       } else {
         const discountAmount = Math.min(matchedOffer.discount, restaurantSubtotal);
         set({ promoCode: matchedOffer.code, promoDiscount: discountAmount, cashbackAmount: 0 });
+        saveCartToStorage(get().activeUserId, get());
         get().showToast(`Applied ${matchedOffer.code}! Saved ₹${discountAmount}`, 'success');
         return { success: true };
       }
@@ -335,6 +434,7 @@ export const useCartStore = create(
 
   removePromo: () => {
     set({ promoCode: null, promoDiscount: 0, cashbackAmount: 0 });
+    saveCartToStorage(get().activeUserId, get());
     get().showToast('Promo code removed', 'info');
   },
 
@@ -499,20 +599,4 @@ export const useCartStore = create(
       total
     };
   }
-}),
-{
-  name: 'corior-cart',          // localStorage key
-  partialize: (state) => ({
-    // Only persist cart data — exclude ephemeral UI state
-    items:         state.items,
-    restaurant:    state.restaurant,
-    promoCode:     state.promoCode,
-    promoDiscount: state.promoDiscount,
-    cashbackAmount: state.cashbackAmount,
-    // toasts and platformSettings intentionally excluded:
-    // toasts   → should not outlive the session
-    // platformSettings → always re-fetched from API on app boot
-  })
-}
-  )
-);
+}));
