@@ -24,6 +24,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import RideBooking from './pages/RideBooking';
 import Favourites from './pages/Favourites';
 import OrderHistory from './pages/OrderHistory';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 
 import { useAuthStore } from './store/authStore';
 import { useCartStore } from './store/cartStore';
@@ -78,6 +79,7 @@ export default function App() {
           <main className="flex-grow pt-4">
             <Routes>
               <Route path="/" element={<Home />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               <Route path="/restaurants" element={<RestaurantListing />} />
               <Route path="/restaurant/:id" element={<RestaurantDetail />} />
               <Route path="/favourites" element={<Favourites />} />
