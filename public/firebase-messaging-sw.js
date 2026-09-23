@@ -52,34 +52,36 @@ if (messaging) {
   });
 }
 
-// ── Fallback Push Event Handler for standard WebPush payloads ─────────────────
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-  try {
-    const rawData = event.data.json();
-    if (rawData && (rawData.notification || rawData.data)) {
-      const title = rawData.notification?.title || rawData.data?.title || 'Jinkzo Notification';
-      const body = rawData.notification?.body || rawData.data?.body || 'New notification received.';
-      const notifData = rawData.data || {};
-      const notifTag = notifData.orderId
-        ? `jinkzo-order-${notifData.orderId}`
-        : (notifData.rideId ? `jinkzo-ride-${notifData.rideId}` : (notifData.notificationType || 'jinkzo-update'));
-      const options = {
-        body,
-        icon: rawData.notification?.icon || '/jinkzo-pwa-192.png',
-        badge: '/jinkzo-favicon-32.png',
-        vibrate: [200, 100, 200],
-        data: notifData,
-        tag: notifTag,
-        renotify: true
-      };
+// ── Fallback Push Event Handler for standard WebPush payloads (Active ONLY if Firebase messaging is not initialized) ──
+if (!messaging) {
+  self.addEventListener('push', (event) => {
+    if (!event.data) return;
+    try {
+      const rawData = event.data.json();
+      if (rawData && (rawData.notification || rawData.data)) {
+        const title = rawData.notification?.title || rawData.data?.title || 'Jinkzo Notification';
+        const body = rawData.notification?.body || rawData.data?.body || 'New notification received.';
+        const notifData = rawData.data || {};
+        const notifTag = notifData.orderId
+          ? `jinkzo-order-${notifData.orderId}`
+          : (notifData.rideId ? `jinkzo-ride-${notifData.rideId}` : (notifData.notificationType || 'jinkzo-update'));
+        const options = {
+          body,
+          icon: rawData.notification?.icon || '/jinkzo-pwa-192.png',
+          badge: '/jinkzo-favicon-32.png',
+          vibrate: [200, 100, 200],
+          data: notifData,
+          tag: notifTag,
+          renotify: true
+        };
 
-      event.waitUntil(self.registration.showNotification(title, options));
+        event.waitUntil(self.registration.showNotification(title, options));
+      }
+    } catch {
+      // Non-JSON push payload, ignore
     }
-  } catch {
-    // Non-JSON push payload, ignore
-  }
-});
+  });
+}
 
 // ── Notification Click & Navigation Handler ──────────────────────────────────
 self.addEventListener('notificationclick', (event) => {
