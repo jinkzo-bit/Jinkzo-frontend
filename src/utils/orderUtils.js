@@ -210,7 +210,7 @@ export const getCustomerCancellationEligibility = (order) => {
 
   // 1. RIDE SERVICE
   if (isRide) {
-    const rideEligible = order.status === 'Placed' && !riderClaimed && !(order.deliveryAgent && (order.deliveryAgent.id || order.deliveryAgent.phone));
+    const rideEligible = ['Placed', 'Rider_Assigned', 'Rider_Accepted', 'Rider_At_Pickup'].includes(order.status);
     return {
       canCancelAnything: rideEligible,
       isRide: true,
@@ -222,7 +222,7 @@ export const getCustomerCancellationEligibility = (order) => {
         serviceType: 'ride',
         status: order.status,
         eligible: rideEligible,
-        reason: rideEligible ? '' : 'Captain has already accepted this ride.'
+        reason: rideEligible ? '' : 'Ride has already started or completed.'
       }]
     };
   }
@@ -427,7 +427,7 @@ export const getOrderFinancialBreakdown = (order) => {
       platform: {
         customerDeliveryFee: custDeliveryFee,
         riderPayout: riderTotalPayout,
-        platformMargin: custDeliveryFee - riderTotalPayout
+        platformMargin: (custDeliveryFee - riderTotalPayout) + Number(ps.platformFee ?? order.platformFee ?? 0)
       },
       restaurant: restaurantObj
     };
@@ -442,33 +442,35 @@ export const getOrderFinancialBreakdown = (order) => {
   const totalPayable = Number(order.total ?? (itemsSubtotal + totalCustomerDeliveryFee + platformFee - discount));
 
   if (isRide) {
+    const riderPayout = Number(order.riderPayout ?? (totalPayable - platformFee));
+    const rideFare = Number(order.fare ?? (totalPayable - platformFee));
     return {
       customer: {
         itemsSubtotal: 0,
-        baseDeliveryFee: totalPayable,
+        baseDeliveryFee: rideFare,
         additionalStopFee: 0,
         extraItemFee: 0,
         distanceFee: Number(order.distance ?? 0),
         surgeFee: Number(order.pricing?.otherSurcharges ?? 0),
         rainFee: Number(order.pricing?.rainSurcharge ?? 0),
-        totalCustomerDeliveryFee: totalPayable,
-        deliveryFee: totalPayable,
+        totalCustomerDeliveryFee: rideFare,
+        deliveryFee: rideFare,
         platformFee,
         discount,
         totalPayable
       },
       rider: {
-        basePayout: totalPayable,
+        basePayout: riderPayout,
         additionalStopPayout: 0,
         incentive: 0,
         platformSubsidy: 0,
         deductions: 0,
-        totalRiderPayout: totalPayable
+        totalRiderPayout: riderPayout
       },
       platform: {
-        customerDeliveryFee: totalPayable,
-        riderPayout: totalPayable,
-        platformMargin: 0
+        customerDeliveryFee: rideFare,
+        riderPayout: riderPayout,
+        platformMargin: platformFee
       },
       restaurant: restaurantObj
     };
@@ -601,10 +603,11 @@ export const getDeliveryFeeBreakdown = (order) => {
   const totalPayable = Number(order.total ?? (itemsSubtotal + totalDeliveryFees + platformFee - discount));
 
   if (isRide) {
+    const rideFare = Number(order.fare ?? (totalPayable - platformFee));
     return {
-      lines: [{ sequence: 1, label: 'Ride Base Fare & Distance', sourceName: 'Ride Pickup', sourceType: 'ride', amount: totalPayable }],
-      totalDeliveryFees: totalPayable,
-      platformFee: 0,
+      lines: [{ sequence: 1, label: 'Ride Base Fare & Distance', sourceName: 'Ride Pickup', sourceType: 'ride', amount: rideFare }],
+      totalDeliveryFees: rideFare,
+      platformFee: Number(order.pricingSnapshot?.platformFee ?? order.platformFee ?? 0),
       surgeFee: Number(order.pricing?.otherSurcharges || 0),
       rainFee: Number(order.pricing?.rainSurcharge || 0),
       extraItemFee: 0,
@@ -1459,11 +1462,12 @@ export const getOrderBillingBreakdown = (order) => {
 
   if (isRide) {
     const pickupName = order.pickupLocation?.formattedAddress || order.pickupAddress?.street || 'Ride Pickup';
+    const rideFare = Number(order.fare ?? (totalPayable - platformFee));
     sources.push({
       id: 'ride_pickup',
       name: pickupName,
       type: 'ride',
-      subtotal: totalPayable,
+      subtotal: rideFare,
       status: order.status,
       isRejected: false,
       isNoSupplier: false,

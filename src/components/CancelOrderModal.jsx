@@ -33,10 +33,11 @@ export default function CancelOrderModal({ isOpen, onClose, order, token, onCanc
   ];
 
   const rideReasons = [
-    'Changed my mind',
-    'Pickup location issue',
-    'No longer need the ride',
-    'Taking too long to find a rider',
+    'Changed my plans',
+    'Found another ride',
+    'Rider is taking too long',
+    'Wrong pickup location',
+    'Emergency',
     'Other'
   ];
 
@@ -53,11 +54,7 @@ export default function CancelOrderModal({ isOpen, onClose, order, token, onCanc
       setIsSubmitting(false);
 
       if (isRide) {
-        setPreview({
-          currentTotal: order.total || 0,
-          cancelledAmount: order.total || 0,
-          newTotal: 0
-        });
+        setPreview(null);
       } else {
         setPreview({
           currentTotal: order.total || 0,
@@ -68,11 +65,11 @@ export default function CancelOrderModal({ isOpen, onClose, order, token, onCanc
     }
   }, [isOpen, order?._id]);
 
-  // Request server-side financial preview on selection change
+  // Request server-side financial preview on selection change (or on open for rides)
   useEffect(() => {
-    if (!isOpen || !order || isRide) return;
+    if (!isOpen || !order) return;
 
-    if (selectedItemIds.length === 0 && selectedStopIds.length === 0) {
+    if (!isRide && selectedItemIds.length === 0 && selectedStopIds.length === 0) {
       setPreview({
         currentTotal: order.total || 0,
         cancelledAmount: 0,
@@ -94,7 +91,7 @@ export default function CancelOrderModal({ isOpen, onClose, order, token, onCanc
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({
+          body: JSON.stringify(isRide ? {} : {
             itemIds: selectedItemIds,
             stopIds: selectedStopIds
           })
@@ -104,6 +101,8 @@ export default function CancelOrderModal({ isOpen, onClose, order, token, onCanc
         if (isMounted) {
           if (res.ok) {
             setPreview(data);
+          } else {
+            setErrorMessage(data.message || 'Failed to load cancellation preview.');
           }
           setIsLoadingPreview(false);
         }
@@ -115,7 +114,7 @@ export default function CancelOrderModal({ isOpen, onClose, order, token, onCanc
     fetchPreview();
 
     return () => { isMounted = false; };
-  }, [selectedItemIds, selectedStopIds, isOpen, order?._id]);
+  }, [selectedItemIds, selectedStopIds, isOpen, order?._id, isRide]);
 
   if (!isOpen || !order) return null;
 
@@ -436,37 +435,91 @@ export default function CancelOrderModal({ isOpen, onClose, order, token, onCanc
           </div>
 
           {/* Financial Summary Preview */}
-          <div className="bg-base/70 border border-line rounded-2xl p-3.5 flex flex-col gap-2">
-            <span className="text-[9px] font-extrabold uppercase tracking-wider text-muted">
-              Financial Summary
-            </span>
-
-            <div className="flex justify-between text-xs font-semibold text-muted">
-              <span>Current Total:</span>
-              <span className="font-bold text-main">₹{preview?.currentTotal ?? order.total}</span>
-            </div>
-
-            <div className="flex justify-between text-xs font-semibold text-red-600">
-              <span>Cancelled Items Amount:</span>
-              <span className="font-bold">
-                {isLoadingPreview ? '...' : `- ₹${preview?.cancelledAmount ?? 0}`}
+          {isRide ? (
+            <div className="bg-base/70 border border-line rounded-2xl p-4 flex flex-col gap-2.5">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted">
+                Cancellation Summary
               </span>
-            </div>
 
-            <div className="border-t border-line/80 pt-2 flex justify-between items-center text-sm font-black text-main">
-              <span>New Total Payable:</span>
-              <span className="text-primary text-base">
-                {isLoadingPreview ? '...' : `₹${preview?.newTotal ?? order.total}`}
+              {preview?.isRiderArrived ? (
+                <>
+                  <div className="flex justify-between text-xs font-semibold text-muted">
+                    <span>Ride Fare:</span>
+                    <span className="font-bold text-main">₹{preview?.rideFare ?? order.subtotal ?? 0}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-semibold text-amber-700">
+                    <span>Cancellation Charge:</span>
+                    <span className="font-bold">50%</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-semibold text-muted">
+                    <span>Payment:</span>
+                    <span className="font-bold text-main">{preview?.paymentMethod || 'Cash to Rider'}</span>
+                  </div>
+                  <div className="border-t border-line/80 pt-2 flex justify-between items-center text-sm font-black text-main">
+                    <span>Amount to Pay:</span>
+                    <span className="text-red-600 text-base">
+                      {isLoadingPreview ? '...' : `₹${preview?.cancellationFee ?? 0}`}
+                    </span>
+                  </div>
+                  <div className="mt-1 bg-amber-50 border border-amber-200 text-amber-900 p-2.5 rounded-xl text-[11px] font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                    <span>Captain has reached your pickup location. Cancellation fee of 50% applies (Cash to Rider).</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between text-xs font-semibold text-muted">
+                    <span>Ride Fare:</span>
+                    <span className="font-bold text-main">₹{preview?.rideFare ?? order.subtotal ?? 0}</span>
+                  </div>
+                  <div className="flex justify-between text-xs font-semibold text-emerald-600">
+                    <span>Cancellation charge:</span>
+                    <span className="font-bold">₹0</span>
+                  </div>
+                  <div className="border-t border-line/80 pt-2 flex justify-between items-center text-sm font-black text-main">
+                    <span>Amount to Pay:</span>
+                    <span className="text-emerald-600 text-base">₹0</span>
+                  </div>
+                  <div className="mt-1 bg-emerald-50 border border-emerald-200 text-emerald-800 p-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <span>Free cancellation before captain reaches pickup location.</span>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="bg-base/70 border border-line rounded-2xl p-3.5 flex flex-col gap-2">
+              <span className="text-[9px] font-extrabold uppercase tracking-wider text-muted">
+                Financial Summary
               </span>
-            </div>
 
-            {preview?.wouldCancelEntireOrder && (
-              <div className="mt-1 bg-red-50 border border-red-200 text-red-800 p-2 rounded-xl text-[10px] font-bold flex items-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />
-                <span>All active items will be cancelled. Entire order will be terminated.</span>
+              <div className="flex justify-between text-xs font-semibold text-muted">
+                <span>Current Total:</span>
+                <span className="font-bold text-main">₹{preview?.currentTotal ?? order.total}</span>
               </div>
-            )}
-          </div>
+
+              <div className="flex justify-between text-xs font-semibold text-red-600">
+                <span>Cancelled Items Amount:</span>
+                <span className="font-bold">
+                  {isLoadingPreview ? '...' : `- ₹${preview?.cancelledAmount ?? 0}`}
+                </span>
+              </div>
+
+              <div className="border-t border-line/80 pt-2 flex justify-between items-center text-sm font-black text-main">
+                <span>New Total Payable:</span>
+                <span className="text-primary text-base">
+                  {isLoadingPreview ? '...' : `₹${preview?.newTotal ?? order.total}`}
+                </span>
+              </div>
+
+              {preview?.wouldCancelEntireOrder && (
+                <div className="mt-1 bg-red-50 border border-red-200 text-red-800 p-2 rounded-xl text-[10px] font-bold flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />
+                  <span>All active items will be cancelled. Entire order will be terminated.</span>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
 

@@ -830,6 +830,14 @@ export default function DeliveryDashboard() {
       scheduleLiveOrdersRefresh(1000);
     });
 
+    socket.on('orderCancelled', (data) => {
+      if (data && data.order) {
+        setSelectedOrder(prev => (prev && prev._id === data.order._id ? { ...prev, ...data.order } : prev));
+        setActiveOrders(prev => prev.map(o => (o._id === data.order._id ? { ...o, ...data.order } : o)));
+      }
+      scheduleLiveOrdersRefresh(1000);
+    });
+
     socket.on('auto_ride_opportunity', () => {
       scheduleLiveOrdersRefresh(1000);
     });
@@ -944,6 +952,39 @@ export default function DeliveryDashboard() {
     } finally {
       setUpdatingId(null);
       isUpdatingRef.current = false;
+    }
+  };
+
+  const [collectingFeeId, setCollectingFeeId] = useState(null);
+
+  const handleCollectCancellationFee = async (orderId) => {
+    if (collectingFeeId) return;
+    setCollectingFeeId(orderId);
+    try {
+      const res = await fetch(`${API_BASE}/delivery-partner/orders/${orderId}/collect-cancellation-fee`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const fresh = data.order || data;
+        setSelectedOrder(prev => (prev && String(prev._id) === String(orderId) ? { ...prev, ...fresh } : prev));
+        setActiveOrders(prev => prev.map(o => String(o._id) === String(orderId) ? { ...o, ...fresh } : o));
+        setHistoryOrders(prev => [fresh, ...prev.filter(o => String(o._id) !== String(orderId))]);
+        fetchOrdersData();
+        fetchProfile();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Failed to confirm fee collection: ${errorData.message || res.statusText || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert(`Error confirming fee collection: ${err.message}`);
+    } finally {
+      setCollectingFeeId(null);
     }
   };
 
@@ -1368,7 +1409,7 @@ export default function DeliveryDashboard() {
           {activeSubTab === 'orders' && (
             <div className="flex flex-col gap-6">
               {/* If no active orders */}
-              {activeOrders.length === 0 ? (
+              {activeOrders.length === 0 && (!selectedOrder || (selectedOrder.status !== 'Cancelled' && selectedOrder.status !== 'Rejected')) ? (
                 <div className="bg-surface rounded-3xl border border-line p-12 text-center flex flex-col items-center justify-center gap-3 shadow-2xs">
                   <div className="w-16 h-16 rounded-2xl bg-violet-50 flex items-center justify-center text-primary mb-2">
                     <Bike className="w-8 h-8" />
@@ -2125,6 +2166,73 @@ export default function DeliveryDashboard() {
                                   </div>
                                 )}
                               </div>
+                            ) : isCancelled ? (
+                              <div className="flex flex-col gap-3">
+                                <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold p-3.5 rounded-xl flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <XCircle className="w-5 h-5 text-red-600 shrink-0" />
+                                    <span className="font-extrabold uppercase">
+                                      {currentOrder.orderType === 'ride' ? 'Ride Cancelled by Customer' : 'Order Cancelled'}
+                                    </span>
+                                  </div>
+                                  {(currentOrder.cancellationReason || currentOrder.rejectionReason) && (
+                                    <p className="text-[11px] text-red-600 pl-7">
+                                      Reason: <span className="font-medium">{currentOrder.cancellationReason || currentOrder.rejectionReason}</span>
+                                      {currentOrder.cancellationComment && ` (${currentOrder.cancellationComment})`}
+                                    </p>
+                                  )}
+                                </div>
+
+                                {currentOrder.orderType === 'ride' && currentOrder.cancellationFee > 0 && (
+                                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-col gap-2.5">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-xs font-bold text-amber-900">Cancellation Charge ({currentOrder.cancellationFeePercentage || 50}%):</span>
+                                      <span className="text-sm font-black text-amber-900">₹{currentOrder.cancellationFee}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-[11px]">
+                                      <span className="text-muted font-medium">Collection Method:</span>
+                                      <span className="font-bold text-main">Cash from Customer</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-[11px]">
+                                      <span className="text-muted font-medium">Payment Status:</span>
+                                      <span className={`font-extrabold px-2 py-0.5 rounded text-[10px] ${
+                                        currentOrder.cancellationFeePaymentStatus === 'Collected'
+                                          ? 'bg-green-100 text-green-800 border border-green-200'
+                                          : 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse'
+                                      }`}>
+                                        {currentOrder.cancellationFeePaymentStatus === 'Collected' ? '✅ CASH COLLECTED' : '⏳ PENDING COLLECTION'}
+                                      </span>
+                                    </div>
+
+                                    {currentOrder.cancellationFeePaymentStatus !== 'Collected' && (
+                                      <button
+                                        onClick={() => handleCollectCancellationFee(currentOrder._id)}
+                                        disabled={collectingFeeId === currentOrder._id}
+                                        className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
+                                      >
+                                        <DollarSign className="w-4 h-4" />
+                                        <span>{collectingFeeId === currentOrder._id ? 'Confirming...' : `Collect ₹${currentOrder.cancellationFee} Cash from Customer`}</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+
+                                {currentOrder.orderType === 'ride' && (!currentOrder.cancellationFee || currentOrder.cancellationFee === 0) && (
+                                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center text-xs text-muted font-medium">
+                                    Customer cancelled before arrival. No cancellation fee applicable.
+                                  </div>
+                                )}
+
+                                <button
+                                  onClick={() => {
+                                    setSelectedOrder(null);
+                                    setActiveSubTab('pool');
+                                  }}
+                                  className="w-full bg-surface hover:bg-gray-50 border border-line text-main text-xs font-bold py-2.5 px-4 rounded-xl transition-colors cursor-pointer"
+                                >
+                                  Dismiss & View Requests Pool
+                                </button>
+                              </div>
                             ) : (
                               <div className="bg-violet-50 border border-violet-100 text-violet-800 text-xs font-bold p-3.5 rounded-xl flex items-center gap-2 animate-pulse">
                                 <Clock className="w-4 h-4 text-primary shrink-0" />
@@ -2174,6 +2282,13 @@ export default function DeliveryDashboard() {
                                 <div className="border-t border-line/60 pt-1.5 flex justify-between items-center text-xs font-bold text-muted">
                                   <span>Subtotal (Items Total)</span>
                                   <span className="font-extrabold text-main">{formatCurrency(billing.itemsSubtotal)}</span>
+                                </div>
+                              )}
+
+                              {currentOrder.orderType === 'ride' && billing.platformFee > 0 && (
+                                <div className="border-t border-line/60 pt-1.5 flex justify-between items-center text-xs">
+                                  <span className="text-muted font-medium">Platform Fee</span>
+                                  <span className="font-bold text-main">+{formatCurrency(billing.platformFee)}</span>
                                 </div>
                               )}
                             </div>
@@ -2239,10 +2354,16 @@ export default function DeliveryDashboard() {
                             {/* 3. Total Payable / Amount to Collect */}
                             <div className="border-t border-line pt-2.5 flex justify-between items-center">
                               <span className="text-xs font-black text-main uppercase">
-                                {billing.isCOD ? 'Amount to Collect (COD)' : 'Total Payable'}
+                                {currentOrder.orderType === 'ride' && isCancelled
+                                  ? (currentOrder.cancellationFee > 0 ? 'Cancellation Fee to Collect' : 'Cancellation Fee')
+                                  : billing.isCOD ? 'Amount to Collect (COD)' : 'Total Payable'}
                               </span>
                               <span className="text-primary text-base font-black">
-                                {formatCurrency(billing.totalPayable)}
+                                {formatCurrency(
+                                  currentOrder.orderType === 'ride' && isCancelled
+                                    ? (currentOrder.cancellationFee || 0)
+                                    : billing.totalPayable
+                                )}
                               </span>
                             </div>
                           </div>
@@ -2254,17 +2375,25 @@ export default function DeliveryDashboard() {
                                 <DollarSign className="w-3.5 h-3.5 text-green-600" /> Rider Earnings
                               </h5>
                               <span className="text-[9px] font-extrabold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200 uppercase">
-                                Wallet Credit
+                                {currentOrder.orderType === 'ride' && isCancelled ? 'Cash Collection' : 'Wallet Credit'}
                               </span>
                             </div>
 
                             <div className="flex flex-col gap-2">
                               <div className="flex justify-between items-center text-xs">
                                 <span className="text-muted font-medium">
-                                  {currentOrder.orderType === 'ride' ? 'Ride Base & Distance Payout' : 'Base Delivery Earning'}
+                                  {currentOrder.orderType === 'ride' && isCancelled
+                                    ? 'Cancellation Fee (Cash)'
+                                    : currentOrder.orderType === 'ride'
+                                      ? 'Ride Base & Distance Payout'
+                                      : 'Base Delivery Earning'}
                                 </span>
                                 <span className="font-bold text-main">
-                                  {formatCurrency(billing.rider.basePayout)}
+                                  {formatCurrency(
+                                    currentOrder.orderType === 'ride' && isCancelled
+                                      ? (currentOrder.cancellationFee || 0)
+                                      : billing.rider.basePayout
+                                  )}
                                 </span>
                               </div>
 
@@ -2287,7 +2416,11 @@ export default function DeliveryDashboard() {
                                   TOTAL {currentOrder.orderType === 'ride' ? 'CAPTAIN' : 'RIDER'} EARNING
                                 </span>
                                 <span className="text-green-600 text-base font-black">
-                                  {formatCurrency(billing.rider.totalRiderPayout)}
+                                  {formatCurrency(
+                                    currentOrder.orderType === 'ride' && isCancelled
+                                      ? (currentOrder.cancellationFee || 0)
+                                      : billing.rider.totalRiderPayout
+                                  )}
                                 </span>
                               </div>
                             </div>

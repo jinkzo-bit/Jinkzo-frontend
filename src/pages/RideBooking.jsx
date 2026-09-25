@@ -177,7 +177,10 @@ export default function RideBooking() {
             if (platformSettings?.surcharges?.festival?.enabled) {
               festivalSurcharge = platformSettings.surcharges.festival.fee || 15;
             }
-            setFare(computedFare + rainSurcharge + lateNightSurcharge + festivalSurcharge);
+            const platformFee = typeof platformSettings?.platformFee === 'number'
+              ? platformSettings.platformFee
+              : (Number(platformSettings?.platformFee) || 0);
+            setFare(computedFare + rainSurcharge + lateNightSurcharge + festivalSurcharge + platformFee);
             const serviceRadiusKm = platformSettings?.globalServiceRadiusKm || 5;
             if (calculatedDistance > serviceRadiusKm) {
               setErrorMsg(`This ride is outside our current ${serviceRadiusKm} KM service radius.`);
@@ -665,30 +668,48 @@ export default function RideBooking() {
                   {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : distance === 'error' ? 'Error' : `${distance} km`)}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span>Distance Pricing Fee</span>
-                <span className="text-main font-bold">
-                  {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : distance === 'error' ? 'Error' : `₹${fare - ((platformSettings?.surcharges?.rain?.enabled ? (platformSettings.surcharges.rain.fee || 10) : 0) + (platformSettings?.surcharges?.lateNight?.enabled ? (platformSettings.surcharges.lateNight.fee || 20) : 0) + (platformSettings?.surcharges?.festival?.enabled ? (platformSettings.surcharges.festival.fee || 15) : 0))}`)}
-                </span>
-              </div>
-              {platformSettings?.surcharges?.rain?.enabled && (
-                <div className="flex justify-between">
-                  <span>Rain Charge</span>
-                  <span className="text-red-500 font-bold">+₹{platformSettings.surcharges.rain.fee || 10}</span>
-                </div>
-              )}
-              {platformSettings?.surcharges?.lateNight?.enabled && (
-                <div className="flex justify-between">
-                  <span>Late Night Charge</span>
-                  <span className="text-red-500 font-bold">+₹{platformSettings.surcharges.lateNight.fee || 20}</span>
-                </div>
-              )}
-              {platformSettings?.surcharges?.festival?.enabled && (
-                <div className="flex justify-between">
-                  <span>Festival Charge</span>
-                  <span className="text-red-500 font-bold">+₹{platformSettings.surcharges.festival.fee || 15}</span>
-                </div>
-              )}
+              {(() => {
+                const rainFee = platformSettings?.surcharges?.rain?.enabled ? (platformSettings.surcharges.rain.fee || 10) : 0;
+                const lateNightFee = platformSettings?.surcharges?.lateNight?.enabled ? (platformSettings.surcharges.lateNight.fee || 20) : 0;
+                const festivalFee = platformSettings?.surcharges?.festival?.enabled ? (platformSettings.surcharges.festival.fee || 15) : 0;
+                const currentPlatformFee = typeof platformSettings?.platformFee === 'number' ? platformSettings.platformFee : (Number(platformSettings?.platformFee) || 0);
+                const distanceFee = Math.max(0, fare - rainFee - lateNightFee - festivalFee - currentPlatformFee);
+
+                return (
+                  <>
+                    <div className="flex justify-between">
+                      <span>Distance Pricing Fee</span>
+                      <span className="text-main font-bold">
+                        {(!pickupLat || !destLat) ? 'Select locations' : (distance === null ? 'Calculating...' : distance === 'error' ? 'Error' : `₹${distanceFee}`)}
+                      </span>
+                    </div>
+                    {currentPlatformFee > 0 && (
+                      <div className="flex justify-between">
+                        <span>Platform Fee</span>
+                        <span className="text-main font-bold">₹{currentPlatformFee}</span>
+                      </div>
+                    )}
+                    {rainFee > 0 && (
+                      <div className="flex justify-between">
+                        <span>Rain Charge</span>
+                        <span className="text-red-500 font-bold">+₹{rainFee}</span>
+                      </div>
+                    )}
+                    {lateNightFee > 0 && (
+                      <div className="flex justify-between">
+                        <span>Late Night Charge</span>
+                        <span className="text-red-500 font-bold">+₹{lateNightFee}</span>
+                      </div>
+                    )}
+                    {festivalFee > 0 && (
+                      <div className="flex justify-between">
+                        <span>Festival Charge</span>
+                        <span className="text-red-500 font-bold">+₹{festivalFee}</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {/* Total invoice block */}

@@ -384,16 +384,36 @@ export default function OrderDetailsModal({
           })()}
 
           {/* Cancellation / Rejection banner if applicable */}
-          {isCancelled && order.rejectionReason && (
+          {isCancelled && (order.cancellationReason || order.rejectionReason || isRide) && (
             <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 rounded-2xl p-4 flex gap-3">
               <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-              <div>
-                <h5 className="font-bold text-xs text-red-700 dark:text-red-300">
-                  {order.status === 'Cancelled' ? 'Order Cancelled' : 'Order Rejected'}
-                </h5>
-                <p className="text-xs text-red-600 dark:text-red-400 font-medium mt-0.5">
-                  Reason: {order.rejectionReason}
-                </p>
+              <div className="flex flex-col gap-1 w-full">
+                <div className="flex items-center justify-between">
+                  <h5 className="font-bold text-xs text-red-700 dark:text-red-300">
+                    {isRide ? 'Ride Cancelled' : (order.status === 'Cancelled' ? 'Order Cancelled' : 'Order Rejected')}
+                  </h5>
+                  {isRide && (order.cancellationFee > 0 || order.cancellationFeePercentage > 0) && (
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded bg-red-100 text-red-800 border border-red-200">
+                      Cancellation Charge: {formatCurrency(order.cancellationFee || 0)} ({order.cancellationFeePercentage || 50}%)
+                    </span>
+                  )}
+                </div>
+                {(order.cancellationReason || order.rejectionReason) && (
+                  <p className="text-xs text-red-600 dark:text-red-400 font-medium">
+                    Reason: {order.cancellationReason || order.rejectionReason}
+                    {order.cancellationComment && ` (${order.cancellationComment})`}
+                  </p>
+                )}
+                {isRide && (
+                  <div className="text-[11px] text-red-600/90 dark:text-red-400/90 font-medium mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    {order.cancelledBy && <span>Cancelled by: <strong>{order.cancelledBy}</strong></span>}
+                    {order.cancellationFee > 0 ? (
+                      <span>Payment: <strong>Cash to Rider</strong> ({order.cancellationFeePaymentStatus || 'Pending Collection'})</span>
+                    ) : (
+                      <span>Cancellation charge: <strong>₹0 (Cancelled before arrival)</strong></span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1291,6 +1311,14 @@ export default function OrderDetailsModal({
                       <span className="font-extrabold text-main">{formatCurrency(billing.itemsSubtotal)}</span>
                     </div>
                   )}
+
+                  {/* Platform Fee for Ride */}
+                  {isRide && billing.platformFee > 0 && (
+                    <div className="border-t border-line/60 pt-1.5 flex justify-between items-center text-xs">
+                      <span className="text-muted font-medium">Platform Fee</span>
+                      <span className="font-bold text-main">+{formatCurrency(billing.platformFee)}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* 2. Delivery & Other Charges */}
@@ -1354,10 +1382,16 @@ export default function OrderDetailsModal({
                 {/* 3. Total Payable / Amount to Collect */}
                 <div className="border-t border-line pt-2.5 flex justify-between items-center">
                   <span className="text-xs font-black text-main uppercase">
-                    {billing.isCOD ? 'Amount to Collect (COD)' : 'Total Payable'}
+                    {isRide && isCancelled
+                      ? (order.cancellationFee > 0 ? 'Cancellation Fee to Collect' : 'Cancellation Fee')
+                      : billing.isCOD ? 'Amount to Collect (COD)' : 'Total Payable'}
                   </span>
                   <span className="text-primary text-base font-black">
-                    {formatCurrency(billing.totalPayable)}
+                    {formatCurrency(
+                      isRide && isCancelled
+                        ? (order.cancellationFee || 0)
+                        : billing.totalPayable
+                    )}
                   </span>
                 </div>
               </div>
@@ -1370,14 +1404,16 @@ export default function OrderDetailsModal({
                     <span>{isRide ? 'RIDER CAPTAIN EARNINGS' : 'RIDER EARNINGS'}</span>
                   </h4>
                   <span className="text-[9px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 uppercase">
-                    Wallet Payout
+                    {isRide && isCancelled ? 'Cash Collection' : 'Wallet Payout'}
                   </span>
                 </div>
 
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-muted font-medium">{isRide ? 'Ride Base & Distance Payout' : 'Base Delivery Earning'}</span>
+                  <span className="text-muted font-medium">
+                    {isRide && isCancelled ? 'Cancellation Fee (Cash)' : isRide ? 'Ride Base & Distance Payout' : 'Base Delivery Earning'}
+                  </span>
                   <span className="font-bold text-main">
-                    {formatCurrency(billing.rider.basePayout)}
+                    {formatCurrency(isRide && isCancelled ? (order.cancellationFee || 0) : billing.rider.basePayout)}
                   </span>
                 </div>
 
@@ -1396,9 +1432,9 @@ export default function OrderDetailsModal({
                 )}
 
                 <div className="border-t border-line pt-2 flex justify-between items-center text-sm font-extrabold">
-                  <span className="text-main">TOTAL RIDER EARNING</span>
+                  <span className="text-main">TOTAL {isRide ? 'CAPTAIN' : 'RIDER'} EARNING</span>
                   <span className="text-green-600 dark:text-green-400 font-black text-base">
-                    {formatCurrency(billing.rider.totalRiderPayout)}
+                    {formatCurrency(isRide && isCancelled ? (order.cancellationFee || 0) : billing.rider.totalRiderPayout)}
                   </span>
                 </div>
               </div>
