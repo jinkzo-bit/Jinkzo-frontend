@@ -1,18 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 /**
- * AppIntro component for Corior Web.
- * Plays the official Corior intro video (/intro/corior-intro.mp4) once per session.
- * Features:
- * - Responsive aspect ratio preservation (object-contain)
- * - Muted autoplay for maximum browser compatibility
- * - Graceful fade-out transition upon completion
- * - Immediate fallback on load error / timeout
- * - Skip option for user convenience
+ * Jinkzo Website Startup Logo Reveal Animation
+ * 
+ * Sequence (~1.25s–1.45s total):
+ * - 0.00s–0.35s: Isolated Black J Emblem reveals (opacity 0->1, scale 0.85->1) on pure white.
+ * - 0.35s–0.70s: Wordmark reveals — JINK from left (-30px->0), ZO from right (+30px->0).
+ * - 0.70s–0.95s: Tagline "FOOD & RIDE DELIVERY" fades in subtly (translateY 6px->0).
+ * - 0.95s–1.25s: Brand lockup hold.
+ * - 1.25s–1.45s: Entire white overlay fades out smoothly and unmounts, revealing the website.
  */
 export default function AppIntro({ onComplete }) {
   const [fading, setFading] = useState(false);
-  const videoRef = useRef(null);
   const completedRef = useRef(false);
 
   const handleFinish = () => {
@@ -21,55 +20,131 @@ export default function AppIntro({ onComplete }) {
     setFading(true);
     setTimeout(() => {
       onComplete?.();
-    }, 450);
+    }, 200);
   };
 
   useEffect(() => {
-    // Fallback safety timeout (8s max in case video fails or onEnded doesn't fire)
-    const fallbackTimer = setTimeout(() => {
+    // Phase 5 trigger: Start fade-out at 1.25s
+    const exitTimer = setTimeout(() => {
       handleFinish();
-    }, 8000);
+    }, 1250);
 
-    // Attempt video playback
-    if (videoRef.current) {
-      videoRef.current.play().catch((err) => {
-        console.warn("[Corior Intro] Autoplay blocked or unavailable, falling back:", err);
-        handleFinish();
-      });
-    }
+    // Fail-safe safety timeout (2.5s max in case of any animation stalls)
+    const safetyTimer = setTimeout(() => {
+      handleFinish();
+    }, 2500);
 
     return () => {
-      clearTimeout(fallbackTimer);
+      clearTimeout(exitTimer);
+      clearTimeout(safetyTimer);
     };
   }, []);
 
   return (
     <div
-      className={`fixed inset-0 z-[99999] bg-black flex items-center justify-center overflow-hidden transition-opacity duration-500 ease-out select-none ${
+      className={`fixed inset-0 z-[99999] bg-white flex flex-col items-center justify-center select-none transition-opacity duration-200 ease-out ${
         fading ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
-      aria-label="Corior Intro Screen"
+      aria-label="Jinkzo Startup Screen"
     >
-      <div className="relative w-full h-full max-w-full max-h-full flex items-center justify-center">
-        <video
-          ref={videoRef}
-          src="/intro/corior-intro.mp4"
-          autoPlay
-          muted
-          playsInline
-          onEnded={handleFinish}
+      <style>{`
+        @keyframes jinkzo-emblem-reveal {
+          0% {
+            opacity: 0;
+            transform: scale(0.85);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
+        @keyframes jinkzo-wordmark-jink {
+          0% {
+            opacity: 0;
+            transform: translateX(-30px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+
+        @keyframes jinkzo-wordmark-zo {
+          0% {
+            opacity: 0;
+            transform: translateX(30px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+
+        @keyframes jinkzo-tagline-reveal {
+          0% {
+            opacity: 0;
+            transform: translateY(6px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .jinkzo-anim-emblem {
+          animation: jinkzo-emblem-reveal 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          will-change: transform, opacity;
+        }
+
+        .jinkzo-anim-jink {
+          animation: jinkzo-wordmark-jink 350ms cubic-bezier(0.16, 1, 0.3, 1) 350ms both;
+          will-change: transform, opacity;
+        }
+
+        .jinkzo-anim-zo {
+          animation: jinkzo-wordmark-zo 350ms cubic-bezier(0.16, 1, 0.3, 1) 350ms both;
+          will-change: transform, opacity;
+        }
+
+        .jinkzo-anim-tagline {
+          animation: jinkzo-tagline-reveal 250ms cubic-bezier(0.16, 1, 0.3, 1) 700ms both;
+          will-change: transform, opacity;
+        }
+      `}</style>
+
+      <div className="flex flex-col items-center justify-center">
+        {/* Phase 1: Isolated Black J Emblem (no circular background) */}
+        <img
+          src="/branding/logo-emblem.png"
+          alt="Jinkzo"
+          className="jinkzo-anim-emblem w-[68px] h-[92px] object-contain"
           onError={handleFinish}
-          className="w-full h-full object-contain pointer-events-none"
         />
 
-        {/* Skip button for user convenience */}
-        <button
-          type="button"
-          onClick={handleFinish}
-          className="absolute top-5 right-5 sm:top-8 sm:right-8 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all z-20 cursor-pointer border border-white/15"
-        >
-          Skip
-        </button>
+        {/* Phase 2: Wordmark (JINK in black from left, ZO in orange from right) */}
+        <div className="flex items-center justify-center mt-4">
+          <img
+            src="/branding/logo-wordmark-jink.png"
+            alt="JINK"
+            className="jinkzo-anim-jink w-[81px] h-[36px] object-contain"
+            onError={handleFinish}
+          />
+          <img
+            src="/branding/logo-wordmark-zo.png"
+            alt="ZO"
+            className="jinkzo-anim-zo w-[51px] h-[36px] object-contain"
+            onError={handleFinish}
+          />
+        </div>
+
+        {/* Phase 3: Tagline */}
+        <img
+          src="/branding/logo-tagline.png"
+          alt="FOOD & RIDE DELIVERY"
+          className="jinkzo-anim-tagline w-[146px] h-[10px] object-contain mt-3"
+          onError={handleFinish}
+        />
       </div>
     </div>
   );

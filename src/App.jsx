@@ -39,7 +39,7 @@ export default function App() {
 
   const [showIntro, setShowIntro] = useState(() => {
     try {
-      return !sessionStorage.getItem('corior_intro_seen');
+      return !sessionStorage.getItem('jinkzo_intro_seen');
     } catch {
       return false;
     }
@@ -47,7 +47,7 @@ export default function App() {
 
   const handleIntroComplete = () => {
     try {
-      sessionStorage.setItem('corior_intro_seen', 'true');
+      sessionStorage.setItem('jinkzo_intro_seen', 'true');
     } catch {}
     setShowIntro(false);
   };
